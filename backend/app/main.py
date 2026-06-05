@@ -9,21 +9,29 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from typing import Any
+from datetime import date
+from typing import Any, List
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from capture_insights.config import settings
+# Local import so the early dev layout works without full package install
+# (we can clean this up when we do proper packaging)
+try:
+    from .config import settings
+except ImportError:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from config import settings
 
 # Placeholder: real lifespan will init DuckDB, Chroma, MCP clients, Ollama health etc.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"[capture-insights] Starting backend v{settings.app_version} env={settings.app_env}")
-    print(f"[capture-insights] DuckDB: {settings.duckdb_path}")
-    print(f"[capture-insights] Chroma:  {settings.chroma_path}")
-    # TODO: connect_duckdb(), init_chroma(), mcp_client_manager.start(), ollama health check
+    print(f"[capture-insights] Using single DuckDB at: {settings.duckdb_path}")
+    # TODO: mcp_client_manager.start(), ollama health check, etc.
     yield
     print("[capture-insights] Shutting down...")
 
@@ -50,7 +58,6 @@ class HealthResponse(BaseModel):
     version: str
     env: str
     duckdb_ready: bool = False
-    chroma_ready: bool = False
     ollama_ready: bool = False
     mcp_servers: list[str] = []
 
@@ -58,13 +65,12 @@ class HealthResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 async def health() -> dict[str, Any]:
     """Basic health + readiness for local dev and monitoring."""
-    # TODO: real checks
+    # TODO: real checks (ping Ollama, list loaded MCP servers, etc.)
     return {
         "status": "ok",
         "version": settings.app_version,
         "env": settings.app_env,
-        "duckdb_ready": os.path.exists(settings.duckdb_path) if settings.duckdb_path else False,
-        "chroma_ready": os.path.isdir(settings.chroma_path) if settings.chroma_path else False,
+        "duckdb_ready": os.path.exists(str(settings.duckdb_path)),
         "ollama_ready": False,  # TODO: ping Ollama
         "mcp_servers": [],  # TODO: list connected federal-contracting MCPs etc.
     }
@@ -80,11 +86,84 @@ async def root():
     }
 
 
-# TODO routers:
-# from .routers import filters, awards, chat, profiles, mcp, stance
-# app.include_router(...)
+# --- Simple data endpoints (Chunk 2) ---
+# These call the plain-English query functions above.
+# The frontend (or future skills/agents) will call these.
+
+from .queries import (
+    get_market_summary,
+    get_top_agencies,
+    get_expiring_contracts,
+    get_quick_opportunity_snapshot,
+)
+
+
+class SummaryResponse(BaseModel):
+    naics_codes: List[str]
+    total_actions: int
+    total_millions: float
+    avg_thousands: float
+    earliest_date: str | None = None
+    latest_date: str | None = None
+    message: str | None = None
+
+
+@app.get("/data/summary", response_model=SummaryResponse, tags=["data"])
+async def data_summary(
+    naics: str = "561210",  # comma separated ok: 561210,541512
+    start: str | None = None,
+    end: str | None = None,
+):
+    """Get high-level market numbers for the selected NAICS codes.
+
+    Example browser call:
+    http://127.0.0.1:8000/data/summary?naics=561210
+
+    This is the foundation for dashboard cards.
+    """
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    start_date = date.fromisoformat(start) if start else None
+    end_date = date.fromisoformat(end) if end else None
+
+    return get_market_summary(naics_list, start_date, end_date)
+
+
+@app.get("/data/top-agencies", tags=["data"])
+async def data_top_agencies(naics: str = "561210", limit: int = 10):
+    """Top spending agencies for the NAICS codes.
+
+    Helps you see where the money is actually flowing.
+    """
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_top_agencies(naics_list, limit=limit)
+
+
+@app.get("/data/expiring", tags=["data"])
+async def data_expiring(naics: str = "561210", months: int = 24, limit: int = 15):
+    """Contracts whose current performance period ends soon.
+
+    These are the recompete opportunities you want to track early.
+    """
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_expiring_contracts(naics_list, months_ahead=months, limit=limit)
+
+
+@app.get("/data/snapshot", tags=["data"])
+async def data_snapshot(naics: str = "561210"):
+    """One convenient call that returns summary + top agencies + expiring.
+
+    Great for a quick "tell me about this market" view that an AI agent or
+    a future skill can consume.
+    """
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    # For snapshot we just take the first NAICS for simplicity in this early version
+    primary = naics_list[0] if naics_list else "561210"
+    return get_quick_opportunity_snapshot(primary)
+
+
+# TODO: Add more routers as we grow (chat, profile generation, stance, MCP tools, etc.)
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("capture_insights.backend.app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("backend.app.main:app", host="127.0.0.1", port=8000, reload=True)

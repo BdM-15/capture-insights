@@ -65,6 +65,5 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Ensure data dirs exist on import (convenience for local dev)
+# Ensure the single data directory exists (DuckDB file lives under here)
 settings.duckdb_path.parent.mkdir(parents=True, exist_ok=True)
-settings.chroma_path.mkdir(parents=True, exist_ok=True)
