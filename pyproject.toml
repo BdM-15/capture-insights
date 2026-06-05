@@ -37,14 +37,12 @@ capture-insights = "capture_insights.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-# Modern way (avoids deprecation warning)
 [dependency-groups]
 dev = [
     "ruff",
     "pytest",
     "mypy",
-    "pandas",   # optional but very handy when exploring data with .df()
+    "pandas",   # handy for .df() when exploring in notebooks / scripts
 ]
 
 [tool.ruff]
