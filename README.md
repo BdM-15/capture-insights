@@ -165,32 +165,81 @@ We are building in small, focused, high-quality chunks. No "build to build."
   - Local LLM primary (Ollama). 8GB VRAM friendly recommendation: `qwen2.5:7b` (or similar quantized). You can also use xAI Grok models via API when you want.
   - Training data collection planned from the beginning for future fine-tuning of specialized models.
   - NAICS: 561210 is default but multi-NAICS support is built in from day one.
-  - Future skills (visuals/presentations like huashu-design style, IGCE, teaming, etc.) are documented as later work.
+  - Future skills (visuals/presentations like huashu-design style, IGCE, teaming, etc.) are documented in `docs/future-skills-ideas.md` as later work. Broader roadmap and future feature ideas (including the flexible agency/competitor search bar) live in `docs/ROADMAP_AND_FUTURE_FEATURES.md`.
 - Initial scaffold + very educational `scripts/ingest_sample.py` (synthetic data works immediately; real CSV instructions included).
 - Plain-English data dictionary started (Karpathy-style explanations + "how the AI should think about this field").
 - Architecture and future-skills ideas docs written with your constraints in mind.
 
-**Progress so far (small focused chunks):**
+**Progress so far (small focused chunks) — data foundation is now the explicit priority:**
 
-- Chunk 1: Single DuckDB only + educational ingest script (multi-NAICS, real CSV instructions, synthetic demo) + plain-English data dictionary (Karpathy style) + future skills ideas doc.
-- Chunk 2: Reusable query functions (market summary, top agencies, expiring contracts) + FastAPI endpoints (`/data/summary`, `/top-agencies`, `/expiring`, `/snapshot`) that actually return real numbers from your DuckDB.
-- Chunk 3 (just done): First real artifact of the flagship feature — `scripts/generate_profile_stub.py` that produces a proper .docx Capture Profile with:
-  - Real data pulled from DuckDB (totals, top agencies table, expiring list)
-  - Clear sections matching the classic 9-section structure
-  - Obvious `[LLM PLACEHOLDER]` areas where we will later inject grounded narrative from Ollama or xAI
-  - Citations / methodology note
-  - The file is saved in `data/exports/` and is a real Word document you can open today.
+- Chunk 1: Single DuckDB only + educational ingest + plain-English data dictionary + future skills doc.
+- Chunk 2: Reusable query functions + FastAPI data endpoints (`/data/summary`, `/top-agencies`, etc.).
+- Chunk 3 (profile/LLM preview): We built an early version of the capture profile generator + real LLM narrative + training logging. This proved the end-to-end vision and gave us our first training example. Per your feedback we are parking heavy artifact/LLM generation work for now.
+- Chunk 4 (data foundation + visibility dashboard — in progress, "If all is good, continue..."):
+  - `scripts/download_usaspending_bulk.py` robust: 2-day chunking (your proven safe size), resume via .download_progress, 403 recovery by re-polling status_url for fresh file_url + retries. You are successfully running the full 10yr (both prime+sub, ALL contract actions, no early NAICS filter) in a separate window. First ~8-16 days of 2015 chunks already downloaded as dated zips.
+  - `scripts/ingest_historical.py` + real loads: ingests the .zip (auto-extracts the slim TARGET_FIELDS CSV), **by default ingests the entire raw CSV content with no NAICS filter** (omit --naics), optional --naics 561210,xxx to filter at load time, --sub for teaming table, dedup, derived fy/quarter.
+  - All core queries aligned to the exact 50+ columns from original Data_Insights (parent_award_agency_name, type_of_set_aside, contract_award_unique_key etc.).
+  - `/data/market_potential`, `/data/fy-trends`, `/data/set-aside`, `/data/filters`, `/data/expiring`, etc. all work on real bulk data.
+  - **Interactive visibility dashboard live at root `/`** (self-contained HTML/JS, no React yet): 
+    - NAICS selector (multi supported), one-click Refresh All.
+    - Market Potential card (actions, $M, unique competitors, trend).
+    - FY Spend Trends with simple bars (derived fiscal year).
+    - Set-Aside / Competition breakdown (small business share visible).
+    - Top Agencies + Top Recipients (incumbents/competitors).
+    - Expiring/Recompete radar (lights up as you load recent years).
+    - Filters explorer (distinct values actually present in your data).
+    - Prominent instructions: keep the bulk download running externally; when new zips appear, re-ingest (the same command works incrementally) and refresh the dashboard to see history grow.
+  - `docs/DATA_PIPELINE.md` + README updated with the exact workflow.
 
-All code is heavily commented in plain language. The generator is deliberately a "stub" so we can quickly get to something visible and then improve it (add your stance, real LLM calls, training data logging, live MCP enrichment, etc.).
+Next (still data first):
+- Keep the long bulk download running in its window. Periodically (or at end of a FY batch) ingest the new zips with the one-liner (supports globs via the comma trick or temp script). Dashboard becomes more powerful with each added year.
+- Add MCP integration (start with usaspending-gov-mcp + sam-gov-mcp clients) for live gaps + long-horizon vehicles (e.g. 20yr DOE) + opportunities you mentioned.
+- When 2-3 years of real data + MCP are solid, scaffold the real frontend (Vite/React in /frontend) that consumes the same /data/* endpoints.
+- Then: grounded chat over the data, profile artifacts, training collection, skills.
 
-Next chunk ideas (pick one or suggest your own):
-- Minimal React frontend page that calls the /data/* endpoints and shows nice cards + tables.
+We are aligned: solid data pipelines (historical bulk foundation + MCP) → trustworthy dashboard for "visibility into our companies total market potential" and ability to navigate → later artifacts/chat/training/skills.
+
+We are aligned: solid data pipelines (historical + real-time) → trustworthy dashboard/ visualizations for visibility → then the cool stuff (chat, profiles, training, skills like huashu-design renders).
 - First grounded LLM chat (question → pull relevant data from DuckDB → send context + question to Ollama → return answer with citations).
 - Enhance the profile stub (more sections, better formatting, save the exact "LLM input context" for training data).
 - Make real CSV loading more robust (drag a folder of USASpending downloads and it just works).
 - Training data helper (a small script that logs successful profile generations as JSONL for future fine-tuning).
 
 Everything stays small, understandable, and directly serves the end state you described.
+
+## Ariadne Thread Synergy & Full Vision (Roadmap Context — Not Current Scope)
+
+**Important framing (per project principles):** capture-insights remains **laser-focused on the data foundation and insights layer first**. Get the data right — reliable, queryable, insightful — and it becomes the source of truth and trigger engine for higher-level workflows. We build piece-by-piece, small and focused, to avoid the bloat seen in prior efforts (Data_Insights, ariadne-thread). "Grill-with-docs" sessions (Matt Pocock skill) are useful for deep dives but were over-applied previously, leading to hyper-focused scope creep without the big-picture end game. Here we keep the North Star in view while staying disciplined.
+
+**Baby-out-of-the-bath-water approach (no copy-paste):** We do *not* replicate ariadne-thread's full complexity, MVPs, or monolithic structure. We extract the highest-leverage concepts that align with our lean, data-first, local, MCP-powered, global-chat + actionable platform vision. Many of Ariadne's "data elements" (packet fields, evidence, seller baselines, opportunity context) can flow directly from or be triggered by capture-insights outputs (market potential summaries, expiring+intensity combos, flows, agency/recipient data, vehicles, geo, etc.). These serve as inputs/triggers for skills, MCPs, research, brainstorming, agents, and work-product loops — without capture-insights itself becoming the full lifecycle manager.
+
+**Highest-leverage concepts from ariadne-thread (mapped to 5 priorities for synergy):**
+
+1. **Living Packet as central accumulation + data-driven trigger** (highest leverage, per user direction): The "packet" is simply the living accumulation of structured data elements for an opportunity (requirements, evidence, assumptions, gaps, actions). capture-insights supplies many core elements directly (e.g., from bulk data: obligations, competitors, expiring contracts, intensity scores, flows, set-aside/vehicle context) and acts as the trigger engine (e.g., "new high-intensity expiring contract in your NAICS" fires research, skill runs, MCP enrichment, or profile updates). This keeps the packet "alive" and data-backed without reinventing data acquisition.
+
+2. **Command & Control Management / Portfolio Pulse + Command Center** (highest leverage, per user direction): Global visibility + routing cockpit (not a mega-scroll of tabs). Our dashboard + sidebar navigation (Dashboard views with internal lenses for Market/Opportunities/Agency/Competitive/Vehicles/Geo/Combos, plus Pipeline, Tools, etc.) + persistent global elements (filters, chat, pipeline tray) directly support this. Portfolio-level pulse (triage by urgency, freshness, data signals) + focused work on one opportunity. Avoids siloed pages; everything interconnected via shared data state.
+
+3. **Review-gated workflows, provenance, and human-in-the-loop discipline** (Shipley-aligned): Nothing becomes "trusted" (e.g., added to packet, action plan, profile) without explicit review/accept. Our current "add to pipeline" actions, combo insights, education tooltips, and status notes are the seed. Future: explicit gates on data-derived recommendations before they feed skills/MCPs/agents. Full audit trail/citations from our DuckDB queries.
+
+4. **Federal Data MCP + bulk hybrid enrichment as the reliable data spine**: Ariadne relies heavily on MCPs (SAM, USAspending, BLS, etc.) and profiles. capture-insights already delivers the hybrid (10yr bulk for deep history + live MCPs) with clean endpoints. This becomes the "source of truth" layer for Ariadne's seller baselines, opportunity discovery, recompete intel, etc. — no duplication.
+
+5. **Knowledge Layer / Structured Knowledge + LLM-wiki vault for compounding**: Global data elements, typed relationships, and a living knowledge base (beyond per-opportunity). Our queries + market potential summaries + combos feed structured knowledge. Future: lightweight vault (inspired by Ariadne's Obsidian/LLM-wiki + Theseus patterns) that turns insights into reusable elements, triggers, and context for the global chat/agent. Keeps opportunity-specific state (packets) separate from global knowledge.
+
+**How this keeps us focused while looking ahead:**
+- Current phase: Data acquisition (bulk + MCP), clean DuckDB schema/queries, dashboard for visibility/navigation (with global chat, pipeline actions, combos, education).
+- Next small focused increments (only after data is solid): Extend endpoints for packet-like structures, opportunity/portfolio stubs driven by data signals, review gates on actions, knowledge projection from insights.
+- Full Ariadne-style (living packets as first-class, full command center orchestration, agents/skills over the data, artifact assembly, etc.) lives in the vision section below — we only pull the next piece when the foundation supports it without bloat.
+- Big picture end game (Ariadne North Star adapted): One elegant local Command Center where a capture pro manages the full lifecycle with minimum friction. capture-insights provides the trustworthy data/insights foundation and triggers; higher layers (packets, actions, knowledge, agents) compose on top using the same modular, review-gated, global-chat, cyber-professional UX principles.
+
+This section is *not* a commitment to implement Ariadne features here. It is a map to ensure piece-by-piece work serves the larger platform without losing the forest for the trees. All current work stays small, data-first, and directly useful for BD/capture visibility and decision-making today.
+
+See also:
+- `docs/ROADMAP_AND_FUTURE_FEATURES.md` (central living planning doc — future features, near-term priorities, and the flexible global search/command bar idea)
+- `docs/UI_THEME.md` (cyberpunk command-center aesthetic)
+- `docs/future-skills-ideas.md` (post-processing skills)
+- The Ariadne Thread synergy section below (we extract the highest-leverage concepts only)
+
+We document future ideas here first so the big picture stays visible without bloating current small focused work.
 
 ## Contributing / Next
 

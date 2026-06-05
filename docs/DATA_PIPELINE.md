@@ -38,10 +38,11 @@ We keep the heavy historical stuff in a local DuckDB file (one fast file on your
 - Loads everything into one table called `usaspending_prime_awards` inside your local `data/capture.duckdb` file.
 - You can run it again later with new CSVs and it will add the new records (incremental friendly).
 
-Command example:
+Command example (ingest *entire* raw CSVs, no NAICS limit):
 ```powershell
-uv run python scripts/ingest_historical.py --csv "C:\Downloads\awards_561210_2019-2025.csv" --naics 561210
+uv run python scripts/ingest_historical.py --csv "C:\Downloads\awards_*.csv"
 ```
+(Use `--naics 561210` only if you explicitly want to filter rows at ingest time.)
 
 The script is heavily commented so you can read exactly what each step does.
 
@@ -98,10 +99,16 @@ We do this once at ingest time so every dashboard query is fast and consistent.
 
 - We have a working DuckDB table structure and a set of clean query functions (`backend/app/queries.py`).
 - FastAPI endpoints exist that return summary numbers, top agencies, expiring contracts, etc.
-- Ingest is still mostly "demo/synthetic" for quick testing.
-- Next focus: make the historical CSV ingest real and robust so you can load your actual USASpending downloads.
-- After that: add "what are my filter options?" endpoints (distinct agencies, years, set-asides, etc.) that a real UI needs.
-- MCP live layer will come as a parallel small piece once the historical side feels solid.
+- **New/Improved**: `scripts/download_usaspending_bulk.py` -- the practical tool to request/download the actual bulk CSVs for prime and subawards (last 10 years via the official Bulk Download API, using the exact TARGET_FIELDS and small date chunks from the original repo). 
+  - Processes in small configurable chunks (default 2 days per your experience).
+  - Per-chunk retries (3 attempts with backoff) + simple .progress file resume support so you don't lose work on transient errors.
+  - Raw zips are saved under your chosen --out-dir (default `data/raw/bulk_chunks/prime/` and `/sub/`). They are **never auto-deleted** by the download script.
+  - No NAICS or other filters in the request (all contract actions).
+- **New/Improved**: `scripts/ingest_historical.py` now properly handles real CSVs (prime or `--sub`), uses the exact target fields for the DuckDB table, and has a `--delete-source` flag. If you pass `--delete-source`, it will delete the source CSV/zip **after successful load** into DuckDB (use with care; default is to keep everything).
+- Next focus: you use the download script (start small, e.g. 1-2 recent years for 561210), ingest the CSVs, verify queries work for market visibility.
+- Then add more market-potential specific analytics (TAM estimates, your share if we load your UEI history, etc.).
+- MCP live layer (for gaps like long DOE contracts, fresh SAM opps) as parallel next piece.
+- UI/UX dashboard only after data is solid.
 
 ## Next Logical Small Chunks (Data First)
 

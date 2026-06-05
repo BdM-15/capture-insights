@@ -1,0 +1,282 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+/* Theme tokens aligned with docs/UI_THEME.md + Theseus STYLE_GUIDE + Ariadne neon/glass */
+:root {
+  --neon-cyan: #00f0ff;
+  --neon-magenta: #ff2bd6;
+  --neon-lime: #00ff9c;
+  --neon-amber: #ffb020;
+  --neon-red: #ff3b6b;
+
+  --ink-950: #05070d;
+  --ink-900: #0a0e1a;
+  --ink-850: #0f1422;
+  --ink-800: #141a2b;
+  --ink-700: #1c2338;
+  --ink-600: #283151;
+  --ink-card: #11172a;
+
+  --edge: #1f2a44;
+  --edge-strong: #2c3a5e;
+
+  --text-primary: #e6ecff;
+  --text-300: #cbd5e1;
+  --text-400: #94a3b8;
+  --text-500: #64748b;
+
+  /* RGB triplets for rgba() glows and transparency (do not hardcode hex for variants) */
+  --neon-cyan-rgb: 0, 240, 255;
+  --neon-magenta-rgb: 255, 43, 214;
+  --neon-lime-rgb: 0, 255, 156;
+  --neon-amber-rgb: 255, 176, 32;
+}
+
+/* Base dark styles */
+body {
+  background: var(--ink-950);
+  color: var(--text-primary);
+}
+
+/* Glass / card patterns from Theseus + Ariadne */
+.glass {
+  background: rgba(17, 23, 42, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 240, 255, 0.08);
+}
+
+.card {
+  background: var(--ink-card);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 1rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.12);
+}
+
+.card-accent {
+  border-left: 3px solid;
+}
+
+.card-accent.accent-cyan { border-color: var(--neon-cyan); }
+.card-accent.accent-magenta { border-color: var(--neon-magenta); }
+.card-accent.accent-lime { border-color: var(--neon-lime); }
+.card-accent.accent-amber { border-color: var(--neon-amber); }
+
+/* Neon text + glow helpers */
+.neon-text {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px rgba(var(--neon-cyan-rgb), 0.5);
+}
+
+.neon-magenta { color: var(--neon-magenta); text-shadow: 0 0 6px rgba(var(--neon-magenta-rgb), 0.5); }
+.neon-lime { color: var(--neon-lime); }
+.neon-amber { color: var(--neon-amber); }
+
+/* Buttons, pills, icon tiles (Theseus patterns) */
+.btn {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition;
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--neon-cyan), #00b8d9);
+  color: var(--ink-950);
+  border: 1px solid var(--neon-cyan);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--edge);
+  color: var(--text-300);
+}
+
+.btn-ghost:hover {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+}
+
+.pill {
+  @apply px-2.5 py-0.5 text-xs font-mono rounded-full border;
+}
+
+.icon-tile {
+  @apply w-9 h-9 rounded-md flex items-center justify-center;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+/* Nav */
+.nav-item {
+  @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition;
+}
+
+.nav-item-active {
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--neon-cyan);
+  border-left: 3px solid var(--neon-cyan);
+}
+
+/* Status / data indicators */
+.status-dot {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Data tables and small text */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Educational / info icons */
+.info-icon {
+  color: var(--neon-cyan);
+  cursor: help;
+  opacity: 0.7;
+}
+
+.info-icon:hover {
+  opacity: 1;
+}
+
+/* Resizable chat pane (holistic floating assistant — always available, no separate page) */
+.chat-pane {
+  background: rgba(17, 23, 42, 0.96);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid rgba(0, 240, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 30px rgba(0,0,0,0.6);
+}
+
+.resize-handle {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.1s;
+}
+.resize-handle:hover,
+.resize-handle.active {
+  background: linear-gradient(to right, transparent, rgba(0,240,255,0.3));
+}
+
+.chat-header {
+  background: #0a0a12;
+  border-bottom: 1px solid #1f1f2e;
+  padding: 8px 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: #0c101c;
+}
+
+.chat-msg {
+  max-width: 88%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  white-space: pre-wrap;
+}
+.chat-msg.user {
+  background: #00f0ff;
+  color: #000;
+  margin-left: auto;
+}
+.chat-msg.assistant {
+  background: #16161f;
+  color: #e0e0ff;
+  border: 1px solid rgba(0,240,255,0.1);
+}
+
+.chat-suggest {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid rgba(255,43,214,0.4);
+  color: #ff2bd6;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-block;
+  margin: 2px 3px 2px 0;
+}
+.chat-suggest:hover {
+  background: rgba(255,43,214,0.1);
+  border-color: #ff2bd6;
+}
+
+.chat-input-row {
+  padding: 8px 10px;
+  border-top: 1px solid #1f1f2e;
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Brain / Wiki accumulator items (contextual "make the knowledge smarter") */
+.brain-item {
+  background: rgba(255,43,214,0.06);
+  border: 1px solid rgba(255,43,214,0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.brain-item .meta {
+  font-size: 10px;
+  color: #a0a0c0;
+  margin-top: 2px;
+}
+
+.action-btn {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  cursor: pointer;
+  transition: all .1s;
+}
+.action-btn.pipeline {
+  color: #00f0ff;
+  border-color: rgba(0,240,255,0.5);
+}
+.action-btn.pipeline:hover { background: rgba(0,240,255,0.1); }
+.action-btn.brain {
+  color: #ff2bd6;
+  border-color: rgba(255,43,214,0.5);
+}
+.action-btn.brain:hover { background: rgba(255,43,214,0.1); }
+
+/* Insight callout boxes for useful content per tab */
+.insight {
+  background: rgba(31,31,46,0.6);
+  border-left: 3px solid #00f0ff;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #a8b4d0;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+.insight.magenta { border-color: #ff2bd6; }
+.insight.lime { border-color: #00ff9c; }

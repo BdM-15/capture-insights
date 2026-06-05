@@ -2,6 +2,11 @@
 """
 INGEST SAMPLE DATA INTO DUCKDB - Plain English Version for Non-Experts
 
+NOTE: For real historical work, use the newer and better script:
+  scripts/ingest_historical.py
+
+This older script is kept for quick demo/synthetic testing only.
+
 This script creates ONE single file (a .duckdb file) that holds all your government contract data
 in a super-fast, easy-to-query way.
 
