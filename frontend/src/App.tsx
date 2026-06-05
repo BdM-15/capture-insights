@@ -52,7 +52,7 @@ interface ExpiringData {
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3, desc: 'Core data views & insights' },
   { id: 'pipeline', label: 'Pipeline + Brain', icon: Briefcase, desc: 'Saved pursuits + competitor wiki accumulators' },
-  { id: 'tools', label: 'MCP Tools', icon: Wrench, desc: 'SAM, BLS, usaspending MCPs (future)' },
+  { id: 'tools', label: 'MCP Tools', icon: Wrench, desc: 'Using 1102tools/federal-contracting-mcps (sam-gov-mcp etc.) + direct fallbacks' },
   { id: 'skills', label: 'Skills', icon: Layers, desc: 'Capture skills & automations (future)' },
   { id: 'settings', label: 'Settings', icon: Settings, desc: 'NAICS defaults, theme, etc.' },
 ]
@@ -780,7 +780,7 @@ export default function App() {
                   }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20">{t}</button>
                 ))}
               </div>
-              <div className="text-[10px] text-[#606080] mb-2">Tip: From an expiring row above, click "Search SAM for this" to auto-fill for that cycle's agency/recipient. Common types: RFI, Sources Sought, Special Notice, Presolicitation, Solicitation. Add results to pipeline or "Create Monitor" to track.</div>
+              <div className="text-[10px] text-[#606080] mb-2">Tip: From an expiring row above, click "Search SAM for this" to auto-fill for that cycle's agency/recipient. Common types: RFI, Sources Sought, Special Notice, Presolicitation, Solicitation. Add results to pipeline or "Create Monitor" to track. For richer MCP tools run `uvx sam-gov-mcp` in another terminal (see backend/app/mcp.py).</div>
               <div className="glass rounded-3xl overflow-hidden text-sm">
                 <table className="w-full"><tbody>
                   {samResults.length === 0 && <tr><td className="p-3 text-slate-400">No SAM results yet — enter keywords and search (requires SAM_API_KEY on backend for live data).</td></tr>}
@@ -790,6 +790,7 @@ export default function App() {
                       <td className="p-3 text-xs text-[#a0a0c0]">{s.noticeType}</td>
                       <td className="p-3 text-xs">{s.responseDeadLine}</td>
                       <td className="p-3 text-xs text-[#00f0ff]">{(s.agency || '').slice(0,20)}</td>
+                      <td className="p-3 text-[9px] text-[#606080]">{s._source ? (s._source.startsWith('mcp') ? 'via MCP' : 'direct API') : ''}</td>
                       <td className="p-3 text-right space-x-1">
                         {s.link && <a href={s.link} target="_blank" rel="noopener" className="text-xs text-[#00f0ff] hover:underline">sam.gov ↗</a>}
                         <button onClick={() => addToPipeline(s, 'sam-opp')} className="action-btn pipeline text-xs">+ pipeline</button>

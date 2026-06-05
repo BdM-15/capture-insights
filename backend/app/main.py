@@ -287,9 +287,14 @@ async def sam_opportunities(
     import httpx
 
     # Try MCP first for rich tools (when sam-gov-mcp server is running locally)
+    # See backend/app/mcp.py and docs for how to run: uvx sam-gov-mcp (from https://github.com/1102tools/federal-contracting-mcps)
     from .mcp import search_sam_opportunities_mcp
     mcp_results = await search_sam_opportunities_mcp(naics=naics, keywords=keywords, notice_types=notice_types, limit=limit)
     if mcp_results:
+        # Tag so frontend can show "sourced from live MCP" vs direct API fallback
+        for item in mcp_results:
+            if isinstance(item, dict):
+                item.setdefault("_source", "mcp:sam-gov-mcp")
         return mcp_results
 
     if not settings.sam_api_key or settings.sam_api_key.startswith("SAM-7fa8ffb7") or len(settings.sam_api_key) < 20:
@@ -335,6 +340,7 @@ async def sam_opportunities(
             "agency": o.get("agency") or o.get("organizationName") or o.get("department") or "",
             "link": link,
             "description": (o.get("description") or o.get("synopsis") or "")[:300],
+            "_source": "direct:sam-gov-api",
         })
     return results
 
