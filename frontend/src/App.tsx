@@ -767,6 +767,18 @@ export default function App() {
                   className="w-72 bg-[#16161f] border border-[#1f1f2e] text-sm px-3 py-1.5 rounded"
                 />
                 <button onClick={searchSamLive} disabled={loading} className="px-4 py-1.5 rounded bg-[#00f0ff] text-black text-sm font-semibold">Search SAM</button>
+                <button onClick={() => {
+                  const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords)}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`
+                  addToPipeline({ title: `SAM Monitor: ${samKeywords || 'custom'}`, agency: 'Custom', monitorUrl, notes: `Notice types: ${samNoticeTypes}` }, 'sam-monitor')
+                }} className="px-3 py-1.5 text-sm border border-[#00f0ff]/50 rounded hover:bg-[#00f0ff]/10">Create custom monitor</button>
+              </div>
+              <div className="flex flex-wrap gap-1 mb-2 text-xs">
+                {['RFI','Sources Sought','Special Notice','Presolicitation','Solicitation'].map(t => (
+                  <button key={t} onClick={() => {
+                    const current = samNoticeTypes.split(',').map(s=>s.trim()).filter(Boolean);
+                    if (!current.includes(t)) setSamNoticeTypes([...current, t].join(','));
+                  }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20">{t}</button>
+                ))}
               </div>
               <div className="text-[10px] text-[#606080] mb-2">Tip: From an expiring row above, click "Search SAM for this" to auto-fill for that cycle's agency/recipient. Common types: RFI, Sources Sought, Special Notice, Presolicitation, Solicitation. Add results to pipeline or "Create Monitor" to track.</div>
               <div className="glass rounded-3xl overflow-hidden text-sm">
@@ -796,6 +808,29 @@ export default function App() {
                 </tbody></table>
               </div>
               <div className="text-[10px] text-[#606080] mt-2">Results from SAM.gov API (MCP layer coming for richer tools like saved searches, entity info, exclusions). "Create Monitor" adds a pipeline item with a ready-to-use SAM search URL so you can set recurring checks or alerts.</div>
+
+              {/* My SAM Monitors - saved searches from Create Monitor */}
+              <div className="mt-4">
+                <div className="text-sm font-semibold mb-2">My SAM Monitors (saved searches)</div>
+                {pipeline.filter((p: any) => p.type === 'sam-monitor').length === 0 ? (
+                  <div className="text-xs text-slate-400">No monitors yet. Use "Create Monitor" on search results or expiring items to save recurring SAM searches.</div>
+                ) : (
+                  <div className="glass rounded-3xl overflow-hidden text-sm">
+                    <table className="w-full"><tbody>
+                      {pipeline.filter((p: any) => p.type === 'sam-monitor').map((m: any, i: number) => (
+                        <tr key={i} className="border-b border-[#1f1f2e] hover:bg-[#16161f]">
+                          <td className="p-3 truncate">{m.title || m.monitorUrl || 'SAM Monitor'}</td>
+                          <td className="p-3 text-xs">{m.agency}</td>
+                          <td className="p-3 text-right">
+                            {m.monitorUrl && <a href={m.monitorUrl} target="_blank" className="text-xs text-[#00f0ff] hover:underline mr-2">Open in SAM ↗</a>}
+                            <button onClick={() => removeFromPipeline(m.id || m.ts)} className="text-xs text-[#ff3b6b]">× remove</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody></table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )

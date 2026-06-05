@@ -73,7 +73,7 @@ async def health() -> dict[str, Any]:
         "env": settings.app_env,
         "duckdb_ready": os.path.exists(str(settings.duckdb_path)),
         "ollama_ready": False,  # TODO: ping Ollama
-        "mcp_servers": [],  # TODO: list connected federal-contracting MCPs etc.
+        "mcp_servers": ["sam (direct API + mcp.py stub; connect sam-gov-mcp server for full tools)"],  # TODO: list connected federal-contracting MCPs etc.
     }
 
 
@@ -286,11 +286,17 @@ async def sam_opportunities(
     from .config import settings
     import httpx
 
-    if not settings.sam_api_key:
+    # Try MCP first for rich tools (when sam-gov-mcp server is running locally)
+    from .mcp import search_sam_opportunities_mcp
+    mcp_results = await search_sam_opportunities_mcp(naics=naics, keywords=keywords, notice_types=notice_types, limit=limit)
+    if mcp_results:
+        return mcp_results
+
+    if not settings.sam_api_key or settings.sam_api_key.startswith("SAM-7fa8ffb7") or len(settings.sam_api_key) < 20:
         return [
             {
-                "title": "SAM.gov search disabled (no SAM_API_KEY)",
-                "agency": "Configure in .env",
+                "title": "SAM.gov search requires a real SAM_API_KEY in .env",
+                "agency": "Get free key at https://api.data.gov/signup/ (SAM.gov section)",
                 "link": "https://api.data.gov/signup/",
                 "noticeType": "info",
             }
