@@ -1,0 +1,63 @@
+[project]
+name = "capture-insights"
+version = "0.1.0"
+description = "Modern local workstation for federal contract capture intelligence. Privacy-first, MCP-powered, AI-assisted capture profiles."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    "duckdb>=1.1",
+    "chromadb>=0.5",
+    "python-docx>=1.1",
+    "ollama>=0.4",
+    "httpx>=0.27",
+    "mcp>=1.0",  # official Python MCP SDK for connecting to federal-contracting-mcps etc.
+    # "pydantic-ai>=0.0.1",  # when stable / desired for agents
+    "structlog>=24.0",
+    "typer>=0.12",  # for CLI scripts
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8.0",
+    "pytest-asyncio",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+]
+
+[project.scripts]
+capture-insights = "capture_insights.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "ruff",
+    "pytest",
+    "mypy",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests", "tests"]
+asyncio_mode = "auto"
