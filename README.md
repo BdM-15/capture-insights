@@ -153,19 +153,32 @@ capture-insights/
 
 See `docs/ARCHITECTURE.md` (initial version to be added) for details, ADRs, and migration notes from old repo.
 
-## Current Status (Just Started)
+## Current Status & Approach (June 2026)
 
-- [x] New public GitHub repo created (BdM-15/capture-insights).
-- [x] Thorough review of predecessor + federal-contracting-mcps.
-- [x] User input collected on UI (FastAPI + React/TS modern frontend), data (open to DuckDB + Chroma for vectors), v1 scope (core dashboard + filters + viz + grounded chat + basic DOCX profile), name (capture-insights).
-- [ ] Local scaffold (this README, pyproject, basic FastAPI + frontend skeleton, .env, git).
-- [ ] First runnable "hello" (health endpoint + simple dashboard page + docx stub).
-- [ ] Sample data ingest + DuckDB + basic filters API.
-- [ ] MCP client wiring + one live tool demo (e.g. SAM opportunities search).
-- [ ] AI chat grounded in local data.
-- [ ] Profile generator v0 (4-5 sections, citations, export).
+We are building in small, focused, high-quality chunks. No "build to build."
 
-This is the foundation commit. Next steps will be incremental, testable, and documented.
+**What exists right now (after first real work session):**
+- New public repo + local git.
+- Thorough review of the old Data_Insights repo and the excellent federal-contracting-mcps.
+- Clear decisions based on your input:
+  - **Single DuckDB only** (one simple, powerful file on your computer). No redundant databases (Chroma etc.) until we prove we need them. Everything explained in plain English.
+  - Local LLM primary (Ollama). 8GB VRAM friendly recommendation: `qwen2.5:7b` (or similar quantized). You can also use xAI Grok models via API when you want.
+  - Training data collection planned from the beginning for future fine-tuning of specialized models.
+  - NAICS: 561210 is default but multi-NAICS support is built in from day one.
+  - Future skills (visuals/presentations like huashu-design style, IGCE, teaming, etc.) are documented as later work.
+- Initial scaffold + very educational `scripts/ingest_sample.py` (synthetic data works immediately; real CSV instructions included).
+- Plain-English data dictionary started (Karpathy-style explanations + "how the AI should think about this field").
+- Architecture and future-skills ideas docs written with your constraints in mind.
+
+**Next small chunk (what we will do next unless you say otherwise):**
+1. Make the ingest script + DuckDB loading rock solid and well documented.
+2. Add a couple of basic, useful SQL queries (inspired by the good ones in the old repo) as examples.
+3. Simple FastAPI endpoint that returns "summary numbers + top agencies" for selected NAICS/date range.
+4. Update docs so a non-expert can run the ingest, open the DuckDB file, and run some queries themselves.
+
+After that chunk we will show you the output and decide the exact next piece (basic dashboard UI? first chat? profile stub?).
+
+Everything stays understandable. No magic. Quality and efficiency over speed of adding features.
 
 ## Contributing / Next
 

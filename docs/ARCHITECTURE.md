@@ -47,14 +47,36 @@ This document captures the rationale, decisions, and high-level design for the 2
    - Also MD, JSON (structured data), PDF (later).
    - Future: PPT exec brief, Excel pipeline export.
 
-## Key Technology Choices & Rationale (June 2026)
-- **DuckDB over Postgres for v1 analytics**: In-process, zero ops, reads Parquet natively, vectorized, excellent SQL for exactly the filter + agg workloads we have. Handles tens of millions of rows comfortably on a good laptop. Postgres remains an option later for shared/team use.
-- **Chroma (or equiv) for vectors**: Simple, local, great metadata filtering + similarity. Pairs well with DuckDB for hybrid search (structured + semantic).
-- **federal-contracting-mcps (1102tools)**: Production-hardened, deterministic, low-context, tested (2600+ tests), easy key injection. Replaces almost all custom SAM/USASpending/BLS acquisition code from the old repo. Run via `uvx` or persistent processes.
-- **FastAPI + React/TS (shadcn)**: Clean separation, typed contract (OpenAPI), best-in-class DX for rich interactive UI. Localhost only (no public hosting needed).
-- **Ollama + structured agents**: Local, private, improving rapidly. Tool calling + Pydantic models for reliable outputs.
-- **uv + pyproject**: Reproducible, fast, modern Python packaging. No more massive pinned requirements.txt or committed venvs.
-- **python-docx for profiles**: Battle-tested, precise control over professional formatting, tables, headings, citations.
+## Key Technology Choices - Kept Extremely Simple (for Non-Experts)
+
+We made deliberate choices to avoid "shiny object" complexity.
+
+**Single Database: DuckDB only**
+- What it feels like: One regular file on your hard drive (data/capture.duckdb) that acts like a magical, super-fast Excel that speaks SQL.
+- Why only one? You (and I) are not experts in databases. Having DuckDB + Chroma + Postgres would be redundant and confusing.
+- DuckDB can answer "normal" questions (sums, top 10 agencies, contracts expiring in 2026) AND later "find contracts whose descriptions sound like this one" (semantic search).
+- Result: Much less to learn, less to break, less to maintain. We only add a second store if we hit a real wall that DuckDB can't solve.
+
+**Data sources**
+- Historical depth: You download CSV(s) from usaspending.gov (or we later use the official usaspending-gov-mcp tool).
+- Live / forward-looking: The excellent free federal-contracting-mcps from 1102tools (you already have the API keys for SAM, BLS, etc.).
+- No custom fragile scrapers like in the old repo.
+
+**Local LLM + optional xAI**
+- Primary: Ollama running on your machine (private, free after download).
+- For 8GB VRAM: qwen2.5:7b (or qwen2.5:7b quantized) is an excellent, capable starting point. Your suggested qwen-style 9B can work if quantized.
+- Optional: When you want Grok-level reasoning for a hard profile or training example, the code can call xAI's API (you provide the key). We log those uses so they become great fine-tuning data later.
+
+**Everything else stays simple and focused on the end state**
+- FastAPI (the "engine room" that answers questions from the frontend or future skills).
+- Modern React frontend (clean cards, filters, tables, charts) served locally.
+- python-docx for real professional Word documents that executives will actually read.
+- Training data collection from day one (so future fine-tuning is possible and high quality).
+
+We are not building features for the sake of building. Every piece must serve:
+- Fast, trustworthy answers about real spending data.
+- Professional capture artifacts with citations.
+- Ability to improve over time (via better data + eventual fine-tuned models).
 
 ## Data Model Sketch (High Level)
 - Core fact: awards (primes + subawards) with full USASpending columns + our derived (fy, quarter, normalized recipient, etc.).

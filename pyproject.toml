@@ -38,10 +38,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv]
-dev-dependencies = [
+# Modern way (avoids deprecation warning)
+[dependency-groups]
+dev = [
     "ruff",
     "pytest",
     "mypy",
+    "pandas",   # optional but very handy when exploring data with .df()
 ]
 
 [tool.ruff]

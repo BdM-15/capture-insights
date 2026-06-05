@@ -26,15 +26,19 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     log_level: str = "INFO"
 
-    # Data
+    # Data - We deliberately use ONE store (DuckDB) for simplicity.
+    # See docs for plain-English explanation. No Chroma/Postgres in early versions.
     duckdb_path: Path = Path("data/capture.duckdb")
-    chroma_path: Path = Path("data/chroma")
 
-    # LLM
+    # LLM - Local first (good for 8GB VRAM), with optional xAI fallback
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5:14b-instruct"
+    ollama_model: str = "qwen2.5:7b"   # Safe & strong on 8GB VRAM. qwen2.5:7b or similar.
     ollama_temperature: float = 0.3
-    ollama_embed_model: str = "nomic-embed-text"
+
+    # xAI Grok (via their OpenAI-compatible endpoint) - use when you want more power
+    # or for generating training examples to later fine-tune a local model.
+    xai_api_key: str | None = None
+    xai_base_url: str = "https://api.x.ai/v1"
 
     # MCP / API keys (for federal-contracting-mcps etc.)
     sam_api_key: str | None = None
