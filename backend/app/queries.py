@@ -711,6 +711,7 @@ def get_chat_response(
     pipeline_items: list[dict] | None = None,
     extra_context: str | None = None,
     use_llm: bool = False,
+    mcp_tools: list[dict] | None = None,
 ) -> dict:
     """
     Build a useful, context-aware response for the floating AI co-pilot.
@@ -718,11 +719,16 @@ def get_chat_response(
     Receives live state from the frontend (current NAICS, active tab, KPIs,
     and the user's persisted Brain + Pipeline from data/user_accumulators.json).
 
+    mcp_tools (if provided) is the catalog of available tools from sam-gov-mcp (and future others).
+    The LLM is instructed that it is the agent that calls these to perform admin tasks for the user.
+    The user will never use the MCP servers manually.
+
     By default uses the fast deterministic path (excellent because it has your exact saved data + actions).
-    If the incoming request has use_llm=True, it will try the local Ollama model first.
+    If the incoming request has use_llm=True, it will try the local Ollama model first (qwen preferred).
     """
     brain = brain_items or []
     pipeline = pipeline_items or []
+    tools = mcp_tools or []
 
     brain_names = [b.get("name") for b in brain if b.get("name")][:5]
     pipeline_count = len(pipeline)
@@ -744,8 +750,13 @@ def get_chat_response(
         context_lines.append(f"User's Pipeline has {pipeline_count} saved opportunities.")
     else:
         context_lines.append("User's Pipeline is currently empty.")
+    if tools:
+        tool_names = [t.get("name") for t in tools if isinstance(t, dict) and t.get("name")][:8]
+        context_lines.append("Available MCP tools the co-pilot can invoke for the user (agentic): " + ", ".join(tool_names) + ".")
+    else:
+        context_lines.append("MCP tools catalog not loaded this request (direct API fallbacks still available for SAM).")
     if extra_context:
-        context_lines.append(f"User asked: {extra_context}")
+        context_lines.append(f"User asked / tool results injected: {extra_context}")
 
     context_block = "\n".join(context_lines)
 
@@ -753,24 +764,27 @@ def get_chat_response(
     # The fast deterministic path below is already very powerful because it has your exact saved Brain + Pipeline.
     llm_text = None
     if use_llm:
-        ollama_models_to_try = ["qwen3.5:9b", "qwen2.5:7b-instruct", "llama2:latest"]
+        ollama_models_to_try = ["qwen3.5:9b", "qwen2.5:7b-instruct", "qwen2.5:7b", "llama3.2:latest"]
         for model in ollama_models_to_try:
             try:
                 prompt = (
-                    "You are a concise, professional capture intelligence co-pilot for a business development professional.\n"
-                    "Use only the provided live context from their dashboard and their own saved Brain (competitors/agencies they are tracking) and Pipeline (opportunities they saved).\n"
-                    "Be direct, actionable, and reference specific numbers or names from the context when possible.\n"
-                    "If the context is limited, say so plainly and suggest the most useful next step (e.g. adding more items to Brain).\n\n"
+                    "You are an agentic capture intelligence co-pilot. The user will NEVER call MCP tools or run uvx themselves.\n"
+                    "You are the one who decides when to use available MCP tools (from the catalog in context) to perform admin tasks on their behalf: searching SAM.gov for live notices, creating monitors, enriching brain entries, etc.\n"
+                    "You are grounded ONLY in the provided CONTEXT (scope + exact Brain + Pipeline + live tool results if any + available MCP tools).\n"
+                    "Be direct, actionable, reference specific names/numbers from context. If you used or want to reference live MCP data, say so.\n"
+                    "When you want to invoke a tool to help answer (e.g. because user asked to search SAM or create monitors), output on its own line in this exact format before your final prose:\n"
+                    "TOOL_CALL: search_opportunities {\"naics\": \"561210\", \"keywords\": \"...\", \"notice_types\": \"RFI,Sources Sought\"}\n"
+                    "The system will execute it and re-invoke you with the results injected. For this turn, just propose or use what is already injected.\n\n"
                     f"CONTEXT:\n{context_block}\n\n"
-                    "Answer the user's question or request helpfully. Keep the response to 4-8 sentences unless more detail is clearly needed."
+                    "Answer the user's request helpfully and concisely (4-8 sentences). At the end suggest 1-3 concrete next actions the user can click."
                 )
                 ollama_req = urllib.request.Request(
                     "http://localhost:11434/api/generate",
-                    data=json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8"),
+                    data=json.dumps({"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.2}}).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                with urllib.request.urlopen(ollama_req, timeout=5) as resp:
+                with urllib.request.urlopen(ollama_req, timeout=12) as resp:
                     result = json.loads(resp.read())
                 llm_text = result.get("response", "").strip()
                 if llm_text:
@@ -780,6 +794,9 @@ def get_chat_response(
                         llm_actions.append({"label": f"Add more to Brain for {top}", "action": "add_to_brain", "payload": {"name": top, "type": brain[0].get("type", "competitor")}})
                     if pipeline:
                         llm_actions.append({"label": "Review my Pipeline", "action": "navigate", "payload": {"view": "pipeline"}})
+                    # If LLM output contains a TOOL_CALL we surface it as a special suggested action (frontend can later drive full loop)
+                    if "TOOL_CALL" in llm_text:
+                        llm_actions.append({"label": "Execute the tool call the model proposed (search/create)", "action": "log_note", "payload": {"note": "LLM proposed TOOL_CALL — backend orchestration handled the MCP in this version"}})
                     return {
                         "response": llm_text,
                         "context_used": {
@@ -788,8 +805,9 @@ def get_chat_response(
                             "brain_count": brain_count,
                             "pipeline_count": pipeline_count,
                             "model": model,
+                            "mcp_tools": [t.get("name") for t in tools if isinstance(t, dict)][:5],
                         },
-                        "source": "ollama",
+                        "source": "ollama+agentic",
                         "suggested_actions": llm_actions,
                     }
             except Exception:
@@ -817,8 +835,10 @@ def get_chat_response(
     suggestions = []
     if brain and pipeline:
         suggestions.append("Look for overlap between your saved Pipeline items and the agencies/companies in your Brain.")
+    if brain and tools:
+        suggestions.append("Ask me (the co-pilot) to search SAM using the agencies in your Brain + current expiring cycles — I will call the MCP tools for you.")
     if brain:
-        suggestions.append("Consider running deeper research on the top Brain entries (future: one-click MCP or LLM enrichment).")
+        suggestions.append("Consider running deeper research on the top Brain entries (ask the chat to drive MCP search or enrichment).")
     if not brain:
         suggestions.append("Start by adding 2-3 interesting recipients or agencies to your Brain from the Competitive or Agency tabs.")
 
@@ -834,6 +854,12 @@ def get_chat_response(
             "label": "Check overlaps between my Brain and Pipeline",
             "action": "log_note",
             "payload": {"note": "User asked to review overlaps"}
+        })
+    if brain and tools:
+        suggested_actions.append({
+            "label": "Let AI search SAM for hot items in my Brain + expiring (drives MCP)",
+            "action": "mcp_search_sam",
+            "payload": {"reason": "brain+expiring", "keywords": ", ".join(brain_names[:3])}
         })
     if brain:
         top = brain[0].get("name")

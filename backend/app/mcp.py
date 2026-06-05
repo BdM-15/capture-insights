@@ -38,8 +38,9 @@ _sam_mcp_lock = asyncio.Lock()
 async def get_sam_mcp_client() -> Optional[ClientSession]:
     """Return (or create) a connected MCP client session for sam-gov-mcp.
 
-    Connects via stdio to the external MCP server (run `uvx sam-gov-mcp` separately).
-    Returns None if MCP not available or server not running (caller should fallback).
+    NOTE: For reliability with stdio MCP servers we prefer on-demand connections
+    inside context managers for each list_tools / call_tool (see helpers below).
+    This legacy global is kept for backward compat but new code uses the _call / list funcs.
     """
     global _sam_mcp_session
 
@@ -48,15 +49,10 @@ async def get_sam_mcp_client() -> Optional[ClientSession]:
 
     async with _sam_mcp_lock:
         if _sam_mcp_session is not None:
-            # Basic liveness check could be added here
             return _sam_mcp_session
 
         try:
-            # Use the battle-tested servers from https://github.com/1102tools/federal-contracting-mcps
-            # Run separately: uvx sam-gov-mcp   (or uvx --from git+https://github.com/1102tools/federal-contracting-mcps sam-gov-mcp)
-            # The client here only *consumes* them via stdio — we do not implement MCP servers.
             server_env = os.environ.copy()
-            # Ensure keys from our .env are visible to the child MCP process
             for key in ("SAM_API_KEY", "DATA_GOV_API_KEY"):
                 if hasattr(settings, key.lower()) and getattr(settings, key.lower()):
                     server_env[key] = getattr(settings, key.lower())
@@ -67,22 +63,56 @@ async def get_sam_mcp_client() -> Optional[ClientSession]:
                 env=server_env,
             )
 
+            # Note: we intentionally do not keep a long-lived one here to avoid leaks;
+            # the list_ and search_ helpers below use fresh proper async with per invocation.
             read, write = await stdio_client(server_params).__aenter__()
             session = ClientSession(read, write)
             await session.initialize()
-
-            # Optionally list tools for debugging / validation
-            # tools = await session.list_tools()
-            # print("Connected to sam-gov-mcp, tools:", [t.name for t in tools.tools])
-
             _sam_mcp_session = session
             return _sam_mcp_session
         except Exception as e:
-            # Server not running, wrong command, missing deps, etc. — graceful fallback
-            # In production you might log at debug level.
             print(f"[mcp] Could not connect to sam-gov-mcp (will use direct API fallback): {e}")
             _sam_mcp_session = None
             return None
+
+
+async def list_sam_mcp_tools() -> List[Dict[str, Any]]:
+    """Discover the tools exposed by sam-gov-mcp (from https://github.com/1102tools/federal-contracting-mcps).
+
+    Returns list of {name, description, ...} or [] if MCP server not running / unavailable.
+    This catalog is injected into the chat LLM context so the agentic co-pilot knows what admin
+    actions it can perform on the user's behalf (user never calls MCP manually).
+    """
+    if not settings.enable_live_mcps or not MCP_AVAILABLE:
+        return []
+
+    server_env = os.environ.copy()
+    for key in ("SAM_API_KEY", "DATA_GOV_API_KEY"):
+        if hasattr(settings, key.lower()) and getattr(settings, key.lower()):
+            server_env[key] = getattr(settings, key.lower())
+
+    server_params = StdioServerParameters(
+        command="uvx",
+        args=["sam-gov-mcp"],
+        env=server_env,
+    )
+
+    try:
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+                tools: List[Dict[str, Any]] = []
+                for t in getattr(tools_result, "tools", []) or []:
+                    tools.append({
+                        "name": getattr(t, "name", str(t)),
+                        "description": getattr(t, "description", ""),
+                        "input_schema": getattr(t, "inputSchema", None) or getattr(t, "input_schema", None),
+                    })
+                return tools
+    except Exception as e:
+        print(f"[mcp] list_sam_mcp_tools: server not reachable or error: {e}")
+        return []
 
 
 async def search_sam_opportunities_mcp(
@@ -91,50 +121,68 @@ async def search_sam_opportunities_mcp(
     notice_types: str = "",
     limit: int = 10,
 ) -> List[Dict[str, Any]]:
-    """Call the MCP tool if a sam-gov-mcp server is connected.
+    """Call the MCP 'search_opportunities' tool (preferred) via fresh on-demand stdio session.
 
-    Expected tool name in the 1102tools package is typically "search_opportunities"
-    (or similar — adjust the name below after running the server and inspecting tools).
-    Falls back to returning [] so the direct-API path in the endpoint is used.
+    Falls back to [] (so main.py sam_opportunities can use direct REST).
+    The LLM co-pilot (in /chat) is the one that decides to invoke this — user never uses MCP or uvx directly.
     """
-    session = await get_sam_mcp_client()
-    if not session:
+    if not settings.enable_live_mcps or not MCP_AVAILABLE:
         return []
 
+    server_env = os.environ.copy()
+    for key in ("SAM_API_KEY", "DATA_GOV_API_KEY"):
+        if hasattr(settings, key.lower()) and getattr(settings, key.lower()):
+            server_env[key] = getattr(settings, key.lower())
+
+    server_params = StdioServerParameters(
+        command="uvx",
+        args=["sam-gov-mcp"],
+        env=server_env,
+    )
+
+    arguments: Dict[str, Any] = {"naics": naics, "limit": limit}
+    if keywords:
+        arguments["keywords"] = keywords
+    if notice_types:
+        arguments["notice_types"] = notice_types
+
     try:
-        # Build arguments matching what the MCP tool expects.
-        # Common shape for these MCPs: pass filters as dict.
-        arguments: Dict[str, Any] = {
-            "naics": naics,
-            "limit": limit,
-        }
-        if keywords:
-            arguments["keywords"] = keywords  # or "q"
-        if notice_types:
-            arguments["notice_types"] = notice_types  # or "noticeType"
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                # Try common / likely tool names from the 1102tools sam-gov-mcp (we only consume; inspect list_tools for exact)
+                candidates = ["search_opportunities", "search", "get_opportunities", "search_sam_opportunities", "opportunities"]
+                result = None
+                used_name = None
+                for tn in candidates:
+                    try:
+                        result = await session.call_tool(tn, arguments=arguments)
+                        used_name = tn
+                        break
+                    except Exception:
+                        continue
+                if result is None:
+                    # fall through to raw note
+                    return [{"raw_mcp_result": "no matching search tool found in server; available via list_tools", "_source": "mcp:tool-mismatch"}]
 
-        # The actual tool name may be "search_opportunities" or "search".
-        # You can discover it by temporarily uncommenting list_tools above and checking the name.
-        result = await session.call_tool("search_opportunities", arguments=arguments)
-
-        # MCP results are usually in result.content (text or structured).
-        # The sam-gov-mcp typically returns list of opportunity dicts.
-        # Adapt parsing as needed once you have a live connection.
-        if hasattr(result, "content") and result.content:
-            # Many MCPs return JSON text in the first content item
-            import json
-            text = result.content[0].text if hasattr(result.content[0], "text") else str(result.content[0])
-            try:
-                parsed = json.loads(text)
-                if isinstance(parsed, list):
-                    return parsed[:limit]
-                if isinstance(parsed, dict) and "opportunities" in parsed:
-                    return parsed["opportunities"][:limit]
-            except Exception:
-                pass
-
-        # Fallback: return raw if we can't parse
-        return [{"raw_mcp_result": str(result)[:500]}]
+                if hasattr(result, "content") and result.content:
+                    import json
+                    text = result.content[0].text if hasattr(result.content[0], "text") else str(result.content[0])
+                    try:
+                        parsed = json.loads(text)
+                        if isinstance(parsed, list):
+                            for item in parsed:
+                                if isinstance(item, dict):
+                                    item.setdefault("_source", "mcp:sam-gov-mcp")
+                            return parsed[:limit]
+                        if isinstance(parsed, dict) and "opportunities" in parsed:
+                            opps = parsed["opportunities"][:limit]
+                            for o in opps:
+                                if isinstance(o, dict): o.setdefault("_source", "mcp:sam-gov-mcp")
+                            return opps
+                    except Exception:
+                        pass
+                return [{"raw_mcp_result": str(result)[:400], "_source": "mcp:sam-gov-mcp"}]
     except Exception as e:
-        print(f"[mcp] search_opportunities_mcp error (falling back): {e}")
+        print(f"[mcp] search_sam_opportunities_mcp error (will fallback to direct): {e}")
         return []

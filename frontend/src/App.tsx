@@ -113,6 +113,19 @@ export default function App() {
 
   useEffect(() => { loadUserAccumulators() }, [])
 
+  // Fetch MCP tool catalog once (so chat can tell the LLM what admin actions are available to drive).
+  // This is how the agentic contract is communicated: LLM sees the list and user never touches MCPs directly.
+  async function loadMcpTools() {
+    try {
+      const res = await fetch('/mcp/tools')
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.tools)) setMcpToolsCatalog(data.tools)
+      }
+    } catch {}
+  }
+  useEffect(() => { loadMcpTools() }, [])
+
   // Call after mutations so React state matches the JSON file on disk
   async function syncAccumulators() {
     await loadUserAccumulators()
@@ -125,9 +138,10 @@ export default function App() {
   const [isResizing, setIsResizing] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [chatHistory, setChatHistory] = useState([
-    { role: 'assistant', content: 'Live co-pilot ready (now calls backend /chat).\n\nI receive your current NAICS, active tab, KPIs, and the full contents of your persisted Pipeline + Brain.\n\nThe responses are grounded in what you have actually saved (data/user_accumulators.json). Try asking about your brain entries, overlaps, or what to watch next.' }
+    { role: 'assistant', content: 'Agentic co-pilot ready.\n\nI see your current scope (NAICS + tab + KPIs), full persisted Pipeline + Brain (from data/user_accumulators.json), and the catalog of available MCP tools (sam-gov-mcp etc from 1102tools/federal-contracting-mcps).\n\nTell me what admin work to do: "search SAM for the hot agencies in my brain + expiring cycles", "create monitors for the top 3 relevant RFIs/Sources Sought", "add the interesting live ones to my pipeline".\n\nI (the LLM) will drive the MCP calls for you — you never use MCP or uvx manually. Use Smart for local LLM (qwen...) or Fast for instant deterministic.' }
   ])
   const [useSmartModel, setUseSmartModel] = useState(false)  // opt into local LLM (qwen3.5:9b etc.) for more natural answers; default is fast deterministic path using your exact persisted data + suggested action chips
+  const [mcpToolsCatalog, setMcpToolsCatalog] = useState<any[]>([])
 
   async function loadData() {
     setLoading(true)
@@ -268,8 +282,9 @@ export default function App() {
     const userText = chatInput.trim()
     setChatInput('')
 
-    // Build rich live context from the current dashboard + the persisted accumulators.
-    // This is what makes the floating chat genuinely useful instead of a generic assistant.
+    // Build rich live context from the current dashboard + the persisted accumulators + MCP tool catalog.
+    // The catalog tells the LLM what admin/MCP actions it can perform on the user's behalf (search SAM,
+    // entity lookups, etc.). This is the core of the agentic design: LLM drives MCPs; user never does manually.
     const payload = {
       naics,
       active_tab: dashTab,
@@ -278,6 +293,7 @@ export default function App() {
       pipeline: pipeline || [],
       message: userText,
       use_llm: useSmartModel,
+      mcp_tools: mcpToolsCatalog || [],
     }
 
     try {
@@ -339,6 +355,17 @@ export default function App() {
     } else if (type === 'log_note') {
       // For now just echo in chat; later we can persist notes against items
       setChatHistory(prev => [...prev, { role: 'assistant', content: `Note logged: ${payload?.note || 'user request'}` }])
+    } else if (type === 'mcp_search_sam') {
+      // This is the key agentic trigger: instead of user filling the SAM form or clicking manual buttons,
+      // the chat suggested action (or user just types) causes the LLM + backend router to drive the MCP search.
+      // We synthesize a natural prompt that the router will catch and execute search_sam_opportunities_mcp.
+      const reason = payload?.reason || 'current scope'
+      const kws = payload?.keywords || ''
+      const prompt = `Search SAM for live opportunities (RFI, Sources Sought, Special Notice, Presolicitation) matching my Brain and expiring contracts. Keywords: ${kws}. Reason: ${reason}. Then suggest which ones to create monitors for and add to pipeline.`
+      // Reuse send path by setting input + calling (keeps history clean)
+      setChatInput(prompt)
+      // fire after paint
+      setTimeout(() => { sendChat() }, 30)
     } else {
       // Fallback: just show the action
       setChatHistory(prev => [...prev, { role: 'assistant', content: `Action requested: ${type} ${JSON.stringify(payload || {})}` }])
@@ -704,6 +731,7 @@ export default function App() {
               <div className="insight magenta">
                 Why this matters: These are live recompete opportunities you can start positioning for today. Early engagement is the highest-leverage capture activity. Prioritize the ones in agencies where you already see high intensity or existing flows.
               </div>
+              <div className="text-[10px] text-[#39ff14] mt-1">Primary way to discover &amp; monitor: ask the floating AI Co-pilot (it drives MCP tools for you). The form below and +pipeline buttons are manual escape hatches only.</div>
               <input
                 value={oppSearch}
                 onChange={(e) => setOppSearch(e.target.value)}
@@ -750,8 +778,14 @@ export default function App() {
             {/* Live SAM layer — the "new + emerging" that complements historical recompete cycles */}
             <div>
               <div className="text-lg font-semibold text-[#00f0ff] mb-2">Live & Emerging from SAM.gov (new requirements + notices on known cycles)</div>
+              <div className="mb-2 flex flex-wrap gap-1 text-[10px]">
+                <span className="text-[#606080] mr-1 self-center">Example prompts for the co-pilot (drives MCP for you):</span>
+                <button onClick={() => { const p = 'Search SAM for live RFI/Sources Sought/Special Notice matching the agencies and recipients in my Brain and the expiring contracts. Then propose 2-3 to create monitors for and add to pipeline.'; setChatInput(p); setTimeout(() => sendChat(), 20); }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20 border border-[#00f0ff]/20">Search SAM for my Brain + expiring</button>
+                <button onClick={() => { const p = 'Using my current hot agencies from intensity and Brain, find any new CSO/OTA or open solicitation on SAM and suggest monitors.'; setChatInput(p); setTimeout(() => sendChat(), 20); }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20 border border-[#00f0ff]/20">Find new work for hot agencies in Brain</button>
+              </div>
               <div className="insight">
                 USASpending tells you the historical cycles and who wins recurring work. SAM.gov is where the actual RFIs, Sources Sought, Special Notices, and eventual RFPs appear — plus brand new work (CSOs, OTAs, open solicitations, traditional FAR requirements with no prior history). Use the expiring list above to seed searches for "the known universe", then discover net-new.
+                <span className="block mt-1 text-[#39ff14]">The co-pilot (chat) is the intended way to drive these searches and create monitors via MCP — tell it in natural language what you want researched/monitored. Manual controls here are escape hatches.</span>
               </div>
               <div className="flex gap-2 mb-2">
                 <input
@@ -780,7 +814,7 @@ export default function App() {
                   }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20">{t}</button>
                 ))}
               </div>
-              <div className="text-[10px] text-[#606080] mb-2">Tip: From an expiring row above, click "Search SAM for this" to auto-fill for that cycle's agency/recipient. Common types: RFI, Sources Sought, Special Notice, Presolicitation, Solicitation. Add results to pipeline or "Create Monitor" to track. For richer MCP tools run `uvx sam-gov-mcp` in another terminal (see backend/app/mcp.py).</div>
+              <div className="text-[10px] text-[#606080] mb-2">Tip: Primary path = tell the AI Co-pilot (e.g. "search SAM for hot agencies in my brain and expiring cycles, create monitors for relevant RFIs"). It will use available MCP tools under the hood and surface +pipeline actions. The controls below and "Search SAM for this" are manual escape hatches. (To enable richer live MCP: run `uvx sam-gov-mcp` in another terminal.)</div>
               <div className="glass rounded-3xl overflow-hidden text-sm">
                 <table className="w-full"><tbody>
                   {samResults.length === 0 && <tr><td className="p-3 text-slate-400">No SAM results yet — enter keywords and search (requires SAM_API_KEY on backend for live data).</td></tr>}
@@ -808,7 +842,7 @@ export default function App() {
                   ))}
                 </tbody></table>
               </div>
-              <div className="text-[10px] text-[#606080] mt-2">Results from SAM.gov API (MCP layer coming for richer tools like saved searches, entity info, exclusions). "Create Monitor" adds a pipeline item with a ready-to-use SAM search URL so you can set recurring checks or alerts.</div>
+              <div className="text-[10px] text-[#606080] mt-2">Results via /mcp/sam (prefers MCP sam-gov-mcp when the server is running; falls back to direct). The co-pilot LLM can drive the exact same search + "Create Monitor" flow for you from natural language — no manual form use required.</div>
 
               {/* My SAM Monitors - saved searches from Create Monitor */}
               <div className="mt-4">
@@ -1396,7 +1430,7 @@ export default function App() {
               value={chatInput} 
               onChange={e => setChatInput(e.target.value)} 
               onKeyDown={e => { if (e.key === 'Enter') sendChat() }}
-              placeholder="Ask about data, combos, what to add to pipeline/brain..."
+              placeholder="Tell the co-pilot what to do (e.g. search SAM for my brain items, create monitors, find overlaps... it drives MCPs)"
               className="flex-1 bg-[#0a0e1a] border border-[#1f1f2e] rounded-lg px-3 py-1.5 text-xs focus:border-[#00f0ff] focus:outline-none"
             />
             <button onClick={sendChat} className="px-4 rounded-lg bg-[#00f0ff] text-black text-xs font-semibold">Send</button>
