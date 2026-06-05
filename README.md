@@ -170,15 +170,27 @@ We are building in small, focused, high-quality chunks. No "build to build."
 - Plain-English data dictionary started (Karpathy-style explanations + "how the AI should think about this field").
 - Architecture and future-skills ideas docs written with your constraints in mind.
 
-**Next small chunk (what we will do next unless you say otherwise):**
-1. Make the ingest script + DuckDB loading rock solid and well documented.
-2. Add a couple of basic, useful SQL queries (inspired by the good ones in the old repo) as examples.
-3. Simple FastAPI endpoint that returns "summary numbers + top agencies" for selected NAICS/date range.
-4. Update docs so a non-expert can run the ingest, open the DuckDB file, and run some queries themselves.
+**Progress so far (small focused chunks):**
 
-After that chunk we will show you the output and decide the exact next piece (basic dashboard UI? first chat? profile stub?).
+- Chunk 1: Single DuckDB only + educational ingest script (multi-NAICS, real CSV instructions, synthetic demo) + plain-English data dictionary (Karpathy style) + future skills ideas doc.
+- Chunk 2: Reusable query functions (market summary, top agencies, expiring contracts) + FastAPI endpoints (`/data/summary`, `/top-agencies`, `/expiring`, `/snapshot`) that actually return real numbers from your DuckDB.
+- Chunk 3 (just done): First real artifact of the flagship feature — `scripts/generate_profile_stub.py` that produces a proper .docx Capture Profile with:
+  - Real data pulled from DuckDB (totals, top agencies table, expiring list)
+  - Clear sections matching the classic 9-section structure
+  - Obvious `[LLM PLACEHOLDER]` areas where we will later inject grounded narrative from Ollama or xAI
+  - Citations / methodology note
+  - The file is saved in `data/exports/` and is a real Word document you can open today.
 
-Everything stays understandable. No magic. Quality and efficiency over speed of adding features.
+All code is heavily commented in plain language. The generator is deliberately a "stub" so we can quickly get to something visible and then improve it (add your stance, real LLM calls, training data logging, live MCP enrichment, etc.).
+
+Next chunk ideas (pick one or suggest your own):
+- Minimal React frontend page that calls the /data/* endpoints and shows nice cards + tables.
+- First grounded LLM chat (question → pull relevant data from DuckDB → send context + question to Ollama → return answer with citations).
+- Enhance the profile stub (more sections, better formatting, save the exact "LLM input context" for training data).
+- Make real CSV loading more robust (drag a folder of USASpending downloads and it just works).
+- Training data helper (a small script that logs successful profile generations as JSONL for future fine-tuning).
+
+Everything stays small, understandable, and directly serves the end state you described.
 
 ## Contributing / Next
 

@@ -10,11 +10,13 @@ Usage (after uv sync):
 
 It will create a real .docx file in data/exports/ that you can open in Word.
 
-The document contains real numbers pulled from your local DuckDB + clearly marked
-placeholders where the LLM (local Ollama or xAI) will later write the narrative sections.
+The document contains real numbers pulled from your local DuckDB.
+If Ollama is running (with your qwen3.5:9b or the configured model), it will now
+actually call the LLM to write the Executive Summary section, grounded only in the
+data we pulled. The exact prompt + output is logged to data/training/profiles.jsonl
+for future fine-tuning.
 
-This directly works toward the flagship "one-click professional capture profile" goal
-while staying simple and educational.
+This is a small but real step toward the flagship feature.
 """
 
 from pathlib import Path
@@ -35,8 +37,8 @@ def main(
     typer.echo(f"\n✅ Capture Profile stub generated:")
     typer.echo(f"   {out_path}")
     typer.echo("\nOpen the file in Microsoft Word.")
-    typer.echo("You will see real data from the DuckDB + obvious [LLM PLACEHOLDER] sections.")
-    typer.echo("This is the foundation we will enhance with grounded LLM writing + your company stance.")
+    typer.echo("The Executive Summary was written by your local LLM (if Ollama was available) using only the data.")
+    typer.echo("A training record was saved in data/training/ so we can improve the model later.")
 
 
 if __name__ == "__main__":
