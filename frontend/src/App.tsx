@@ -88,6 +88,7 @@ export default function App() {
   const [status, setStatus] = useState('Ready — backend running + data ingested. Use the ingest command under the NAICS box (simple --dir form available).')
   const [pipeline, setPipeline] = useState<any[]>([])
   const [brain, setBrain] = useState<any[]>([])  // Competitor / agency wiki accumulator — seeds "brain" that gets smarter
+  const [brainWiki, setBrainWiki] = useState<any[]>([])  // Native .md wiki files (Obsidian/Karpathy foundation) for richer view
 
   // Real on-disk persistence via backend (data/user_accumulators.json).
   // This replaces the earlier pure localStorage slice. Adds/deletes/notes now go through the server
@@ -99,7 +100,14 @@ export default function App() {
         const data = await res.json()
         if (Array.isArray(data.pipeline)) setPipeline(data.pipeline)
         if (Array.isArray(data.brain)) setBrain(data.brain)
-        return
+      }
+    } catch {}
+    // Load native wiki .md list (the Obsidian/Karpathy LLM wiki foundation)
+    try {
+      const wres = await fetch('/user/brain/wiki')
+      if (wres.ok) {
+        const wdata = await wres.json()
+        if (Array.isArray(wdata.wiki_files)) setBrainWiki(wdata.wiki_files)
       }
     } catch {}
     // Last-resort fallback for very old browser state
@@ -113,14 +121,21 @@ export default function App() {
 
   useEffect(() => { loadUserAccumulators() }, [])
 
-  // Fetch MCP tool catalog once (so chat can tell the LLM what admin actions are available to drive).
-  // This is how the agentic contract is communicated: LLM sees the list and user never touches MCPs directly.
-  async function loadMcpTools() {
+  // Fetch MCP tool catalog (populated by app warmup in lifespan).
+  // Used both for the dedicated "MCP Tools" sidebar (visibility/education) and passed to /chat so the co-pilot knows what agentic actions (buttons + chat) can drive.
+  // User never calls these manually — buttons like "Create SAM monitor (smart)" and the chat use them under the hood.
+  async function loadMcpTools(refresh = false) {
     try {
-      const res = await fetch('/mcp/tools')
+      const q = refresh ? '?refresh=1' : ''
+      const res = await fetch(`/mcp/tools${q}`)
       if (res.ok) {
         const data = await res.json()
-        if (Array.isArray(data.tools)) setMcpToolsCatalog(data.tools)
+        setMcpInfo({
+          tools: Array.isArray(data.tools) ? data.tools : [],
+          mcp_available: data.mcp_available,
+          note: data.note,
+          how_to_enable: data.how_to_enable,
+        })
       }
     } catch {}
   }
@@ -141,7 +156,8 @@ export default function App() {
     { role: 'assistant', content: 'Co-pilot ready (sees your NAICS, tab, KPIs, full Pipeline + Brain from disk, and MCP tools).\n\nFor quick admin tasks (e.g. smart SAM monitor from an expiring contract) use the buttons in the views — they activate the agent (LLM + MCP) with context and citations. Chat is excellent for open questions, overlaps, "what should I watch", or natural language exploration. Use Smart for local LLM or Fast for instant.' }
   ])
   const [useSmartModel, setUseSmartModel] = useState(false)  // opt into local LLM (qwen3.5:9b etc.) for more natural answers; default is fast deterministic path using your exact persisted data + suggested action chips
-  const [mcpToolsCatalog, setMcpToolsCatalog] = useState<any[]>([])
+  // MCP info for the dedicated sidebar view + for feeding the chat co-pilot (catalog of what the agent can drive)
+  const [mcpInfo, setMcpInfo] = useState<{tools: any[], mcp_available?: boolean, note?: string, how_to_enable?: string}>({ tools: [] })
 
   async function loadData() {
     setLoading(true)
@@ -293,7 +309,7 @@ export default function App() {
       pipeline: pipeline || [],
       message: userText,
       use_llm: useSmartModel,
-      mcp_tools: mcpToolsCatalog || [],
+      mcp_tools: mcpInfo.tools || [],
     }
 
     try {
@@ -307,8 +323,9 @@ export default function App() {
         const assistantContent = data.response || '(no response)'
         const actions = data.suggested_actions || []
         const src = data.source || null
+        const modelUsed = (data.context_used && data.context_used.model) || null
         setTimeout(() => {
-          setChatHistory(prev => [...prev, { role: 'assistant', content: assistantContent, suggested_actions: actions, source: src }])
+          setChatHistory(prev => [...prev, { role: 'assistant', content: assistantContent, suggested_actions: actions, source: src, model: modelUsed }])
         }, 150)
         return
       }
@@ -908,6 +925,79 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {/* My Focus - ultra-light derived view on the *current* simple JSON Brain (per plan).
+                  Client-side intersections using brain + expiring + intensity + smart monitors.
+                  This is the quick 1-day validation slice BEFORE evolving Brain into the real Obsidian/Karpathy LLM wiki foundation (native .md files, [[wikilinks]], LLM synthesis on +brain, structure ready to grow to global_wiki/competitor_intel/etc.).
+                  Header notes the future upgrade so user expectations are set. */}
+              <div className="mt-4">
+                <div className="text-sm font-semibold mb-1">My Focus (lightweight intersections from your Brain + recent agent-created smart monitors + live data)</div>
+                <div className="text-[10px] text-[#606080] mb-2">Ultra-light view using the current simple Brain accumulator. Will become much more powerful once we evolve Brain into a real Obsidian/Karpathy-style LLM wiki (plain Markdown files with [[wikilinks]], LLM-synthesized entries seeded from USASpending insights + citations, compounding, native so you can point Obsidian at data/knowledge/ for free rich UI/backlinks). Foundation first, then richer derived views.</div>
+
+                {/* Simple intersections - reuse existing state and logic patterns */}
+                {(() => {
+                  const brainLower = brain.map((b: any) => (b.name || '').toLowerCase().slice(0, 15));
+                  const brainMatchedExpiring = expiring.filter((e: any) => {
+                    const r = (e.recipient || '').toLowerCase().slice(0,15);
+                    const a = (e.agency || '').toLowerCase().slice(0,15);
+                    return brainLower.some((bl: string) => r.includes(bl) || a.includes(bl) || bl.includes(r) || bl.includes(a));
+                  }).slice(0,4);
+
+                  const smartMonitors = pipeline.filter((p: any) => p.type === 'sam-monitor');
+                  const monitorOverlaps = smartMonitors.filter((m: any) => {
+                    const mName = (m.agency || m.title || '').toLowerCase().slice(0,15);
+                    return brainLower.some((bl: string) => mName.includes(bl) || bl.includes(mName)) ||
+                           hotAgencies.has(m.agency || '') ||
+                           expiring.some((e: any) => (e.agency || '').toLowerCase().includes(mName));
+                  }).slice(0,3);
+
+                  const brainHotAgencies = intensity.filter((a: any) => {
+                    const name = (a.agency || '').toLowerCase().slice(0,15);
+                    return brainLower.some((bl: string) => name.includes(bl) || bl.includes(name));
+                  }).slice(0,3);
+
+                  return (
+                    <div className="space-y-2 text-xs">
+                      {brainMatchedExpiring.length > 0 && (
+                        <div>
+                          <div className="font-medium mb-0.5">Expiring that match your Brain:</div>
+                          {brainMatchedExpiring.map((e: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 pl-2">
+                              <span>{e.recipient || '—'} @ {e.agency} (ends {e.end_date})</span>
+                              <button onClick={() => addToPipeline(e, 'expiring-from-focus')} className="text-[#00f0ff] hover:underline">+ pipeline</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {monitorOverlaps.length > 0 && (
+                        <div>
+                          <div className="font-medium mb-0.5">Your smart monitors overlapping Brain / hot / expiring:</div>
+                          {monitorOverlaps.map((m: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 pl-2">
+                              <span>{m.title || m.agency}</span>
+                              {m.monitorUrl && <a href={m.monitorUrl} target="_blank" className="text-[#00f0ff] hover:underline">open ↗</a>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {brainHotAgencies.length > 0 && (
+                        <div>
+                          <div className="font-medium mb-0.5">Hot agencies already in your Brain:</div>
+                          {brainHotAgencies.map((a: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 pl-2">
+                              <span>{a.agency} — {a.award_count} actions, ${(a.total_oblig||0)/1e6}M</span>
+                              <button onClick={() => addToBrain(a, a.agency, 'agency')} className="text-[#39ff14] hover:underline">+ brain (already tracked)</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {brainMatchedExpiring.length === 0 && monitorOverlaps.length === 0 && brainHotAgencies.length === 0 && (
+                        <div className="text-slate-400">Add a few items to Brain or create some smart monitors via the buttons above to see intersections here.</div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         )
@@ -1211,21 +1301,40 @@ export default function App() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="text-lg font-semibold text-[#ff2bd6]">Brain / Wiki (accumulated competitor & agency knowledge)</div>
-                <div className="text-xs text-[#a0a0c0]">This is the direct analog to +pipeline for entities. Each +Brain click (from Competitive or Agency tabs) adds or appends data elements + citations. The brain gets smarter and becomes context for chat, future MCP research, and skills. Saved to data/user_accumulators.json on disk (real persistence).</div>
+                <div className="text-xs text-[#a0a0c0]">Each +Brain click (from Competitive or Agency tabs) compounds notes + citations. Foundation slice now also writes native Obsidian/Karpathy-aligned Markdown files to data/knowledge/brain/ (with [[wikilinks]], frontmatter, citations) — point your Obsidian vault there for free rich UI. Will evolve to full LLM-synthesized wiki (global/ + pursuits-style) seeded from USASpending insights. The JSON is still used by the app; .md is the compounding human/LLM wiki substrate.</div>
               </div>
               <div className="text-xs text-[#ff2bd6]">{brain.length} entries</div>
             </div>
             {brain.length === 0 && <div className="text-sm text-slate-400">Go to Competitive Analysis or Agency Intelligence tabs and click "+ brain / wiki" on interesting recipients or agencies. Re-adding the same name appends more evidence (notes + citations) instead of duplicating.</div>}
             {brain.map((b, i) => {
               const bid = b.id || b.addedAt
+              // Match against the native wiki .md list (by name prefix both directions) so the primary
+              // accumulator view shows the LLM-synthesized content from the .md file (Karpathy/Obsidian foundation)
+              // instead of only the raw click-time notes. The editable input remains for user overlay/notes.
+              const wiki = brainWiki.find((w: any) => {
+                const bn = (b.name || '').toLowerCase().slice(0, 14)
+                const wn = (w.name || '').toLowerCase().slice(0, 14)
+                return bn && wn && (bn.includes(wn) || wn.includes(bn))
+              })
+              const display = wiki ? (wiki.excerpt || wiki.content) : (b.notes || '')
+              const wikiPath = wiki ? wiki.path : null
               return (
                 <div key={i} className="brain-item">
                   <div className="flex justify-between items-start">
                     <div className="font-medium">{b.name} <span className="text-[10px] px-1.5 py-px rounded bg-[#ff2bd6]/20 text-[#ff2bd6]">{b.type}</span></div>
                     <button onClick={() => removeFromBrain(bid)} className="text-[#ff3b6b] text-xs hover:underline" title="Remove from brain">×</button>
                   </div>
-                  <div className="text-xs mt-0.5">{b.notes}</div>
+                  {wiki ? (
+                    <div className="text-[10px] mt-0.5">
+                      <span className="text-[#39ff14]">📝 Synthesized wiki note</span>
+                      <div className="text-[#a0a0c0] mt-0.5">{display}</div>
+                      {wikiPath && <div className="text-[#606080] text-[9px] mt-0.5">{wikiPath}</div>}
+                    </div>
+                  ) : (
+                    <div className="text-xs mt-0.5">{display}</div>
+                  )}
                   <div className="meta">Citation: {b.citation}</div>
+                  <div className="text-[9px] text-[#39ff14] mt-0.5">Wiki: data/knowledge/brain/ (native .md + LLM synthesis, Obsidian-ready)</div>
                   <div className="mt-1">
                     <input
                       defaultValue={b.notes}
@@ -1243,16 +1352,92 @@ export default function App() {
                 <div className="text-[10px] text-[#ff2bd6]">Future: button here will "run competitive intel research" (trigger MCPs + LLM append to a real wiki store) using exactly these accumulated elements as seed.</div>
               </div>
             )}
+
+            {/* Native wiki .md files (the Obsidian/Karpathy LLM wiki foundation) */}
+            {brainWiki.length > 0 && (
+              <div className="mt-3 pt-2 border-t border-[#1f1f2e]">
+                <div className="text-xs font-medium mb-1 text-[#39ff14]">Wiki entries (native .md files — point Obsidian at data/knowledge/ for rich view)</div>
+                {brainWiki.slice(0,6).map((w, i) => (
+                  <div key={i} className="text-[10px] py-0.5 border-b border-[#1f1f2e]/50">
+                    <span className="font-medium">{w.name}</span> <span className="text-[#606080]">({w.type})</span>
+                    <div className="text-[#a0a0c0] truncate">{w.excerpt || w.content}</div>
+                    <div className="flex items-center gap-2 text-[#606080]">
+                      <span>{w.path}</span>
+                      <button
+                        onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }}
+                        className="text-[9px] px-1 py-0 border border-[#1f1f2e] rounded hover:bg-[#1f1f2e]"
+                        title="Copy path for Obsidian / editor"
+                      >
+                        copy path
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {brainWiki.length > 6 && <div className="text-[9px] text-[#606080]">... and {brainWiki.length-6} more (full list in data/knowledge/brain/)</div>}
+              </div>
+            )}
           </div>
         </div>
       )
     }
 
-    // Stubs for future — clean and honest
+    if (sidebar === 'tools') {
+      // Dedicated MCP Tools view — educational + status, not for manual calling.
+      // The catalog is populated by the app's warmup at startup (see lifespan).
+      // These tools power the agent: "Create SAM monitor (smart)" button (and future ones) + the chat co-pilot.
+      // Per the design: the LLM/agent drives them; you as the user never use MCPs or uvx directly.
+      const tools = mcpInfo.tools || []
+      return (
+        <div className="space-y-4">
+          <div className="glass p-5 rounded-3xl">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-lg font-semibold">MCP Tools</div>
+                <div className="text-xs text-[#a0a0c0]">Battle-tested clients from https://github.com/1102tools/federal-contracting-mcps (we only consume, never implement servers ourselves).</div>
+              </div>
+              <button
+                onClick={() => loadMcpTools(true)}
+                className="text-xs px-3 py-1 rounded border border-[#00f0ff]/40 hover:bg-[#00f0ff]/10"
+              >
+                Refresh catalog
+              </button>
+            </div>
+
+            {tools.length === 0 ? (
+              <div className="text-sm text-slate-400">
+                No tools discovered yet (app will use direct API fallbacks for SAM etc.).
+                <div className="mt-2 text-[11px]">{mcpInfo.how_to_enable || mcpInfo.note || ''}</div>
+                <div className="mt-1 text-[10px] text-[#606080]">The catalog is attempted at startup (warmup). External sam-gov-mcp server enables the richest tool set.</div>
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm">
+                {tools.map((t, idx) => (
+                  <div key={idx} className="border border-[#1f1f2e] rounded p-2 bg-[#0a0e1a]">
+                    <div className="font-medium text-[#00f0ff]">{t.name}</div>
+                    {t.description && <div className="text-xs text-[#a0a0c0] mt-0.5">{t.description}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 text-[11px] text-[#606080]">
+              These tools are used automatically by the agent when you click contextual buttons (e.g. "Create SAM monitor (smart)" on an expiring row) or ask the floating co-pilot natural-language questions. The catalog is sent to the chat so suggestions stay grounded in what is actually available.
+            </div>
+            {mcpInfo.note && <div className="mt-2 text-[10px] text-[#ff2bd6]">{mcpInfo.note}</div>}
+          </div>
+
+          <div className="text-[10px] text-[#606080] px-1">
+            Status is also visible in /health and the top status line. Warmup happens automatically when the backend starts.
+          </div>
+        </div>
+      )
+    }
+
+    // Stubs for other future sidebars (skills, settings) — clean and honest
     return (
       <div className="glass p-8 rounded-3xl text-center">
         <div className="text-2xl mb-2">{SIDEBAR_ITEMS.find(s => s.id === sidebar)?.label}</div>
-        <div className="text-sm text-slate-400">Placeholder for later (MCP tool calls, full grounded chat/agent with citations over the DuckDB, skills like huashu-design for artifacts, profile settings, etc.).<br/>Right now the priority is the data foundation + contextual Dashboard tabs + the two accumulators (pipeline + brain) + the always-available resizable chat. Exactly as discussed.</div>
+        <div className="text-sm text-slate-400">Placeholder for later (full grounded chat/agent with citations over the DuckDB, skills like huashu-design for artifacts, profile settings, etc.).<br/>Right now the priority is the data foundation + contextual Dashboard tabs + the two accumulators (pipeline + brain) + the always-available resizable chat + button-driven agentic actions (e.g. smart SAM monitors). Exactly as discussed.</div>
       </div>
     )
   }
@@ -1429,8 +1614,10 @@ export default function App() {
               <div key={idx} className={m.role === 'user' ? 'text-right' : ''}>
                 <div className={`chat-msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
                   {m.content}
-                  {m.role === 'assistant' && m.source && (
-                    <div className="text-[9px] text-[#606080] mt-1 opacity-70">{m.source}</div>
+                  {m.role === 'assistant' && (m.source || m.model) && (
+                    <div className="text-[9px] text-[#606080] mt-1 opacity-70">
+                      {m.source}{m.model ? ` • ${m.model}` : ''}
+                    </div>
                   )}
                 </div>
                 {/* Structured suggested actions from the backend (preferred) */}

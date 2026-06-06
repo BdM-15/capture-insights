@@ -41,6 +41,15 @@ async def lifespan(app: FastAPI):
     print(f"[capture-insights] Starting backend v{settings.app_version} env={settings.app_env}")
     print(f"[capture-insights] Using single DuckDB at: {settings.duckdb_path}")
 
+    # Pre-create knowledge/wiki foundation (README + brain/ dirs) so it's immediately visible/usable
+    # even before first +brain. This is the solid Obsidian/Karpathy base (native .md + LLM synthesis).
+    try:
+        from .user_data import _ensure_parent
+        _ensure_parent()
+        print("[warmup] Knowledge/wiki foundation pre-created (data/knowledge/brain/ + README for Obsidian vault).")
+    except Exception as e:
+        print(f"[warmup] Knowledge pre-create note: {e}")
+
     # Warm MCP catalog (triggers uvx sam-gov-mcp once if needed; subsequent calls hit cache)
     if settings.enable_live_mcps:
         try:
@@ -465,6 +474,16 @@ async def user_clear_pipeline():
 @app.delete("/user/brain/clear", tags=["user"])
 async def user_clear_brain():
     return clear_brain()
+
+
+@app.get("/user/brain/wiki", tags=["user"])
+async def user_brain_wiki():
+    """Return the native wiki .md files for Brain (Obsidian/Karpathy LLM wiki foundation).
+    Surfaces the .md content (LLM-synthesized, wikilinks, citations) so the wiki is visible
+    in the app UI while the files remain the source for Obsidian.
+    """
+    from .user_data import list_brain_wiki_files
+    return {"wiki_files": list_brain_wiki_files()}
 
 
 # --- Button-activated agentic actions (LLM + MCP behind explicit user clicks) ---
