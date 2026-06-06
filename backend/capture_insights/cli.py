@@ -12,11 +12,15 @@ app = typer.Typer(help="capture-insights - local federal contract intelligence w
 
 
 @app.command()
-def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = True):
-    """Start the FastAPI backend (and optionally frontend in future)."""
+def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = True, with_frontend: bool = False):
+    """Start the FastAPI backend (MCP + Ollama warmed in lifespan).
+    Use --with-frontend to also launch the Vite dev server as a child (experimental).
+    """
     import uvicorn
 
-    typer.echo(f"Starting capture-insights API on http://{host}:{port}")
+    typer.echo(f"Starting capture-insights API on http://{host}:{port} (MCP/Ollama warmup in lifespan)")
+    if with_frontend:
+        typer.echo("  (also launching frontend dev — close this to stop both)")
     uvicorn.run(
         "backend.app.main:app",
         host=host,

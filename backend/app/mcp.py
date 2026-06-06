@@ -3,16 +3,17 @@
 IMPORTANT: We do **not** create custom MCP servers. We only consume the excellent battle-tested
 ones from that repo (sam-gov-mcp for opportunities/solicitations/entities, usaspending-gov-mcp, etc.).
 
-Run the desired server(s) in a separate terminal/window:
-  uvx sam-gov-mcp
-  # (or uvx --from git+https://github.com/1102tools/federal-contracting-mcps sam-gov-mcp if not on pypi yet)
+The app warms the catalog at startup (backend lifespan pre-calls list_sam_mcp_tools + cache).
+First real button/chat action that needs live data will spawn on-demand via stdio (uvx).
+No separate manual `uvx sam-gov-mcp` window is required for normal use (graceful fallback to direct REST).
 
-This client connects to it via stdio (using the official `mcp` Python SDK).
+(If you want a long-running external instance for perf: run it yourself and use ?refresh=1 on /mcp/tools.)
 
-When the server is not running we gracefully fall back to the direct SAM.gov REST API
+This client connects via stdio (official `mcp` Python SDK). See main.py lifespan, /mcp/tools, and the
+button agentic action (/user/actions/create-sam-monitor) for integration.
+
+When the server is not reachable we gracefully fall back to the direct SAM.gov REST API
 (using SAM_API_KEY from your .env — see config.py).
-
-See also the endpoint in main.py and usage in the Future Opportunities tab.
 """
 
 from __future__ import annotations
@@ -33,6 +34,12 @@ except ImportError:
 
 _sam_mcp_session: Optional[ClientSession] = None
 _sam_mcp_lock = asyncio.Lock()
+
+# Simple process cache for tool list (the stdio connect + list_tools is expensive: spawns uvx + server init).
+# Avoids making /health and every chat slow when the MCP server is not running (the common case until user wants live agentic).
+_mcp_tools_cache: list[dict] | None = None
+_mcp_tools_cache_ts: float = 0.0
+_MCP_CACHE_TTL = 45.0  # seconds; fresh enough for dev, cheap to F5 /mcp/tools for update
 
 
 async def get_sam_mcp_client() -> Optional[ClientSession]:
@@ -76,15 +83,26 @@ async def get_sam_mcp_client() -> Optional[ClientSession]:
             return None
 
 
-async def list_sam_mcp_tools() -> List[Dict[str, Any]]:
+async def list_sam_mcp_tools(force_refresh: bool = False) -> List[Dict[str, Any]]:
     """Discover the tools exposed by sam-gov-mcp (from https://github.com/1102tools/federal-contracting-mcps).
 
     Returns list of {name, description, ...} or [] if MCP server not running / unavailable.
     This catalog is injected into the chat LLM context so the agentic co-pilot knows what admin
     actions it can perform on the user's behalf (user never calls MCP manually).
+
+    Uses a short TTL cache so /health and chat sends are not blocked by repeated expensive
+    uvx stdio spawns when the external MCP server is not running (the normal case).
+    Call /mcp/tools? or pass force_refresh in dev when you just started the server.
     """
+    import time
+    global _mcp_tools_cache, _mcp_tools_cache_ts
+
     if not settings.enable_live_mcps or not MCP_AVAILABLE:
         return []
+
+    now = time.time()
+    if not force_refresh and _mcp_tools_cache is not None and (now - _mcp_tools_cache_ts) < _MCP_CACHE_TTL:
+        return _mcp_tools_cache
 
     server_env = os.environ.copy()
     for key in ("SAM_API_KEY", "DATA_GOV_API_KEY"):
@@ -97,21 +115,26 @@ async def list_sam_mcp_tools() -> List[Dict[str, Any]]:
         env=server_env,
     )
 
+    tools: List[Dict[str, Any]] = []
     try:
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tools_result = await session.list_tools()
-                tools: List[Dict[str, Any]] = []
                 for t in getattr(tools_result, "tools", []) or []:
                     tools.append({
                         "name": getattr(t, "name", str(t)),
                         "description": getattr(t, "description", ""),
                         "input_schema": getattr(t, "inputSchema", None) or getattr(t, "input_schema", None),
                     })
-                return tools
+        _mcp_tools_cache = tools
+        _mcp_tools_cache_ts = now
+        return tools
     except Exception as e:
-        print(f"[mcp] list_sam_mcp_tools: server not reachable or error: {e}")
+        print(f"[mcp] list_sam_mcp_tools: server not reachable or error (cached empty for TTL): {e}")
+        # Cache the empty to avoid hammering on every health/chat until TTL expires
+        _mcp_tools_cache = []
+        _mcp_tools_cache_ts = now
         return []
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.parse
 import urllib.request
 from contextlib import asynccontextmanager
 from datetime import date
@@ -29,12 +30,36 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).parent))
     from config import settings
 
-# Placeholder: real lifespan will init DuckDB, Chroma, MCP clients, Ollama health etc.
+# Shared LLM for agentic button flows + warmup (also used by profile + future chat unification)
+from . import llm as llm_client
+
+# Real warmup at app start so users don't need multiple manual terminals for MCP servers + Ollama model.
+# Per recentering: single (or two) commands bring a "ready" workstation. MCP uses on-demand stdio spawns
+# (via mcp.py) + pre-call here to pay cost early and populate cache. Ollama model is loaded via small call.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"[capture-insights] Starting backend v{settings.app_version} env={settings.app_env}")
     print(f"[capture-insights] Using single DuckDB at: {settings.duckdb_path}")
-    # TODO: mcp_client_manager.start(), ollama health check, etc.
+
+    # Warm MCP catalog (triggers uvx sam-gov-mcp once if needed; subsequent calls hit cache)
+    if settings.enable_live_mcps:
+        try:
+            from .mcp import list_sam_mcp_tools
+            print("[warmup] Pre-warming MCP tools catalog (sam-gov-mcp via uvx on-demand)...")
+            tools = await list_sam_mcp_tools(force_refresh=False)
+            print(f"[warmup] MCP catalog ready ({len(tools)} tools; first real call will be fast if server reachable).")
+        except Exception as e:
+            print(f"[warmup] MCP pre-warm skipped (will be on-demand): {e}")
+
+    # Warm Ollama model (list + tiny generate to load weights into memory; uses shared llm_client)
+    if settings.enable_ai_features:
+        try:
+            print(f"[warmup] Pre-warming Ollama model ({settings.ollama_model}) ...")
+            w = await llm_client.warmup_ollama()
+            print(f"[warmup] Ollama ready: {w.get('ok')} model={w.get('model')} (available: {len(w.get('available', []))})")
+        except Exception as e:
+            print(f"[warmup] Ollama pre-warm note (on-demand will still work): {e}")
+
     yield
     print("[capture-insights] Shutting down...")
 
@@ -68,15 +93,17 @@ class HealthResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 async def health() -> dict[str, Any]:
     """Basic health + readiness for local dev and monitoring.
-    Now includes dynamic MCP tool availability (from mcp.py list when sam-gov-mcp is up).
+    MCP/Ollama are warmed at lifespan (pre-calls + cache) so first button or chat actions are fast.
+    No separate manual `uvx sam-gov-mcp` or model loads required for normal use (on-demand still works).
     """
-    from .mcp import list_sam_mcp_tools, MCP_AVAILABLE
-    mcp_tools = []
-    try:
-        tools = await list_sam_mcp_tools()
-        mcp_tools = [t.get("name") for t in tools if t.get("name")]
-    except Exception:
-        pass
+    from .mcp import MCP_AVAILABLE
+    # Intentionally do not call list_sam_mcp_tools here (it can take seconds on first/uncached because of uvx stdio).
+    # The catalog lives at /mcp/tools (and is shipped by frontend into every /chat). Health just reports capability.
+    mcp_status = []
+    if MCP_AVAILABLE and settings.enable_live_mcps:
+        mcp_status.append("sam-gov-mcp (warmed at startup via lifespan pre-call + cache; on-demand stdio if needed. See /mcp/tools?refresh=1)")
+    else:
+        mcp_status.append("sam (direct REST fallback only; MCP disabled or mcp package not installed)")
 
     # Quick ollama ping (non-blocking, short)
     ollama_ready = False
@@ -87,12 +114,6 @@ async def health() -> dict[str, Any]:
     except Exception:
         ollama_ready = False
 
-    mcp_status = []
-    if MCP_AVAILABLE and settings.enable_live_mcps:
-        mcp_status.append("sam-gov-mcp (via mcp.py client; run `uvx sam-gov-mcp` in separate terminal for live tools)")
-    else:
-        mcp_status.append("sam (direct REST fallback only; MCP disabled or mcp package not installed)")
-
     return {
         "status": "ok",
         "version": settings.app_version,
@@ -100,7 +121,7 @@ async def health() -> dict[str, Any]:
         "duckdb_ready": os.path.exists(str(settings.duckdb_path)),
         "ollama_ready": ollama_ready,
         "mcp_servers": mcp_status,
-        "mcp_tools_available": mcp_tools,
+        "mcp_tools_available": None,  # see /mcp/tools for the live list that chat uses
     }
 
 
@@ -373,7 +394,7 @@ async def sam_opportunities(
 
 
 @app.get("/mcp/tools", tags=["mcp"])
-async def mcp_tools_catalog():
+async def mcp_tools_catalog(refresh: int = 0):
     """Return the currently discoverable MCP tools (primarily from sam-gov-mcp).
 
     The floating chat co-pilot (LLM agent) receives this catalog and is the one that
@@ -383,14 +404,14 @@ async def mcp_tools_catalog():
     from .mcp import list_sam_mcp_tools, MCP_AVAILABLE, settings as mcp_settings
     tools = []
     try:
-        tools = await list_sam_mcp_tools()
+        tools = await list_sam_mcp_tools(force_refresh=bool(refresh))
     except Exception:
         pass
     return {
         "tools": tools,
         "mcp_available": bool(tools) or (MCP_AVAILABLE and mcp_settings.enable_live_mcps),
         "note": "These tools are for the LLM co-pilot only. Manual use is not the intended workflow.",
-        "how_to_enable": "Run `uvx sam-gov-mcp` (or from the 1102tools/federal-contracting-mcps repo) in a separate terminal. The client will auto-discover.",
+        "how_to_enable": "App pre-warms MCP catalog at startup (lifespan). For fresh live data after you start an external server: append ?refresh=1. (uvx sam-gov-mcp from 1102tools/federal-contracting-mcps; we only consume via client.)",
     }
 
 
@@ -446,6 +467,108 @@ async def user_clear_brain():
     return clear_brain()
 
 
+# --- Button-activated agentic actions (LLM + MCP behind explicit user clicks) ---
+# Per recentering: primary interface for "agent does the admin task" is contextual buttons
+# (e.g. on an expiring contract: "Create SAM.gov monitor" runs LLM to pick smart keywords/notice_types
+# from the item + brain + scope, optionally validates via MCP search, then persists a rich sam-monitor
+# entry with citations/rationale). Chat remains for open-ended use (way down the road for deep agentic).
+# This is small, reuses existing add_to_pipeline + MCP + LLM patterns, keeps per-tab sensibility.
+
+class CreateSamMonitorRequest(BaseModel):
+    item: dict  # expiring row or sam result (award_key/recipient/agency/naics etc.)
+    naics: str = "561210"
+    brain: list[dict] | None = None  # current brain for context
+    use_llm: bool = True
+
+
+@app.post("/user/actions/create-sam-monitor", tags=["user", "actions"])
+async def create_sam_monitor(req: CreateSamMonitorRequest):
+    """
+    Agentic 'Create SAM.gov monitor' activated by button click (or embedded UI).
+    Uses LLM (via shared llm_client) + optional MCP search to produce a *smart* persisted monitor:
+    - good keywords/notice_types derived from context (not just raw agency name)
+    - rationale + citation back to the source expiring award_key or SAM result
+    - falls back to deterministic URL builder if LLM unavailable
+    Returns the updated accumulators so FE can sync 'My SAM Monitors'.
+    """
+    from .mcp import search_sam_opportunities_mcp
+
+    item = req.item or {}
+    brain = req.brain or []
+    naics = req.naics or "561210"
+
+    # 1. Base fields from the triggering item (expiring or SAM result)
+    recipient = item.get("recipient") or item.get("title") or ""
+    agency = item.get("agency") or ""
+    award_key = item.get("award_key") or item.get("contract_award_unique_key") or ""
+    end_date = item.get("end_date") or item.get("responseDeadLine") or ""
+
+    # 2. LLM (or det) to suggest smart search params
+    suggested_keywords = (recipient or agency or "support services").strip()
+    suggested_notice = "RFI,Sources Sought,Special Notice,Presolicitation"
+    rationale = f"Derived from {'expiring ' + award_key if award_key else 'SAM result'} for {recipient or agency}."
+
+    if req.use_llm:
+        brain_names = ", ".join([b.get("name", "") for b in brain[:3] if b.get("name")])
+        prompt = (
+            "You are helping a capture professional create a recurring SAM.gov search monitor.\n"
+            f"Context: NAICS {naics}. Trigger item: recipient={recipient}, agency={agency}, end={end_date}, key={award_key}.\n"
+            f"User's Brain (tracked competitors/agencies): {brain_names or 'none'}.\n"
+            "Suggest 3-8 good keywords (comma or space separated) and 1-4 notice types (comma sep from: RFI,Sources Sought,Special Notice,Presolicitation,Solicitation,CSO,OTA).\n"
+            "Also one-sentence rationale citing the trigger item. Keep keywords focused and high-signal.\n"
+            "Return exactly: KEYWORDS: ...\nNOTICE_TYPES: ...\nRATIONALE: ..."
+        )
+        text = llm_client.call_llm(prompt, temperature=0.2, max_tokens=120)
+        # very light parse
+        for line in text.splitlines():
+            l = line.strip()
+            if l.upper().startswith("KEYWORDS:"):
+                suggested_keywords = l.split(":", 1)[1].strip() or suggested_keywords
+            elif l.upper().startswith("NOTICE_TYPES:") or l.upper().startswith("NOTICE:"):
+                suggested_notice = l.split(":", 1)[1].strip() or suggested_notice
+            elif l.upper().startswith("RATIONALE:"):
+                rationale = l.split(":", 1)[1].strip() or rationale
+
+    # 3. Optional MCP validation / enrichment (if server warm or will spawn)
+    mcp_note = ""
+    try:
+        hits = await search_sam_opportunities_mcp(naics=naics, keywords=suggested_keywords[:80], notice_types=suggested_notice, limit=2)
+        if hits:
+            mcp_note = " (validated via MCP)"
+            # could append a sample title if useful
+    except Exception:
+        pass
+
+    # 4. Build the monitor entry (reuse/enhance the existing URL builder pattern)
+    q = f"q={urllib.parse.quote(suggested_keywords)}&naics={naics}"
+    if suggested_notice:
+        q += f"&noticeType={urllib.parse.quote(suggested_notice)}"
+    monitor_url = f"https://sam.gov/search/?index=opp&{q}"
+
+    entry = {
+        "title": f"SAM Monitor: {recipient or agency or suggested_keywords[:40]}",
+        "agency": agency or "Multiple",
+        "recipient": recipient,
+        "naics": naics,
+        "keywords": suggested_keywords,
+        "notice_types": suggested_notice,
+        "monitorUrl": monitor_url,
+        "notes": f"{rationale}{mcp_note}. Created via agent button from {'expiring ' + award_key if award_key else 'SAM result'}.",
+        "citation": f"trigger:{award_key or 'sam-result'} • naics:{naics} • {end_date}",
+        "type": "sam-monitor",
+        "source": "agent-button-llm",
+    }
+
+    saved = add_to_pipeline(entry)
+    return {
+        "ok": True,
+        "entry": entry,
+        "accumulators": saved,
+        "rationale": rationale,
+        "used_llm": bool(req.use_llm),
+    }
+
+
 # --- Floating AI Co-pilot (context-aware chat) ---
 # The chat pane is always available. To make the *responses* useful, the frontend
 # now sends the live app state (NAICS, current tab, kpis, brain items, pipeline items).
@@ -466,16 +589,14 @@ class ChatRequest(BaseModel):
 @app.post("/chat", tags=["chat"])
 async def chat_endpoint(req: ChatRequest):
     """
-    The central agentic co-pilot endpoint.
+    The central (optional) co-pilot endpoint.
 
-    - Always grounds on live NAICS + tab + kpis + full persisted brain + pipeline.
-    - Receives (or discovers) MCP tools catalog.
-    - When the user's natural language request is an admin task (search SAM for my brain
-      hot items, create monitors for expiring cycles, find live RFIs etc.), the backend
-      (LLM or deterministic router) drives the MCP client calls under the hood.
-    - User NEVER calls MCPs or uvx manually — the LLM does the majority of these admin tasks.
-    - Results from MCP are injected into context for the final reply + suggested_actions
-      (e.g. "add these 3 as sam-monitor to your pipeline").
+    - Grounds on live scope + brain + pipeline.
+    - MCP catalog is available for suggestions.
+    - Chat is excellent for open questions and exploration. For defined admin tasks
+      (e.g. create monitor from an expiring contract) the primary path is the contextual
+      button in the UI, which activates the agent (LLM + MCP) directly.
+    - Results/suggestions from either path feed the same accumulators.
     """
     from .mcp import search_sam_opportunities_mcp, list_sam_mcp_tools
 
@@ -493,8 +614,8 @@ async def chat_endpoint(req: ChatRequest):
 
     tool_names = [t.get("name") for t in mcp_tools if isinstance(t, dict) and t.get("name")]
 
-    # 2. Agentic routing: if message smells like "do MCP admin for me", execute tool(s) here.
-    #    This is the key piece for "LLM does the majority of admin tasks; I as user will never use mcp manually".
+    # 2. Optional chat-driven routing for admin (kept for power users / natural language).
+    #    Primary "agent does the task" is via UI buttons (see /user/actions/create-sam-monitor).
     mcp_results: list = []
     mcp_source_note = ""
     did_mcp_call = False
@@ -524,7 +645,21 @@ async def chat_endpoint(req: ChatRequest):
             limit=6,
         )
         did_mcp_call = True
-        mcp_source_note = " (via MCP tool)" if any(r.get("_source","").startswith("mcp") for r in mcp_results if isinstance(r,dict)) else " (direct fallback)"
+        mcp_source_note = " (via MCP tool)" if any((isinstance(r,dict) and r.get("_source","").startswith("mcp")) for r in mcp_results) else " (direct/MCP-fallback)"
+
+        # Hybrid fallback for agentic path: if MCP gave nothing (server not up or tool name mismatch or key), still give the /mcp/sam/opportunities path a chance
+        # so the LLM always has *some* live-ish signal + the UI shows source. This keeps the "LLM drives the search" experience even before user starts the mcp server.
+        if not mcp_results:
+            try:
+                # Re-use the existing endpoint logic by doing an internal http (simple, no extra imports beyond stdlib)
+                q = f"http://127.0.0.1:8000/mcp/sam/opportunities?naics={req.naics}&keywords={urllib.parse.quote(keywords[:80])}&notice_types={urllib.parse.quote(notice_types)}&limit=5"
+                with urllib.request.urlopen(q, timeout=6) as rr:
+                    alt = json.loads(rr.read())
+                    if isinstance(alt, list) and alt:
+                        mcp_results = alt
+                        mcp_source_note = " (via /mcp/sam hybrid)"
+            except Exception:
+                pass
 
     # 3. Enrich the extra_context that goes to the response builder (LLM or det)
     extra_for_response = req.message or ""
@@ -567,20 +702,23 @@ async def chat_endpoint(req: ChatRequest):
         has_monitor_action = any("monitor" in str(a).lower() for a in actions)
         if mcp_results and not has_monitor_action:
             for i, r in enumerate(mcp_results[:3]):
-                if isinstance(r, dict) and r.get("title"):
-                    actions.append({
-                        "label": f"Create monitor for: {(r.get('title') or '')[:60]}",
-                        "action": "add_to_pipeline",
-                        "payload": {
-                            "title": r.get("title"),
-                            "agency": r.get("agency"),
-                            "noticeType": r.get("noticeType"),
-                            "link": r.get("link"),
-                            "type": "sam-monitor",
-                            "monitorUrl": r.get("link") or f"https://sam.gov/opp/{r.get('opportunityId','')}/view",
-                            "notes": f"From chat MCP search{mcp_source_note} • {r.get('responseDeadLine','')}"
-                        }
-                    })
+                t = (r.get("title") or "") if isinstance(r, dict) else ""
+                # Skip placeholder / error messages from direct fallback when key missing
+                if not t or "requires a real SAM_API_KEY" in t or "search error" in t.lower():
+                    continue
+                actions.append({
+                    "label": f"Create monitor for: {t[:60]}",
+                    "action": "add_to_pipeline",
+                    "payload": {
+                        "title": r.get("title"),
+                        "agency": r.get("agency"),
+                        "noticeType": r.get("noticeType"),
+                        "link": r.get("link"),
+                        "type": "sam-monitor",
+                        "monitorUrl": r.get("link") or f"https://sam.gov/opp/{r.get('opportunityId','')}/view",
+                        "notes": f"From chat MCP search{mcp_source_note} • {r.get('responseDeadLine','')}"
+                    }
+                })
             result["suggested_actions"] = actions
 
     # Also surface the tools we considered (for transparency in UI source area if wanted)

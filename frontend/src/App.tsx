@@ -138,7 +138,7 @@ export default function App() {
   const [isResizing, setIsResizing] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [chatHistory, setChatHistory] = useState([
-    { role: 'assistant', content: 'Agentic co-pilot ready.\n\nI see your current scope (NAICS + tab + KPIs), full persisted Pipeline + Brain (from data/user_accumulators.json), and the catalog of available MCP tools (sam-gov-mcp etc from 1102tools/federal-contracting-mcps).\n\nTell me what admin work to do: "search SAM for the hot agencies in my brain + expiring cycles", "create monitors for the top 3 relevant RFIs/Sources Sought", "add the interesting live ones to my pipeline".\n\nI (the LLM) will drive the MCP calls for you — you never use MCP or uvx manually. Use Smart for local LLM (qwen...) or Fast for instant deterministic.' }
+    { role: 'assistant', content: 'Co-pilot ready (sees your NAICS, tab, KPIs, full Pipeline + Brain from disk, and MCP tools).\n\nFor quick admin tasks (e.g. smart SAM monitor from an expiring contract) use the buttons in the views — they activate the agent (LLM + MCP) with context and citations. Chat is excellent for open questions, overlaps, "what should I watch", or natural language exploration. Use Smart for local LLM or Fast for instant.' }
   ])
   const [useSmartModel, setUseSmartModel] = useState(false)  // opt into local LLM (qwen3.5:9b etc.) for more natural answers; default is fast deterministic path using your exact persisted data + suggested action chips
   const [mcpToolsCatalog, setMcpToolsCatalog] = useState<any[]>([])
@@ -731,7 +731,7 @@ export default function App() {
               <div className="insight magenta">
                 Why this matters: These are live recompete opportunities you can start positioning for today. Early engagement is the highest-leverage capture activity. Prioritize the ones in agencies where you already see high intensity or existing flows.
               </div>
-              <div className="text-[10px] text-[#39ff14] mt-1">Primary way to discover &amp; monitor: ask the floating AI Co-pilot (it drives MCP tools for you). The form below and +pipeline buttons are manual escape hatches only.</div>
+              <div className="text-[10px] text-[#39ff14] mt-1">Buttons like "Create SAM monitor (smart)" activate the agent (LLM + MCP) to complete the task with smart params + citations. Chat co-pilot is great for questions and exploration.</div>
               <input
                 value={oppSearch}
                 onChange={(e) => setOppSearch(e.target.value)}
@@ -765,6 +765,39 @@ export default function App() {
                             className="text-xs text-[#00f0ff] hover:underline"
                           >
                             Search SAM for this
+                          </button>
+                          {/* Agentic button (per recentering): click activates LLM + optional MCP to create a *smart* sam-monitor
+                              with good keywords/notice_types + rationale + citation back to this expiring award_key.
+                              This is the primary "agent does the admin task" path; chat is for open questions. */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                setLoading(true)
+                                const res = await fetch('/user/actions/create-sam-monitor', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ item: e, naics, brain, use_llm: useSmartModel })
+                                })
+                                if (res.ok) {
+                                  const data = await res.json()
+                                  await syncAccumulators()
+                                  setChatHistory(h => [...h, { role: 'assistant', content: `Agent created smart SAM monitor: ${data.entry?.title || 'monitor'}. ${data.rationale || ''} (saved to pipeline)` }])
+                                } else {
+                                  // fallback to the simple URL builder the old buttons used
+                                  const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(e.agency || e.recipient || '')}&naics=${naics}`
+                                  addToPipeline({ ...e, title: `SAM Monitor: ${e.agency || e.recipient}`, monitorUrl, type: 'sam-monitor' }, 'sam-monitor')
+                                }
+                              } catch {
+                                const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(e.agency || e.recipient || '')}&naics=${naics}`
+                                addToPipeline({ ...e, title: `SAM Monitor: ${e.agency || e.recipient}`, monitorUrl, type: 'sam-monitor' }, 'sam-monitor')
+                              } finally {
+                                setLoading(false)
+                              }
+                            }}
+                            className="text-xs text-[#39ff14] hover:underline"
+                            title="Agent (LLM + MCP) builds smart keywords/notice types + rationale from this expiring item + your Brain, then saves the monitor"
+                          >
+                            Create SAM monitor (smart)
                           </button>
                         </td>
                       </tr>
@@ -829,20 +862,29 @@ export default function App() {
                         {s.link && <a href={s.link} target="_blank" rel="noopener" className="text-xs text-[#00f0ff] hover:underline">sam.gov ↗</a>}
                         <button onClick={() => addToPipeline(s, 'sam-opp')} className="action-btn pipeline text-xs">+ pipeline</button>
                         <button 
-                          onClick={() => {
-                            const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords || s.title || '')}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`
-                            addToPipeline({ ...s, type: 'sam-monitor', monitorUrl, notes: `Monitor for: ${samKeywords || 'cycle'} | ${s.agency}` }, 'sam-monitor')
-                          }} 
+                          onClick={async () => {
+                            try {
+                              setLoading(true)
+                              const res = await fetch('/user/actions/create-sam-monitor', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ item: s, naics, brain, use_llm: useSmartModel })
+                              })
+                              if (res.ok) { const d = await res.json(); await syncAccumulators(); setChatHistory(h => [...h, { role: 'assistant', content: `Agent created smart monitor: ${d.entry?.title || s.title}` }]) }
+                              else { /* fallback */ const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords || s.title || '')}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`; addToPipeline({ ...s, type: 'sam-monitor', monitorUrl, notes: `Monitor for: ${samKeywords || 'cycle'} | ${s.agency}` }, 'sam-monitor') }
+                            } catch { const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords || s.title || '')}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`; addToPipeline({ ...s, type: 'sam-monitor', monitorUrl, notes: `Monitor for: ${samKeywords || 'cycle'} | ${s.agency}` }, 'sam-monitor') }
+                            finally { setLoading(false) }
+                          }}
                           className="text-xs text-[#39ff14] hover:underline"
+                          title="Agent builds smart monitor params + rationale from this result + your Brain"
                         >
-                          Create Monitor
+                          Create Monitor (smart)
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody></table>
               </div>
-              <div className="text-[10px] text-[#606080] mt-2">Results via /mcp/sam (prefers MCP sam-gov-mcp when the server is running; falls back to direct). The co-pilot LLM can drive the exact same search + "Create Monitor" flow for you from natural language — no manual form use required.</div>
+              <div className="text-[10px] text-[#606080] mt-2">Results via /mcp/sam (prefers MCP when available). Use the "Create SAM monitor (smart)" button (or on expiring rows) for agent-assisted monitors with LLM-chosen params + citations. Chat also works for open-ended discovery.</div>
 
               {/* My SAM Monitors - saved searches from Create Monitor */}
               <div className="mt-4">

@@ -14,7 +14,7 @@
 - Every number and action should carry citations/provenance back to source.
 - Theme: dark vibrant cyber/glass/neon (Ariadne/Theseus inspired) with useful tooltips.
 
-Current phase (as of June 2026): Core data (bulk historical in single DuckDB) → clean typed queries → modern React dashboard with internal contextual tabs → basic accumulators (pipeline + brain) → holistic resizable floating chat → **agentic co-pilot that drives MCP tools** (LLM does admin tasks like SAM searches/monitors; user never manual).
+Current phase (as of June 2026): Core data (bulk historical in single DuckDB) → clean typed queries → modern React dashboard with internal contextual tabs → basic accumulators (pipeline + brain) → holistic resizable floating chat → **button/embedded agentic actions** (click e.g. on expiring → LLM+MCP creates smart SAM monitor with citations) + **app-managed warmup** (MCP catalog + Ollama model at lifespan/CLI start so fewer manual terminal commands). Chat is integrated co-pilot for open work (supplemental for admin tasks).
 
 ## Current State (High Level)
 
@@ -39,7 +39,7 @@ See also:
 
 ## Recently Completed (Small Focused Wins)
 
-- Agentic co-pilot foundation (per user: "the llm does the majority of admin tasks. I as the user will never be using the mcp manually."): MCP tool catalog discovery (/mcp/tools + mcp.py list), chat context ships catalog + full brain/pipeline, backend router executes sam search MCP on natural language intent (grounded in brain/expiring), injects results, auto-proposes add sam-monitor actions; example chips in Opportunities + chat welcome set the expectation; manual forms demoted to escape hatches. All while keeping small focused.
+- Recentered agentic + warmup (per explicit user clarification): Buttons (not chat) as primary activator for agent tasks — e.g. "Create SAM monitor (smart)" on expiring rows uses shared LLM + optional MCP to build smart params/rationale/citation then persists via normal accumulator. Shared llm.py + warmup helper extracted. Lifespan now pre-warms MCP catalog + Ollama model (logs + cache); health/CLI/docs updated for "app start warms, fewer manual windows". Light text/docs adjustments to promote buttons + keep chat as holistic co-pilot. All small, reuse-heavy, per-tab sensible, citations preserved. (See session plan.md for the approved assessment + exact changes.)
 - Tab context discipline: actions now match the meaning of each view (no more indiscriminate +pipeline on competitors).
 - Brain/Wiki accumulator as first-class counterpart to Pipeline (directly supports "if we come across a new competitor we can click that button and it would run like a competitive intel research or add to an existing wiki").
 - **Real persistence for Pipeline + Brain**: on-disk JSON (`data/user_accumulators.json`) + backend endpoints + full frontend wiring (add, delete, edit notes, compounding on re-add for brain). The accumulators now survive everything and the "wiki gets smarter" is durable.
@@ -85,19 +85,20 @@ These are the things we should tackle in the next 1-3 focused sessions while bul
    - Backend: /mcp/sam/opportunities endpoint (direct for now, using SAM_API_KEY from .env; prepared for MCP tools).
    - This creates the full "predictable historical cycles + live/emerging discovery" funnel for capture.
 
-5. **Agentic LLM Co-pilot Drives MCPs (the core contract: LLM does the majority of admin tasks; user never uses MCP manually) — Just shipped first small piece**
-   - User explicit intent: "I guess this is where the local and possible cloud llm needs to come in play to because the platform is intended to have agentic capabilities where the llm does the majority of admin tasks. I as the user will never be using the mcp manually."
-   - Design: The always-on floating chat is the *only* primary surface for MCP-powered work. The LLM (local qwen3.5:9b preferred via ollama, graceful fallback) receives:
-     - Full live context (naics, activeTab, kpis, exact brain + pipeline lists from disk).
-     - The catalog of available MCP tools (discovered via mcp.py list_sam_mcp_tools from the battle-tested https://github.com/1102tools/federal-contracting-mcps servers — we only write clients).
-   - Backend chat_endpoint acts as thin orchestrator/router: keyword+context intent detection (or future full LLM tool-call parse) triggers search_sam_opportunities_mcp (on-demand stdio), injects compact live results into the prompt/context for get_chat_response, tags source "*+mcp", and auto-generates suggested_actions with "add_to_pipeline" payloads for sam-monitor items.
-   - Frontend: sendChat now ships mcpToolsCatalog (fetched from new /mcp/tools). handleChatSuggestedAction supports "mcp_search_sam" chips that synthesize a rich prompt and fire the agentic path. Opportunities tab now has example prompt buttons that let the co-pilot drive searches/monitors. Manual SAM form + "Create Monitor" + "Search SAM for this" remain as explicit escape hatches only.
-   - LLM prompt (both fast det and use_llm/ollama paths) now documents the agentic role and TOOL_CALL format for future full loops.
-   - mcp.py improved: proper on-demand async with stdio_client + ClientSession per list_tools/call (no leaky globals), list_sam_mcp_tools(), better tagging _source.
-   - /health and /mcp/tools now surface real discovered tools + ollama_ready.
-   - Result: user says "search SAM using my brain agencies and the hot expiring ones, create monitors for the good RFIs", chat does MCP call(s), shows results with source, offers clickable "Create monitor for: ..." that mutate Pipeline exactly like the manual buttons did.
-   - Next small increments (documented only, not bloating now): full ReAct loop with actual second-turn after TOOL_CALL parse, support more tools (entity profile, exclusions), cloud LLM option (xai), "My Focus" auto-derived from brain+intensity+live MCP, persist last tool results in accumulators with citations.
-   - Status of this chunk: implemented + texts updated + example chips + ROADMAP capture. (See also the Opportunities tab insight updates and initial chat welcome.)
+5. **Button/Embedded Agentic for Concrete Admin Tasks + App-Managed Warmup (Recentered per user clarification) — In progress (small chunks)**
+   - User clarification: "I guess i didnt mean that my only interface for agentic will be through the ai chat. I meant like when i go to place and find something that needs to be done i can click a button and that will acivate the agent to complete the task or it will be accomplishe as an embedded piece of the rendering or retrival. so if i find an recurring contractgin experiing in 12 months i can click create sam.gov monitor and that would create the monitor automatically with the llm or whatever. I like the idea of being abel to do stuff through the ai but that was a way down the road future idea."
+   - "when our app is started it will also need to warmup the mcp servers and ollama model so we dont have to have multiple manually invoked startup commands in different window."
+   - "Just assess, lets recenter ourselves before we go down and huge complicated build out where we lose sight of the goal."
+   - Approach (small focused, reuse-heavy):
+     - Primary "activate the agent" surface = contextual buttons in the correct tab (e.g. on expiring row in Future Opportunities: "Create SAM monitor (smart)"). The backend action runs LLM (shared client) + optional MCP search to produce smart keywords/notice_types + rationale + citation (back to the exact expiring award_key or SAM result), then persists via the normal accumulator (rich sam-monitor entry with monitorUrl). FE shows loading + success echo + immediate "My SAM Monitors" update.
+     - Embedded: hot-recompete combos or insight areas can surface recommended agent-created monitors.
+     - Chat remains the holistic always-on co-pilot for open questions, overlaps, "what to watch" — valuable and kept, but not the *only* or *primary* for defined admin tasks (reverted strong "escape hatch / primary is co-pilot" messaging).
+     - Warmup at start: lifespan now pre-calls MCP catalog (pays uvx spawn cost early + populates cache) and Ollama model load (list + tiny generate). Health/ logs reflect "warmed". CLI serve enhanced with flag + notes. Result: one (or two) commands bring a ready workstation; no mandatory separate `uvx` or model-load windows for normal button/agent use (on-demand still works as before).
+   - Reuses (no bloat): add_to_pipeline + user accumulators, mcp search/list + existing /mcp/sam hybrid, profile_generator LLM pattern (now extracted to shared llm.py + warmup helper), expiring query shape + current URL builder logic, FE add/sync + table render, lifespan/health skeleton.
+   - Status: Chunk 1 (smart button + action + shared llm + FE wiring + light text) + basic Chunk 2 (lifespan pre-warm + comment/docs updates for "no manual") landed. See plan.md in session for full verified steps + file list. Next: fuller docs recenter (ROADMAP/ README/ARCHITECTURE) + verification run + commit.
+   - Future (documented, not now): deeper chat agentic loops, persistent MCP child procs, auto-suggest on render, "My Focus" view that uses the new smart monitors + brain + intensity, cloud LLM option, full process manager for "one binary starts everything".
+
+   (The prior chat-heavy "agentic foundation" work is retained as a useful supplemental path and for power users, but recentered per the explicit clarification above.)
 
 6. **Command bar polish (while keeping it NAICS-focused for now)**
    - Quick suggestions / recent NAICS chips.

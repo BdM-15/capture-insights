@@ -170,7 +170,11 @@ We are building in small, focused, high-quality chunks. No "build to build."
 - Plain-English data dictionary started (Karpathy-style explanations + "how the AI should think about this field").
 - Architecture and future-skills ideas docs written with your constraints in mind.
 
-**Progress so far (small focused chunks) — data foundation is now the explicit priority:**
+**Progress so far (small focused chunks) — data foundation + actionable buttons + startup ergonomics are the explicit priority (recentered per user feedback on agentic interfaces + warmup):**
+
+- Chunk (recent): Button-activated agentic for real tasks (e.g. on an expiring contract in Future Opportunities: "Create SAM monitor (smart)" runs LLM+MCP behind the scenes to produce a rich, cited monitor entry in your Pipeline with smart keywords/notice types + rationale back to the source award. Manual forms remain as escape hatches. Chat co-pilot is integrated for open-ended use (not the only/primary surface).
+- Chunk (recent): App-managed warmup at start (lifespan pre-calls MCP catalog + Ollama model load + cache; CLI notes + health reflect ready state). One (or two) commands bring a "warmed" workstation; no mandatory separate `uvx sam-gov-mcp` or model loads for normal button/agent flows (on-demand still works).
+- All changes small, reuse existing (accumulators, MCP client, LLM patterns from profile, expiring data, URL builders), per-tab context respected, citations in notes. See docs/ROADMAP_AND_FUTURE_FEATURES.md (reframed agentic section) and the living plan.md in the dev session for assessment + details. Data + dashboard remain #1.
 
 - Chunk 1: Single DuckDB only + educational ingest + plain-English data dictionary + future skills doc.
 - Chunk 2: Reusable query functions + FastAPI data endpoints (`/data/summary`, `/top-agencies`, etc.).
