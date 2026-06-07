@@ -249,26 +249,139 @@ body {
   margin-top: 2px;
 }
 
-.action-btn {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid currentColor;
-  cursor: pointer;
-  transition: all .1s;
-}
-.action-btn.pipeline {
-  color: #00f0ff;
-  border-color: rgba(0,240,255,0.5);
-}
-.action-btn.pipeline:hover { background: rgba(0,240,255,0.1); }
-.action-btn.brain {
-  color: #ff2bd6;
-  border-color: rgba(255,43,214,0.5);
-}
-.action-btn.brain:hover { background: rgba(255,43,214,0.1); }
+/* ============================================
+   THEMED ARCHITECTURE — reusable, consistent, fun
+   Glass + islands for clean separation (no random thrown-together feel)
+   .action-btn family: one module, semantic color variants only
+   Hover lift + glow everywhere for delight not boredom
+   .island = purposeful visual group with breathing + boundary
+   .section-head = consistent label for every island
+   .entry = uniform list row for brain/pipeline/etc
+   ============================================ */
 
-/* Insight callout boxes for useful content per tab */
+/* ============================================
+   Custom components in @layer so Tailwind @apply
+   and processing work reliably (no "class does not exist").
+   Theseus-inspired reusable system: action-btn + variants,
+   islands for separation, entries for lists.
+   ============================================ */
+@layer components {
+  /* Core action button module (Theseus-style: base + variants for purpose) */
+  .action-btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium border transition-all duration-150;
+    min-height: 28px;
+    border-color: currentColor;
+  }
+  .action-btn:hover { transform: translateY(-1px); }
+  .action-btn:active { transform: translateY(0); }
+
+  .action-btn.pipeline {
+    color: #67e8f9;
+    border-color: rgba(103,232,249,0.4);
+    background: rgba(103,232,249,0.06);
+  }
+  .action-btn.pipeline:hover { background: rgba(103,232,249,0.14); box-shadow: 0 0 0 1px rgba(103,232,249,0.3); }
+
+  .action-btn.brain,
+  .action-btn.vault {
+    color: #c4b5fd;
+    border-color: rgba(196,181,253,0.4);
+    background: rgba(196,181,253,0.06);
+  }
+  .action-btn.brain:hover,
+  .action-btn.vault:hover { background: rgba(196,181,253,0.14); box-shadow: 0 0 0 1px rgba(196,181,253,0.3); }
+
+  .action-btn.destructive {
+    color: #fda4af;
+    border-color: rgba(253,164,175,0.35);
+  }
+  .action-btn.destructive:hover { background: rgba(253,164,175,0.1); }
+} /* close action-btn layer chunk; more components continue below in the same @layer if needed */
+
+@layer components {
+  /* The fundamental separated container — clean, not smushed, not random */
+  .island {
+    @apply glass rounded-2xl p-4 border border-[#1f2a44];
+    margin-bottom: 12px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .island:last-child { margin-bottom: 0; }
+  .island:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+    border-color: #2c3a5e;
+  }
+  .island.vault {
+    border-color: rgba(167,139,250,0.25);
+    background: rgba(17,23,42,0.92);
+  }
+  .island.vault:hover {
+    box-shadow: 0 10px 30px -8px rgba(167,139,250,0.2);
+    border-color: rgba(167,139,250,0.45);
+  }
+
+  /* Consistent header for every island / section */
+  .section-head {
+    @apply flex items-center gap-2 text-sm font-semibold tracking-[0.5px] mb-2 pb-1.5 border-b border-[#1f2a44];
+    color: #cbd5e1;
+  }
+  .section-head .count {
+    @apply text-[10px] font-mono px-1.5 py-px rounded bg-[#1f2a44] text-[#94a3b8] ml-1;
+  }
+  .section-head.vault { color: #c4b5fd; border-color: rgba(167,139,250,0.2); }
+
+  /* Uniform list rows (brain entries, pipeline items, etc) — no more ad-hoc brain-item */
+  .entry {
+    @apply bg-[#0a0e1a]/60 border border-[#1f2a44] rounded-xl p-3 mb-2 last:mb-0;
+    font-size: 12px;
+  }
+  .entry:hover { border-color: #2c3a5e; }
+  .entry-head {
+    @apply flex items-start justify-between gap-2;
+  }
+  .entry-title {
+    @apply font-medium text-[#e6ecff];
+  }
+  .entry-type {
+    @apply text-[9px] px-1.5 py-px rounded bg-[#1f2a44] text-[#a5b4fc] ml-1.5 align-middle;
+  }
+  .entry-meta {
+    @apply text-[10px] text-[#64748b] mt-0.5;
+  }
+  .entry-body {
+    @apply mt-2 text-[11px] leading-snug text-[#a8b4d0];
+  }
+  .entry-actions {
+    @apply flex items-center gap-2 mt-2;
+  }
+
+  /* Legacy brain-item kept for minimal diff but now delegates to .entry */
+  .brain-item { @apply entry; }
+
+  /* Old vault-* kept only as thin aliases so nothing breaks during transition.
+     Fixed: do not @apply a compound .action-btn.vault (Tailwind doesn't see it that way).
+     Use base + explicit vault styles so cascade + hover still work. */
+  .vault-action {
+    @apply action-btn text-[10px] px-2.5 py-1;
+    color: #c4b5fd;
+    border-color: rgba(196,181,253,0.4);
+    background: rgba(196,181,253,0.06);
+  }
+  .vault-action:hover {
+    background: rgba(196,181,253,0.14);
+    box-shadow: 0 0 0 1px rgba(196,181,253,0.3);
+  }
+
+  .vault-label { @apply text-[10px] uppercase tracking-[0.5px] text-[#a0a0c0] mb-1; }
+
+  /* Small polish for command feel */
+  .pill {
+    @apply px-2 py-px text-[10px] font-mono rounded-full border border-[#1f2a44] text-[#64748b];
+  }
+  .action-group { @apply flex flex-wrap gap-2 items-center; }
+}
+
+/* Insight callouts (contextual education per tab) */
 .insight {
   background: rgba(31,31,46,0.6);
   border-left: 3px solid #00f0ff;
@@ -280,3 +393,10 @@ body {
 }
 .insight.magenta { border-color: #ff2bd6; }
 .insight.lime { border-color: #00ff9c; }
+.insight.vault { border-color: #c4b5fd; }
+
+/* Small polish for command feel */
+.pill {
+  @apply px-2 py-px text-[10px] font-mono rounded-full border border-[#1f2a44] text-[#64748b];
+}
+.action-group { @apply flex flex-wrap gap-2 items-center; }

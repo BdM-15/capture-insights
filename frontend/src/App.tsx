@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { 
   BarChart3, Target, Users, Truck, MapPin, Clock, 
-  TrendingUp, RefreshCw, Search, Plus, Layers, MessageSquare, Settings, Wrench, Briefcase, X, Maximize2 
+  TrendingUp, RefreshCw, Search, Plus, Layers, MessageSquare, Settings, Wrench, Briefcase, BookOpen, X, Maximize2,
+  Copy, FolderOpen, Trash2, Info, Eye
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
@@ -14,7 +15,9 @@ import Plot from 'react-plotly.js'
 // - Floating chat is the HOLISTIC always-available co-pilot (no separate Chat sidebar page).
 //   Make pane larger/resizable (drag left handle + maximize) so responses and context are useful.
 // - Enrich every tab with synthesized "why this matters" insight callouts + workflow actions so content is actually useful for capture work (not just raw lists).
-// Sidebar = high-level nav (Dashboard with internal tabs, Pipeline+Brain view, future MCPs/skills/settings).
+// Sidebar = high-level nav (Dashboard with internal tabs, separate Pipeline for pursuits, Knowledge Vault for the standalone LLM wiki/Karpathy brain, future MCPs/skills/settings).
+// Per user: Pipeline connects to Ariadne Thread (milestone living packets for opportunities).
+// Knowledge Vault is the foundational standalone knowledge base (domain intelligence, personal observations, Shipley/negotiation/training guidance, new BD intel, future ontologies & Theseus prompts). It is at least as important as the quantitative data insights.
 // Theme + education persistence kept. Data foundation is live from DuckDB bulk. Small focused build.
 
 interface KpiData {
@@ -30,8 +33,23 @@ interface KpiData {
 interface FlowData {
   recipient: string
   agency: string
+  office?: string
   actions: number
   millions: number
+}
+
+interface ChatSuggestedAction {
+  action: string
+  label: string
+  payload?: Record<string, unknown>
+}
+
+interface ChatMessage {
+  role: string
+  content: string
+  source?: string
+  model?: string
+  suggested_actions?: ChatSuggestedAction[]
 }
 
 interface IntensityData {
@@ -51,7 +69,8 @@ interface ExpiringData {
 
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3, desc: 'Core data views & insights' },
-  { id: 'pipeline', label: 'Pipeline + Brain', icon: Briefcase, desc: 'Saved pursuits + competitor wiki accumulators' },
+  { id: 'pipeline', label: 'Pipeline', icon: Briefcase, desc: 'Opportunities & pursuits tracker — future Ariadne Thread connection (milestone living packets)' },
+  { id: 'vault', label: 'Knowledge Vault', icon: BookOpen, desc: 'LLM wiki / Karpathy notes — domain intel, personal observations, training, ontologies' },
   { id: 'tools', label: 'MCP Tools', icon: Wrench, desc: 'Using 1102tools/federal-contracting-mcps (sam-gov-mcp etc.) + direct fallbacks' },
   { id: 'skills', label: 'Skills', icon: Layers, desc: 'Capture skills & automations (future)' },
   { id: 'settings', label: 'Settings', icon: Settings, desc: 'NAICS defaults, theme, etc.' },
@@ -69,7 +88,7 @@ const DASHBOARD_TABS = [
 
 export default function App() {
   const [naics, setNaics] = useState('561210')
-  const [sidebar, setSidebar] = useState<'dashboard' | 'pipeline' | 'tools' | 'skills' | 'settings'>('dashboard')
+  const [sidebar, setSidebar] = useState<'dashboard' | 'pipeline' | 'vault' | 'tools' | 'skills' | 'settings'>('dashboard')
   const [dashTab, setDashTab] = useState('market')
   const [kpis, setKpis] = useState<KpiData | null>(null)
   const [flows, setFlows] = useState<FlowData[]>([])
@@ -89,6 +108,16 @@ export default function App() {
   const [pipeline, setPipeline] = useState<any[]>([])
   const [brain, setBrain] = useState<any[]>([])  // Competitor / agency wiki accumulator — seeds "brain" that gets smarter
   const [brainWiki, setBrainWiki] = useState<any[]>([])  // Native .md wiki files (Obsidian/Karpathy foundation) for richer view
+  const [globalFiles, setGlobalFiles] = useState<any[]>([])  // Global wiki .md for cross-cutting (post phase3 global + data integration)
+  // In-app wiki viewer state: lets you read the actual content (synthesized sections, citations, personal obs, ariadne pages)
+  // without having to copy-path and switch to Obsidian every time. Primary deep work stays in Obsidian (graph/backlinks).
+  // Click View on any global or native .md row -> this opens a focused reader with full(ish) text + copy actions.
+  const [viewedWiki, setViewedWiki] = useState<any>(null)
+  // Phase 3 vault maintenance (lint + index). These are the exact schema chores you want the LLM/agent to run for you.
+  // Buttons below let you trigger them from inside the app instead of terminal.
+  const [lintReport, setLintReport] = useState<any>(null)
+  const [indexStatus, setIndexStatus] = useState<any>(null)
+  const [vaultMaintLoading, setVaultMaintLoading] = useState(false)
 
   // Real on-disk persistence via backend (data/user_accumulators.json).
   // This replaces the earlier pure localStorage slice. Adds/deletes/notes now go through the server
@@ -108,6 +137,14 @@ export default function App() {
       if (wres.ok) {
         const wdata = await wres.json()
         if (Array.isArray(wdata.wiki_files)) setBrainWiki(wdata.wiki_files)
+      }
+    } catch {}
+    // Load global wiki list (cross-cutting, integrated with data insights)
+    try {
+      const gres = await fetch('/user/global/list')
+      if (gres.ok) {
+        const gdata = await gres.json()
+        if (Array.isArray(gdata.global_files)) setGlobalFiles(gdata.global_files)
       }
     } catch {}
     // Last-resort fallback for very old browser state
@@ -146,14 +183,42 @@ export default function App() {
     await loadUserAccumulators()
   }
 
+  // Phase 3: vault maintenance helpers. These are the schema-defined chores (lint structure, rebuild catalog).
+  // You trigger via buttons so the system/LLM does the work. No manual CLI needed.
+  async function runVaultLint() {
+    setVaultMaintLoading(true)
+    try {
+      const res = await fetch('/user/brain/lint')
+      if (res.ok) {
+        const data = await res.json()
+        setLintReport(data)
+      }
+    } catch {}
+    setVaultMaintLoading(false)
+  }
+
+  async function rebuildVaultIndex() {
+    setVaultMaintLoading(true)
+    try {
+      const res = await fetch('/user/brain/rebuild-index', { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setIndexStatus(data)
+        // refresh the native wiki list so counts/entries stay fresh
+        await loadUserAccumulators()
+      }
+    } catch {}
+    setVaultMaintLoading(false)
+  }
+
   // Holistic floating chat (always on, no separate sidebar page). Resizable for useful long responses.
   // Start collapsed per user request — user opens the co-pilot when they want the always-available helper.
   const [showChat, setShowChat] = useState(false)
   const [chatWidth, setChatWidth] = useState(380)
   const [isResizing, setIsResizing] = useState(false)
   const [chatInput, setChatInput] = useState('')
-  const [chatHistory, setChatHistory] = useState([
-    { role: 'assistant', content: 'Co-pilot ready (sees your NAICS, tab, KPIs, full Pipeline + Brain from disk, and MCP tools).\n\nFor quick admin tasks (e.g. smart SAM monitor from an expiring contract) use the buttons in the views — they activate the agent (LLM + MCP) with context and citations. Chat is excellent for open questions, overlaps, "what should I watch", or natural language exploration. Use Smart for local LLM or Fast for instant.' }
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
+    { role: 'assistant', content: 'Co-pilot ready (sees your NAICS, tab, KPIs, Pipeline, and Knowledge Vault from disk, and MCP tools).\n\nFor quick admin tasks (e.g. smart SAM monitor from an expiring contract) use the buttons in the views — they activate the agent (LLM + MCP) with context and citations. Chat is excellent for open questions, overlaps, "what should I watch", or natural language exploration. Use Smart for local LLM or Fast for instant.' }
   ])
   const [useSmartModel, setUseSmartModel] = useState(false)  // opt into local LLM (qwen3.5:9b etc.) for more natural answers; default is fast deterministic path using your exact persisted data + suggested action chips
   // MCP info for the dedicated sidebar view + for feeding the chat co-pilot (catalog of what the agent can drive)
@@ -342,7 +407,7 @@ export default function App() {
   }
 
   // Allow chat to drive actions (for the "suggested actions" in responses)
-  function applySuggestedAction(action: string, payload?: any) {
+  function applySuggestedAction(action: string, _payload?: unknown) {
     if (action === 'brain-top-flows') {
       flows.slice(0, 4).forEach(f => addToBrain(f, f.recipient, 'competitor'))
     }
@@ -442,7 +507,7 @@ export default function App() {
         // Intensity quadrant on overview (as user said — this is an overview chart for pulse + prioritization)
         const medActions = intensity.length ? intensity.reduce((s, x) => s + (x.award_count || 0), 0) / intensity.length : 0
         const medOblig = intensity.length ? intensity.reduce((s, x) => s + (x.total_oblig || 0), 0) / intensity.length : 0
-        const intensityScatterData = intensity.map((a, idx) => {
+        const intensityScatterData = intensity.map((a) => {
           const isHot = (a.total_oblig || 0) > medOblig && (a.award_count || 0) > medActions
           return {
             x: a.award_count || 0,
@@ -822,7 +887,7 @@ export default function App() {
                   })}
                 </tbody></table>
               </div>
-              <div className="text-[10px] text-[#606080] mt-2">Click +pipeline on the ones that fit your capabilities or relationships. "Search SAM for this" prefills a live search for the actual notice/RFI on that cycle. These items accumulate in the Pipeline + Brain view (sidebar).</div>
+              <div className="text-[10px] text-[#606080] mt-2">Click +pipeline on the ones that fit your capabilities or relationships. "Search SAM for this" prefills a live search for the actual notice/RFI on that cycle. These items accumulate in the separate Pipeline view (sidebar). Use +brain / + to Knowledge Vault from Competitive & Agency tabs for the standalone vault.</div>
             </div>
 
             {/* Live SAM layer — the "new + emerging" that complements historical recompete cycles */}
@@ -864,7 +929,7 @@ export default function App() {
                   }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20">{t}</button>
                 ))}
               </div>
-              <div className="text-[10px] text-[#606080] mb-2">Tip: Primary path = tell the AI Co-pilot (e.g. "search SAM for hot agencies in my brain and expiring cycles, create monitors for relevant RFIs"). It will use available MCP tools under the hood and surface +pipeline actions. The controls below and "Search SAM for this" are manual escape hatches. (To enable richer live MCP: run `uvx sam-gov-mcp` in another terminal.)</div>
+              <div className="text-[10px] text-[#606080] mb-2">Tip: Primary path = tell the AI Co-pilot (e.g. "search SAM for hot agencies in my vault and expiring cycles, create monitors for relevant RFIs"). It will use available MCP tools under the hood and surface +pipeline actions. The controls below and "Search SAM for this" are manual escape hatches. (To enable richer live MCP: run `uvx sam-gov-mcp` in another terminal.)</div>
               <div className="glass rounded-3xl overflow-hidden text-sm">
                 <table className="w-full"><tbody>
                   {samResults.length === 0 && <tr><td className="p-3 text-slate-400">No SAM results yet — enter keywords and search (requires SAM_API_KEY on backend for live data).</td></tr>}
@@ -926,41 +991,49 @@ export default function App() {
                 )}
               </div>
 
-              {/* My Focus - ultra-light derived view on the *current* simple JSON Brain (per plan).
-                  Client-side intersections using brain + expiring + intensity + smart monitors.
-                  This is the quick 1-day validation slice BEFORE evolving Brain into the real Obsidian/Karpathy LLM wiki foundation (native .md files, [[wikilinks]], LLM synthesis on +brain, structure ready to grow to global_wiki/competitor_intel/etc.).
-                  Header notes the future upgrade so user expectations are set. */}
+              {/* My Focus - ultra-light derived view on the *current* simple JSON Brain + native wiki excerpts (per plan).
+                  Client-side intersections using brain + brainWiki + expiring + intensity + smart monitors.
+                  This is the quick validation slice; now also peeks at the LLM-synthesized wiki .md excerpts for better matches.
+                  Will get even richer as the full Obsidian/Karpathy wiki (global/, pursuits/, more synthesis) lands. */}
               <div className="mt-4">
-                <div className="text-sm font-semibold mb-1">My Focus (lightweight intersections from your Brain + recent agent-created smart monitors + live data)</div>
-                <div className="text-[10px] text-[#606080] mb-2">Ultra-light view using the current simple Brain accumulator. Will become much more powerful once we evolve Brain into a real Obsidian/Karpathy-style LLM wiki (plain Markdown files with [[wikilinks]], LLM-synthesized entries seeded from USASpending insights + citations, compounding, native so you can point Obsidian at data/knowledge/ for free rich UI/backlinks). Foundation first, then richer derived views.</div>
+                <div className="text-sm font-semibold mb-1">My Focus (lightweight intersections from your Brain + wiki excerpts + recent agent-created smart monitors + live data)</div>
+                <div className="text-[10px] text-[#606080] mb-2">Ultra-light client-side view. Uses both the JSON accumulator and the native wiki .md excerpts (synthesized by LLM from USASpending signals + citations). Add +brain or create smart monitors to populate. Will become much more powerful with the full Obsidian/Karpathy LLM wiki (global seeds, per-pursuit folders, backlinks, etc.).</div>
 
-                {/* Simple intersections - reuse existing state and logic patterns */}
+                {/* Simple intersections - reuse existing state and logic patterns. Now also folds in brainWiki excerpts for matches. */}
                 {(() => {
                   const brainLower = brain.map((b: any) => (b.name || '').toLowerCase().slice(0, 15));
+                  // Also pull keywords from the native wiki .md excerpts (the synthesized content) so My Focus benefits from the foundation we just built.
+                  const wikiLower = (brainWiki || []).flatMap((w: any) => [
+                    (w.name || '').toLowerCase().slice(0, 15),
+                    (w.excerpt || w.content || '').toLowerCase().slice(0, 60)
+                  ]).filter(Boolean);
+
+                  const allBrain = [...brainLower, ...wikiLower];
+
                   const brainMatchedExpiring = expiring.filter((e: any) => {
                     const r = (e.recipient || '').toLowerCase().slice(0,15);
                     const a = (e.agency || '').toLowerCase().slice(0,15);
-                    return brainLower.some((bl: string) => r.includes(bl) || a.includes(bl) || bl.includes(r) || bl.includes(a));
+                    return allBrain.some((bl: string) => r.includes(bl) || a.includes(bl) || bl.includes(r) || bl.includes(a));
                   }).slice(0,4);
 
                   const smartMonitors = pipeline.filter((p: any) => p.type === 'sam-monitor');
                   const monitorOverlaps = smartMonitors.filter((m: any) => {
                     const mName = (m.agency || m.title || '').toLowerCase().slice(0,15);
-                    return brainLower.some((bl: string) => mName.includes(bl) || bl.includes(mName)) ||
+                    return allBrain.some((bl: string) => mName.includes(bl) || bl.includes(mName)) ||
                            hotAgencies.has(m.agency || '') ||
                            expiring.some((e: any) => (e.agency || '').toLowerCase().includes(mName));
                   }).slice(0,3);
 
                   const brainHotAgencies = intensity.filter((a: any) => {
                     const name = (a.agency || '').toLowerCase().slice(0,15);
-                    return brainLower.some((bl: string) => name.includes(bl) || bl.includes(name));
+                    return allBrain.some((bl: string) => name.includes(bl) || bl.includes(name));
                   }).slice(0,3);
 
                   return (
                     <div className="space-y-2 text-xs">
                       {brainMatchedExpiring.length > 0 && (
                         <div>
-                          <div className="font-medium mb-0.5">Expiring that match your Brain:</div>
+                          <div className="font-medium mb-0.5">Expiring that match your Brain / wiki:</div>
                           {brainMatchedExpiring.map((e: any, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 pl-2">
                               <span>{e.recipient || '—'} @ {e.agency} (ends {e.end_date})</span>
@@ -971,7 +1044,7 @@ export default function App() {
                       )}
                       {monitorOverlaps.length > 0 && (
                         <div>
-                          <div className="font-medium mb-0.5">Your smart monitors overlapping Brain / hot / expiring:</div>
+                          <div className="font-medium mb-0.5">Your smart monitors overlapping Brain / wiki / hot / expiring:</div>
                           {monitorOverlaps.map((m: any, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 pl-2">
                               <span>{m.title || m.agency}</span>
@@ -982,7 +1055,7 @@ export default function App() {
                       )}
                       {brainHotAgencies.length > 0 && (
                         <div>
-                          <div className="font-medium mb-0.5">Hot agencies already in your Brain:</div>
+                          <div className="font-medium mb-0.5">Hot agencies already in your Brain / wiki:</div>
                           {brainHotAgencies.map((a: any, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 pl-2">
                               <span>{a.agency} — {a.award_count} actions, ${(a.total_oblig||0)/1e6}M</span>
@@ -992,7 +1065,7 @@ export default function App() {
                         </div>
                       )}
                       {brainMatchedExpiring.length === 0 && monitorOverlaps.length === 0 && brainHotAgencies.length === 0 && (
-                        <div className="text-slate-400">Add a few items to Brain or create some smart monitors via the buttons above to see intersections here.</div>
+                        <div className="text-slate-400">Add a few items to Brain (or create smart monitors) to see intersections here. The view also uses your wiki .md excerpts now.</div>
                       )}
                     </div>
                   );
@@ -1267,115 +1340,391 @@ export default function App() {
     }
 
     if (sidebar === 'pipeline') {
-      // Show BOTH pipeline (opportunities) AND brain/wiki (competitors/agencies) — the two accumulators.
-      // Now persisted in browser localStorage (survives refresh). Delete + edit notes work. Future: real file/DB.
+      // Dedicated Pipeline view — opportunities & pursuits only.
+      // This is the tracker for things worth bidding/tracking. Future: primary connection point
+      // to the full Ariadne Thread vision (milestone living packets for opportunities).
       return (
-        <div className="space-y-4">
-          <div className="glass p-5 rounded-3xl">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-lg font-semibold">Pipeline (opportunities & pursuits)</div>
-              <div className="text-xs text-[#606080]">{pipeline.length} items • persisted in browser for now</div>
+        <div className="space-y-3">
+          <div className="island">
+            <div className="section-head">
+              <Briefcase size={15}/> Pipeline — Opportunities &amp; Pursuits <span className="count">{pipeline.length}</span>
             </div>
-            {pipeline.length === 0 && <div className="text-sm text-slate-400">Use the + pipeline buttons inside the Opportunities and Combo tabs. These become your living list of things you decided are worth tracking or bidding. Items now survive page refresh.</div>}
+            <div className="text-xs text-[#64748b] mb-2">Living list of things you decided are worth tracking or bidding. Becomes the bridge to Ariadne Thread (milestone living packets). Distinct from the Knowledge Vault.</div>
+            {pipeline.length === 0 && <div className="text-sm text-[#64748b]">Use the + pipeline buttons inside Future Opportunities and the Combo insight. Items persist on disk via the backend accumulator.</div>}
             {pipeline.map((p, i) => {
               const pid = p.id || p.ts
               return (
-                <div key={i} className="text-sm py-1.5 border-b border-[#1f1f2e] flex justify-between items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <span className="font-medium">{p.type}</span> — {p.recipient || p.agency || p.label || JSON.stringify(p).slice(0,60)}
-                    <div className="text-[10px] text-[#606080]">from {p.source || 'dashboard'} • NAICS {p.naics}</div>
+                <div key={i} className="entry flex justify-between items-start gap-3">
+                  <div className="min-w-0">
+                    <div><span className="font-medium">{p.type}</span> — {p.recipient || p.agency || p.label || JSON.stringify(p).slice(0,70)}</div>
+                    <div className="entry-meta">from {p.source || 'dashboard'} • NAICS {p.naics} • {new Date(p.ts).toLocaleDateString()}</div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[#606080] text-xs tabular-nums">{new Date(p.ts).toLocaleDateString()}</span>
-                    <button onClick={() => removeFromPipeline(pid)} className="text-[#ff3b6b] hover:underline text-xs" title="Remove from pipeline">×</button>
-                  </div>
+                  <button onClick={() => removeFromPipeline(pid)} className="text-[#fda4af] text-xs hover:underline shrink-0" title="Remove this pursuit from the accumulator (native files if any stay)">remove</button>
                 </div>
               )
             })}
             {pipeline.length > 0 && (
-              <button onClick={async () => { if (confirm('Clear all pipeline?')) { try { await fetch('/user/pipeline/clear', {method:'DELETE'}) } catch{}; await syncAccumulators() } }} className="mt-3 text-xs text-[#606080] hover:text-[#ff3b6b]">Clear pipeline</button>
+              <button onClick={async () => { if (confirm('Clear all pipeline?')) { try { await fetch('/user/pipeline/clear', {method:'DELETE'}) } catch{}; await syncAccumulators() } }} className="action-btn pipeline mt-3" title="Clear the entire active pipeline list. Use when you want a fresh start on tracked opportunities. The Knowledge Vault is untouched.">
+                Clear pipeline
+              </button>
             )}
           </div>
+          <div className="text-[10px] text-[#64748b] px-1">Pipeline and Knowledge Vault are intentionally separate. Pipeline = active pursuits. Vault = compounding domain intelligence + your observations (see sidebar).</div>
+        </div>
+      )
+    }
 
-          <div className="glass p-5 rounded-3xl border border-[#ff2bd6]/30">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="text-lg font-semibold text-[#ff2bd6]">Brain / Wiki (accumulated competitor & agency knowledge)</div>
-                <div className="text-xs text-[#a0a0c0]">Each +Brain click (from Competitive or Agency tabs) compounds notes + citations. Foundation slice now also writes native Obsidian/Karpathy-aligned Markdown files to data/knowledge/brain/ (with [[wikilinks]], frontmatter, citations) — point your Obsidian vault there for free rich UI. Will evolve to full LLM-synthesized wiki (global/ + pursuits-style) seeded from USASpending insights. The JSON is still used by the app; .md is the compounding human/LLM wiki substrate.</div>
-              </div>
-              <div className="text-xs text-[#ff2bd6]">{brain.length} entries</div>
+    if (sidebar === 'vault') {
+      // Dedicated Knowledge Vault — standalone Brain / LLM wiki / Karpathy foundation.
+      // Purpose: domain intelligence + your observations + Shipley/negotiation/training + new BD intel.
+      // Compounds as native .md files (Obsidian + Karpathy pattern). App + LLM seed from data with citations.
+      // You enhance in Obsidian desktop. This + the data views = power foundation. Schema: data/knowledge/schema/capture-llm-wiki.md
+      return (
+        <div className="space-y-3">
+          {/* 1. Narrative + access island — full width desc + root actions co-located (correct grouping) */}
+          <div className="island vault">
+            <div className="section-head vault">
+              <BookOpen size={15}/> Knowledge Vault <span className="pill">LLM wiki • Karpathy notes</span>
+              <span className="count">{brain.length} brain + {globalFiles.length} global</span>
             </div>
-            {brain.length === 0 && <div className="text-sm text-slate-400">Go to Competitive Analysis or Agency Intelligence tabs and click "+ brain / wiki" on interesting recipients or agencies. Re-adding the same name appends more evidence (notes + citations) instead of duplicating.</div>}
+            <div className="text-sm text-[#c0c0d8] leading-snug">
+              Standalone foundation for domain intelligence, personal observations, Shipley/negotiation/training guidance, new BD intel. Compounds as native .md (full Karpathy pattern — see schema/capture-llm-wiki.md). App seeds from data + citations. Enhance in Obsidian desktop (obsidian-skills for agents). Richer seeds from your recent ingest. Data + vault = power foundation.
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-[#606080] font-mono">data/knowledge/</span>
+              <button onClick={() => { try { navigator.clipboard.writeText('data/knowledge') } catch {} }} className="action-btn vault" title="Copy the vault root. In Obsidian: Open folder as vault → get graph, backlinks, search, and edit your education/ notes alongside LLM-synthesized entries while keeping all provenance.">
+                <Copy size={13}/> Copy root (for Obsidian)
+              </button>
+              <button onClick={() => { try { navigator.clipboard.writeText('cd C:\\Users\\benma\\capture-insights\n# Open data/knowledge as vault in Obsidian desktop for full wiki + your Shipley notes') } catch {} }} className="action-btn vault" title="Copy the cd + open instructions. Run it, then point Obsidian at data/knowledge/. Unlocks rich editing of the real .md files (frontmatter, sections, education/, [[wikilinks]]) while the app continues seeding from USASpending.">
+                <FolderOpen size={13}/> Open in Obsidian desktop
+              </button>
+              <span className="text-[10px] text-[#606080] ml-1">Education &amp; schema live inside the vault folder.</span>
+            </div>
+          </div>
+
+          {/* 2. Seed island — separate purpose, contextual to loaded data views, rich titles */}
+          {(intensity.length > 0 || expiring.length > 0) && (
+            <div className="island">
+              <div className="section-head">
+                <Plus size={15}/> Seed from current views <span className="text-[10px] text-[#606080] normal-case">(live intensity / expiring → vault with citations. Compounds on re-add.)</span>
+              </div>
+              <div className="action-group">
+                {intensity.length > 0 && (
+                  <button onClick={() => {
+                    const top = intensity.slice(0,3)
+                    top.forEach(a => addToBrain({ ...a, notes: `seeded from intensity hot (vol ${a.award_count} oblig ${((a.total_oblig||0)/1e6).toFixed(1)}M)` }, a.agency, 'agency'))
+                  }} className="action-btn vault" title="Take top 3 agencies from the Capture Intensity scatter (the hot quadrant ones). Creates or appends .md entry in brain/agencies/ with quadrant signal + obligation volume + direct citation back to the USASpending rows you just loaded.">
+                    <Plus size={13}/> Ingest top 3 hot agencies
+                  </button>
+                )}
+                {expiring.length > 0 && (
+                  <button onClick={() => {
+                    const vis = expiring.slice(0,3)
+                    vis.forEach(e => addToBrain({ ...e, notes: `seeded from expiring radar (ends ${e.end_date} ${((e.obligation||0)/1e6).toFixed(1)}M)` }, e.recipient || e.agency, 'competitor'))
+                  }} className="action-btn vault" title="Take top 3 expiring awards from the radar. Seeds brain/competitors/ or agencies/ with timing + dollar note + award_key citation. Perfect for early recompete positioning and SAM monitor ideas later.">
+                    <Plus size={13}/> Ingest top 3 expiring
+                  </button>
+                )}
+              </div>
+              <div className="text-[10px] text-[#606080] mt-1.5">Pulls directly from whatever is loaded in the current NAICS slice. Your recent historical ingest makes these seeds higher signal. LLM later synthesizes full atomic notes per schema.</div>
+            </div>
+          )}
+
+          {/* 3. Entries island — each is a clean .entry card, synthesized note prominent, copy full is obvious action, your overlay clear */}
+          <div className="island">
+            <div className="section-head">
+              <Layers size={15}/> Entries — synthesized + your overlays
+              {brain.length === 0 && <span className="text-[10px] text-[#606080] normal-case ml-2">(add via + brain/wiki buttons in Competitive or Agency tabs, or seed above)</span>}
+            </div>
+            {brain.length === 0 && <div className="text-xs text-[#64748b]">Nothing in the vault yet. The +brain buttons and seed actions above feed this. Re-adding the same name+type compounds citations and appends a fresh dated section.</div>}
             {brain.map((b, i) => {
               const bid = b.id || b.addedAt
-              // Match against the native wiki .md list (by name prefix both directions) so the primary
-              // accumulator view shows the LLM-synthesized content from the .md file (Karpathy/Obsidian foundation)
-              // instead of only the raw click-time notes. The editable input remains for user overlay/notes.
               const wiki = brainWiki.find((w: any) => {
-                const bn = (b.name || '').toLowerCase().slice(0, 14)
-                const wn = (w.name || '').toLowerCase().slice(0, 14)
+                const bn = (b.name || '').toLowerCase().slice(0,14)
+                const wn = (w.name || '').toLowerCase().slice(0,14)
                 return bn && wn && (bn.includes(wn) || wn.includes(bn))
               })
               const display = wiki ? (wiki.excerpt || wiki.content) : (b.notes || '')
               const wikiPath = wiki ? wiki.path : null
               return (
-                <div key={i} className="brain-item">
-                  <div className="flex justify-between items-start">
-                    <div className="font-medium">{b.name} <span className="text-[10px] px-1.5 py-px rounded bg-[#ff2bd6]/20 text-[#ff2bd6]">{b.type}</span></div>
-                    <button onClick={() => removeFromBrain(bid)} className="text-[#ff3b6b] text-xs hover:underline" title="Remove from brain">×</button>
+                <div key={i} className="entry">
+                  <div className="entry-head">
+                    <div>
+                      <span className="entry-title">{b.name}</span>
+                      <span className="entry-type">{b.type}</span>
+                    </div>
+                    <button onClick={() => removeFromBrain(bid)} className="text-[#fda4af] text-xs hover:underline" title="Remove this entry from the JSON accumulator (native .md on disk stays)">remove</button>
                   </div>
                   {wiki ? (
-                    <div className="text-[10px] mt-0.5">
-                      <span className="text-[#39ff14]">📝 Synthesized wiki note</span>
-                      <div className="text-[#a0a0c0] mt-0.5">{display}</div>
-                      {wikiPath && <div className="text-[#606080] text-[9px] mt-0.5">{wikiPath}</div>}
+                    <div className="entry-body">
+                      <div className="text-[#67e8f9] text-[10px] mb-0.5">SYNTHESIZED FROM USASPENDING + CITATIONS (see schema for exact sections)</div>
+                      <div className="whitespace-pre-wrap text-[#c0c0d8]">{display}</div>
+                      {wikiPath && (
+                        <div className="mt-1.5 flex items-center gap-2 text-[9px] text-[#606080] font-mono">
+                          {wikiPath}
+                          <button onClick={() => { try { navigator.clipboard.writeText(display) } catch {} }} className="action-btn vault" title="Copy the full LLM-synthesized note (data signals + citations + any prior overlays) to clipboard. Paste into Obsidian, reports, or external tools. Provenance stays in the .md frontmatter and sections.">
+                            <Copy size={12}/> Copy full synthesized
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="text-xs mt-0.5">{display}</div>
+                    <div className="entry-body text-[#a8b4d0]">{display}</div>
                   )}
-                  <div className="meta">Citation: {b.citation}</div>
-                  <div className="text-[9px] text-[#39ff14] mt-0.5">Wiki: data/knowledge/brain/ (native .md + LLM synthesis, Obsidian-ready)</div>
-                  <div className="mt-1">
+                  <div className="entry-meta">Citation: {b.citation}</div>
+                  <div className="mt-2">
+                    <div className="text-[9px] text-[#64748b] mb-0.5">Your overlay (appends to the native .md on save)</div>
                     <input
                       defaultValue={b.notes}
                       onBlur={(e) => updateBrainNote(bid, e.target.value)}
-                      className="w-full bg-[#0a0e1a] border border-[#1f1f2e] text-xs rounded px-2 py-0.5"
-                      placeholder="Add your own notes here (edits persist)..."
+                      className="w-full bg-[#05070d] border border-[#1f2a44] text-xs rounded px-2 py-1 text-[#e6ecff]"
+                      placeholder="Add Shipley angle, negotiation lever, new intel, ontology idea..."
                     />
                   </div>
                 </div>
               )
             })}
             {brain.length > 0 && (
-              <div className="flex gap-3 mt-2">
-                <button onClick={async () => { if (confirm('Clear entire brain/wiki?')) { try { await fetch('/user/brain/clear', {method:'DELETE'}) } catch{}; await syncAccumulators() } }} className="text-xs text-[#606080] hover:text-[#ff3b6b]">Clear brain</button>
-                <div className="text-[10px] text-[#ff2bd6]">Future: button here will "run competitive intel research" (trigger MCPs + LLM append to a real wiki store) using exactly these accumulated elements as seed.</div>
+              <div className="mt-2">
+                <button onClick={async () => {
+                  if (confirm('Clear entire Knowledge Vault? Native .md files stay on disk until you delete them in Obsidian or Explorer. Education/ and schema/ are untouched.')) {
+                    try { await fetch('/user/brain/clear', {method:'DELETE'}) } catch{}
+                    await syncAccumulators()
+                  }
+                }} className="action-btn destructive" title="Wipes the in-app accumulator only. The real vault (.md files in data/knowledge/brain/) and your education notes remain. Use this when you want a clean slate in the UI while keeping the files.">
+                  <Trash2 size={13}/> Clear entire Knowledge Vault (UI only)
+                </button>
               </div>
             )}
+          </div>
 
-            {/* Native wiki .md files (the Obsidian/Karpathy LLM wiki foundation) */}
-            {brainWiki.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-[#1f1f2e]">
-                <div className="text-xs font-medium mb-1 text-[#39ff14]">Wiki entries (native .md files — point Obsidian at data/knowledge/ for rich view)</div>
-                {brainWiki.slice(0,6).map((w, i) => (
-                  <div key={i} className="text-[10px] py-0.5 border-b border-[#1f1f2e]/50">
-                    <span className="font-medium">{w.name}</span> <span className="text-[#606080]">({w.type})</span>
-                    <div className="text-[#a0a0c0] truncate">{w.excerpt || w.content}</div>
-                    <div className="flex items-center gap-2 text-[#606080]">
-                      <span>{w.path}</span>
-                      <button
-                        onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }}
-                        className="text-[9px] px-1 py-0 border border-[#1f1f2e] rounded hover:bg-[#1f1f2e]"
-                        title="Copy path for Obsidian / editor"
+          {/* Global Wiki — foundational evergreen knowledge (browse/read/Obsidian). Cross-seed from dashboard data = future. */}
+          <div className="island">
+            <div className="section-head">
+              <Layers size={15}/> Global Wiki <span className="text-[10px] text-[#606080] normal-case">({globalFiles.length} entries)</span>
+            </div>
+            <div className="text-[10px] text-[#64748b] mb-1">
+              Evergreen capture knowledge (Shipley, domain intel, process guides) from the ariadne base. Browse and read here or in Obsidian at data/knowledge/global/. Separate from brain/ (data-tied entries) and from USASpending dashboard numbers.
+            </div>
+            <div className="action-group">
+              <button onClick={async () => { await loadUserAccumulators() }} className="action-btn vault">
+                Refresh Global List
+              </button>
+            </div>
+            {globalFiles.length === 0 && (
+              <div className="text-xs text-[#64748b] mt-1">No global files in UI state yet — click Refresh Global List (or restart app). Backend has 155+ from ariadne global_wiki + domain_intel.</div>
+            )}
+            {globalFiles.length > 0 && (
+              <div className="mt-2 space-y-1 text-xs">
+                {globalFiles.slice(0, 12).map((g, i) => (
+                  <div key={i} className="py-1 px-2 border border-[#1f2a44] rounded bg-[#05070d]/50 flex items-start justify-between gap-2 hover:border-[#a78bfa]/60 transition-colors">
+                    <div 
+                      className="min-w-0 flex-1 cursor-pointer" 
+                      onClick={() => setViewedWiki(g)}
+                      title="Click to read the actual wiki content (synthesized sections, citations, observations) in the viewer below"
+                    >
+                      <div className="font-medium text-[#c0c0d8]">{g.name} <span className="text-[#606080]">({g.type || 'global'})</span></div>
+                      <div className="text-[#a0a0c0] truncate">{(g.excerpt || '').slice(0, 160)}</div>
+                      <div className="font-mono text-[9px] text-[#606080]">{g.path}</div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button 
+                        onClick={() => setViewedWiki(g)} 
+                        className="action-btn vault text-[10px]" 
+                        title="Read the full content of this wiki page right here in the app (no need to switch to Obsidian for quick lookup)"
                       >
-                        copy path
+                        <Eye size={11}/> View
+                      </button>
+                      <button onClick={() => { try { navigator.clipboard.writeText(g.path || '') } catch {} }} className="action-btn vault text-[10px]" title="Copy path for Obsidian">
+                        <Copy size={11}/> path
                       </button>
                     </div>
                   </div>
                 ))}
-                {brainWiki.length > 6 && <div className="text-[9px] text-[#606080]">... and {brainWiki.length-6} more (full list in data/knowledge/brain/)</div>}
+                {globalFiles.length > 12 && <div className="text-[#606080] text-[10px]">+ {globalFiles.length - 12} more — open data/knowledge/global/ in Obsidian for full graph/search. Use View on any row to read the actual text in-app.</div>}
               </div>
             )}
+            <div className="text-[9px] text-[#606080] mt-1">Ariadne knowledge under global/global_wiki + domain_intel. Edit in Obsidian; use brain/ for USASpending-seeded entries. Cross-seed from dashboard → global pages is a future feature.</div>
+
+            {/* In-app Wiki Viewer: the main way to actually *read* the content without only copying paths.
+                Click View on any global row (or native .md row below) → this appears with the real text (synthesized Key Signals, Citations & Sources, Personal Observations, full ariadne pages, etc.).
+                "Load complete file" pulls the entire .md via the backend reader (list only ships a preview slice).
+                This is the UI/UX bridge: app = fast discovery + data seeding + quick reads while you work; Obsidian = the full IDE for editing, graph, bases, wikilinks, plugins.
+            */}
+            {viewedWiki && (
+              <div className="mt-3 island border border-[#a78bfa]/50">
+                <div className="section-head flex items-center justify-between">
+                  <div>
+                    <Eye size={15}/> Viewing wiki page: <span className="text-[#c0c0d8]">{viewedWiki.name}</span>
+                    <span className="text-[#606080] ml-1">({viewedWiki.type || 'wiki'})</span>
+                  </div>
+                  <button onClick={() => setViewedWiki(null)} className="text-xs px-2 py-0.5 border border-[#1f2a44] rounded hover:bg-[#16161f]">Close viewer</button>
+                </div>
+                <div className="text-[10px] font-mono text-[#606080] mb-1">{viewedWiki.path}</div>
+
+                <div className="bg-[#05070d] border border-[#1f2a44] rounded p-3 max-h-[420px] overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-[#d0d8f0]">
+                  {(viewedWiki.content || viewedWiki.excerpt || '(no preview loaded — click Load complete file)')}
+                </div>
+
+                <div className="action-group mt-2">
+                  <button 
+                    onClick={() => { 
+                      const txt = viewedWiki.content || viewedWiki.excerpt || ''; 
+                      try { navigator.clipboard.writeText(txt) } catch {} 
+                    }} 
+                    className="action-btn vault text-[10px]"
+                  >
+                    Copy visible text
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(viewedWiki.path)}`);
+                        const d = await r.json();
+                        if (d.ok && d.content) setViewedWiki({ ...viewedWiki, content: d.content });
+                      } catch {}
+                    }} 
+                    className="action-btn vault text-[10px]"
+                  >
+                    Load complete file
+                  </button>
+                  <button 
+                    onClick={() => { try { navigator.clipboard.writeText(viewedWiki.path || '') } catch {} }} 
+                    className="action-btn vault text-[10px]"
+                  >
+                    Copy path
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const help = `cd C:\\Users\\benma\\capture-insights\n# In Obsidian: Open folder as vault → data/knowledge\n# Then quick switcher or file tree to: ${viewedWiki.path}`;
+                      try { navigator.clipboard.writeText(help) } catch {}
+                    }} 
+                    className="action-btn vault text-[10px]"
+                    title="Copies a ready command + path hint so you can jump straight into full editing + graph in Obsidian"
+                  >
+                    Obsidian jump (copy)
+                  </button>
+                </div>
+                <div className="text-[9px] text-[#606080] mt-1">
+                  Reading here is for speed while you stay on the data + chat flow. For serious curation, [[wikilinks]], backlinks, canvas, daily notes on the wiki: use Obsidian pointed at the data/knowledge folder.
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Training data section (unsloth / future intelligent LLM curation) */}
+          <div className="island">
+            <div className="section-head">
+              <BookOpen size={15}/> Training data (unsloth fine-tunes)
+            </div>
+            <div className="text-[10px] text-[#64748b]">
+              High-signal datasets for local specialized agents live in <span className="font-mono">data/knowledge/training/datasets/</span> (JSONL convos ready for unsloth), examples/, prompts/.
+              Schema defines the workflow: LLM proposes only valuable gaps (e.g. hot quadrant signals with no matching ariadne intel), you review/approve before append (human-in-loop, full provenance).
+              No raw dump — only high-value. Buttons for "Suggest Valuable Training Examples" coming next (will use current global + brain + intensity data).
+            </div>
+            <div className="text-[9px] text-[#606080] mt-1">This saves frontier calls + gives focused capture agents. See schema/capture-llm-wiki.md "Training Data Collection".</div>
+          </div>
+
+          {/* Phase 3 maintenance island — button-driven vault chores (lint + index) so LLM/agent handles the schema work */}
+          <div className="island">
+            <div className="section-head">
+              <Wrench size={15}/> Vault Maintenance (LLM/agent tasks)
+            </div>
+            <div className="text-[10px] text-[#64748b] mb-1">
+              Stats: {brainWiki.length} native .md files on disk | {brain.length} brain entries. 
+              These run the exact lint + catalog tasks defined in the schema. You click once — the system/LLM does the work (no terminal, no --lint flags). 
+              Click lint to see problems → click fix, LLM auto-appends the missing sections per schema (Key Signals, Citations, Open Questions, Personal Observations, etc.).
+            </div>
+            <div className="action-group">
+              <button onClick={runVaultLint} disabled={vaultMaintLoading} className="action-btn vault">
+                Run Lint (check .md structure)
+              </button>
+              <button onClick={rebuildVaultIndex} disabled={vaultMaintLoading} className="action-btn vault">
+                Rebuild Index Catalog
+              </button>
+            </div>
+            {lintReport && (
+              <div className="mt-2 text-xs border border-[#1f2a44] rounded p-2 bg-[#0a0e1a]">
+                <div className="font-medium">Lint result: {lintReport.ok ? 'CLEAN' : 'ISSUES FOUND'} — {lintReport.summary}</div>
+                {lintReport.legacy_dirs?.length > 0 && <div className="text-[#fda4af]">Legacy dirs: {lintReport.legacy_dirs.join(', ')}</div>}
+                {lintReport.entries?.filter((e: any) => !e.ok).slice(0, 4).map((e: any, i: number) => (
+                  <div key={i} className="text-[#fda4af] mt-0.5">{e.name} ({e.type}): {e.issues?.join('; ')}</div>
+                ))}
+                {lintReport.ok && <div className="text-[#67e8f9]">All native .md files follow the schema rules.</div>}
+                {!lintReport.ok && (
+                  <button
+                    onClick={async () => {
+                      setVaultMaintLoading(true)
+                      try {
+                        const res = await fetch('/user/brain/fix', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ lint_report: lintReport })
+                        })
+                        if (res.ok) {
+                          const data = await res.json()
+                          // re-lint to show the improvement (LLM did the appends)
+                          await runVaultLint()
+                          // optional: surface what happened
+                          alert(data.message || 'LLM applied schema fixes to the .md files.')
+                        }
+                      } catch {}
+                      setVaultMaintLoading(false)
+                    }}
+                    disabled={vaultMaintLoading}
+                    className="action-btn vault mt-1"
+                    title="LLM reads the lint issues + schema, then appends the exact missing sections (Key Signals, Citations, Open Questions, Personal Observations, etc.) to the native .md files on disk. This is the admin work you want the agent to own."
+                  >
+                    LLM Fix These Issues (auto-append per schema)
+                  </button>
+                )}
+              </div>
+            )}
+            {indexStatus && (
+              <div className="mt-1 text-xs text-[#67e8f9]">Index catalog rebuilt ({indexStatus.bytes} bytes). Open data/knowledge/index.md in Obsidian to see the fresh list.</div>
+            )}
+            <div className="text-[9px] text-[#606080] mt-1">Run these before handing off to external agents or after big data seeds. Script in scripts/vault_maintain.py does the same for Obsidian-skills agents.</div>
+          </div>
+
+          {/* 4. Native on-disk island — source of truth, easy copy path for Obsidian */}
+          {brainWiki.length > 0 && (
+            <div className="island">
+              <div className="section-head">
+                <FolderOpen size={15}/> Native .md on disk — the real source of truth
+              </div>
+              <div className="text-[10px] text-[#64748b] mb-2">These files live in data/knowledge/brain/. Point Obsidian at data/knowledge/ for graph, backlinks, full editing of your education/ notes + the synthesized sections. App + LLM only append; you curate.</div>
+              {brainWiki.slice(0,8).map((w, i) => (
+                <div key={i} className="text-[11px] py-1 border-b border-[#1f2a44] last:border-none flex items-center justify-between gap-2 hover:border-[#a78bfa]/40">
+                  <div 
+                    className="min-w-0 flex-1 cursor-pointer" 
+                    onClick={() => setViewedWiki(w)}
+                    title="Click to read the actual wiki content in the in-app viewer"
+                  >
+                    <span className="font-medium">{w.name}</span> <span className="text-[#64748b]">({w.type})</span>
+                    <div className="text-[#a0a0c0] truncate text-[10px]">{w.excerpt || w.content}</div>
+                    <div className="font-mono text-[9px] text-[#606080]">{w.path}</div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button 
+                      onClick={() => setViewedWiki(w)} 
+                      className="action-btn vault text-[10px]" 
+                      title="Read the full synthesized note + your overlays right in the UI"
+                    >
+                      <Eye size={11}/> View
+                    </button>
+                    <button onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }} className="action-btn vault" title="Copy exact relative path to this .md. In Obsidian quick switcher or file open you can paste it to jump straight to the full synthesized note + your overlays.">
+                      <Copy size={12}/> copy path
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {brainWiki.length > 8 && <div className="text-[10px] text-[#606080] mt-1">+ {brainWiki.length-8} more on disk</div>}
+            </div>
+          )}
+
+          {/* 5. Light persistent guidance — clean, not smushed, points to the wiki education mechanism */}
+          <div className="text-[10px] text-[#64748b] px-1 flex items-center gap-2">
+            <Info size={13}/> Guidance, Shipley, negotiation, training notes, and new ontology ideas live in the vault's <span className="font-mono text-[#a5b4fc]">education/</span> folder + <span className="font-mono text-[#a5b4fc]">schema/capture-llm-wiki.md</span>. Hover titles + open in Obsidian for the full picture. (Clean, reusable pattern.)
           </div>
         </div>
       )
@@ -1397,9 +1746,9 @@ export default function App() {
               </div>
               <button
                 onClick={() => loadMcpTools(true)}
-                className="text-xs px-3 py-1 rounded border border-[#00f0ff]/40 hover:bg-[#00f0ff]/10"
+                className="action-btn"
               >
-                Refresh catalog
+                <RefreshCw size={12}/> Refresh catalog
               </button>
             </div>
 
@@ -1437,7 +1786,7 @@ export default function App() {
     return (
       <div className="glass p-8 rounded-3xl text-center">
         <div className="text-2xl mb-2">{SIDEBAR_ITEMS.find(s => s.id === sidebar)?.label}</div>
-        <div className="text-sm text-slate-400">Placeholder for later (full grounded chat/agent with citations over the DuckDB, skills like huashu-design for artifacts, profile settings, etc.).<br/>Right now the priority is the data foundation + contextual Dashboard tabs + the two accumulators (pipeline + brain) + the always-available resizable chat + button-driven agentic actions (e.g. smart SAM monitors). Exactly as discussed.</div>
+        <div className="text-sm text-slate-400">Placeholder for later (full grounded chat/agent with citations over the DuckDB, skills like huashu-design for artifacts, profile settings, etc.).<br/>Right now the priority is the data foundation + contextual Dashboard tabs + the two distinct accumulators (Pipeline for pursuits; Knowledge Vault as the standalone LLM wiki/Karpathy foundation) + the always-available resizable chat + button-driven agentic actions. Exactly as discussed.</div>
       </div>
     )
   }
@@ -1561,6 +1910,7 @@ export default function App() {
               <div className="text-2xl font-semibold tracking-tight">
                 {sidebar === 'dashboard' ? 'Real Bulk Data Explorer — Contextual Actions' : SIDEBAR_ITEMS.find(s => s.id === sidebar)?.label}
               </div>
+              {sidebar === 'vault' && <div className="text-[10px] text-[#a78bfa] mt-0.5">The foundational knowledge vault (separate from Pipeline). Native .md files in data/knowledge/ are the source of truth.</div>}
             </div>
             <div className="text-xs text-[#606080]">{contextHeader}</div>
           </div>
