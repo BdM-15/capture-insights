@@ -3,7 +3,7 @@ import {
   BarChart3, Target, Clock, TrendingUp,
   RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
-  GitBranch, PieChart, Crosshair, Lightbulb, Zap,
+  GitBranch, PieChart, Crosshair, Lightbulb, Zap, Search, Radar,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
@@ -1132,20 +1132,28 @@ export default function App() {
           (e.recipient || '').toLowerCase().includes(oppSearch.toLowerCase()) ||
           (e.agency || '').toLowerCase().includes(oppSearch.toLowerCase())
         )
+        const samMonitorCount = pipeline.filter((p: any) => p.type === 'sam-monitor').length
         return (
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="tab-title tab-title-magenta">Expiring / Recompete Radar</div>
-                  <div className="text-xs text-text-400">PoP end in next 36 months — {filteredExpiring.length} shown (of {expiring.length}). Use historical cycles to get ahead of SAM notices.</div>
-                </div>
-                <button onClick={() => addToPipeline({label:'expiring batch'}, 'expiring')} className="action-btn pipeline flex items-center gap-1 px-3 py-1 text-xs"><Plus size={13}/> Add visible batch to pipeline</button>
+          <div className="page-sections">
+            <CollapsibleSection
+              title="Recompete Radar"
+              subtitle={`${filteredExpiring.length} of ${expiring.length} · PoP ends in 36 months`}
+              icon={Radar}
+              accent="magenta"
+              defaultOpen
+              badge={
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToPipeline({ label: 'expiring batch' }, 'expiring') }}
+                  className="action-btn pipeline flex items-center gap-1 px-2 py-0.5 text-[10px] shrink-0"
+                >
+                  <Plus size={12} /> Batch
+                </button>
+              }
+            >
+              <div className="insight magenta mb-3">
+                Live recompete opportunities you can position for today. Prioritize rows in hot agencies or ones already in your Brain.
               </div>
-              <div className="insight magenta">
-                Why this matters: These are live recompete opportunities you can start positioning for today. Early engagement is the highest-leverage capture activity. Prioritize the ones in agencies where you already see high intensity or existing flows.
-              </div>
-              <div className="text-[10px] text-neon-lime mt-1">Buttons like "Create SAM monitor (smart)" activate the agent (LLM + MCP) to complete the task with smart params + citations. Chat co-pilot is great for questions and exploration.</div>
+              <div className="text-[10px] text-neon-lime mb-2">Monitor (smart) uses the agent (LLM + MCP) with citations. Co-pilot works for open-ended questions.</div>
               <input
                 value={oppSearch}
                 onChange={(e) => setOppSearch(e.target.value)}
@@ -1256,12 +1264,10 @@ export default function App() {
                   },
                 ]}
               />
-              <div className="text-[10px] text-text-500 mt-2">Click +pipeline on the ones that fit your capabilities or relationships. "Search SAM for this" prefills a live search for the actual notice/RFI on that cycle. These items accumulate in the separate Pipeline view (sidebar). Use +brain / + to Knowledge Vault from Competitive & Agency tabs for the standalone vault.</div>
-            </div>
+              <div className="text-[10px] text-text-500 mt-2">+pipeline adds to the Pipeline sidebar. Search SAM prefills live lookup for that cycle.</div>
+            </CollapsibleSection>
 
-            {/* Live SAM layer — the "new + emerging" that complements historical recompete cycles */}
-            <div>
-              <div className="tab-title tab-title-cyan mb-2">Live & Emerging from SAM.gov</div>
+            <CollapsibleSection title="Live SAM Discovery" subtitle="RFIs · Sources Sought · emerging work" icon={Search} accent="cyan" defaultOpen>
               <div className="mb-2 flex flex-wrap gap-1 text-[10px]">
                 <span className="text-text-500 mr-1 self-center">Example prompts for the co-pilot (drives MCP for you):</span>
                 <button type="button" onClick={() => askCoPilot('Search SAM for live RFI/Sources Sought/Special Notice matching the agencies and recipients in my Brain and the expiring contracts. Then propose 2-3 to create monitors for and add to pipeline.', true)} className="filter-pill">Search SAM for my Brain + expiring</button>
@@ -1368,11 +1374,17 @@ export default function App() {
                   },
                 ]}
               />
-              <div className="text-[10px] text-text-500 mt-2">Results via /mcp/sam (prefers MCP when available). Use the "Create SAM monitor (smart)" button (or on expiring rows) for agent-assisted monitors with LLM-chosen params + citations. Chat also works for open-ended discovery.</div>
+              <div className="text-[10px] text-text-500 mt-2">Results via /mcp/sam (MCP when available). Chat also works for open-ended discovery.</div>
+            </CollapsibleSection>
 
-              {/* My SAM Monitors - saved searches from Create Monitor */}
-              <div className="mt-4">
-                <div className="text-sm font-semibold mb-2">My SAM Monitors (saved searches)</div>
+            <CollapsibleSection
+              title="SAM Monitors"
+              subtitle="Saved searches from smart monitor creation"
+              icon={Clock}
+              accent="magenta"
+              defaultOpen={samMonitorCount > 0}
+              badge={samMonitorCount > 0 ? <span className="pill text-[10px]">{samMonitorCount}</span> : undefined}
+            >
                 <DataTable
                   data={pipeline.filter((p: any) => p.type === 'sam-monitor')}
                   rowKey={(m: any) => m.id || m.ts}
@@ -1403,17 +1415,10 @@ export default function App() {
                     },
                   ]}
                 />
-              </div>
+            </CollapsibleSection>
 
-              {/* My Focus - ultra-light derived view on the *current* simple JSON Brain + native wiki excerpts (per plan).
-                  Client-side intersections using brain + brainWiki + expiring + intensity + smart monitors.
-                  This is the quick validation slice; now also peeks at the LLM-synthesized wiki .md excerpts for better matches.
-                  Will get even richer as the full Obsidian/Karpathy wiki (global/, pursuits/, more synthesis) lands. */}
-              <div className="mt-4">
-                <div className="text-sm font-semibold mb-1">My Focus (lightweight intersections from your Brain + wiki excerpts + recent agent-created smart monitors + live data)</div>
-                <div className="text-[10px] text-text-500 mb-2">Ultra-light client-side view. Uses both the JSON accumulator and the native wiki .md excerpts (synthesized by LLM from USASpending signals + citations). Add +brain or create smart monitors to populate. Will become much more powerful with the full Obsidian/Karpathy LLM wiki (global seeds, per-pursuit folders, backlinks, etc.).</div>
-
-                {/* Simple intersections - reuse existing state and logic patterns. Now also folds in brainWiki excerpts for matches. */}
+            <CollapsibleSection title="My Focus" subtitle="Brain · wiki · monitors · hot agencies" icon={Eye} accent="lime" defaultOpen={false}>
+                <div className="text-[10px] text-text-500 mb-2">Client-side intersections from Brain, wiki excerpts, monitors, and loaded data.</div>
                 {(() => {
                   const brainLower = brain.map((b: any) => (b.name || '').toLowerCase().slice(0, 15));
                   // Also pull keywords from the native wiki .md excerpts (the synthesized content) so My Focus benefits from the foundation we just built.
@@ -1484,8 +1489,7 @@ export default function App() {
                     </div>
                   );
                 })()}
-              </div>
-            </div>
+            </CollapsibleSection>
           </div>
         )
       }
