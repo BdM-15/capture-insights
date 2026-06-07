@@ -15,9 +15,10 @@ from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any, List
 
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Local import so the early dev layout works without full package install
@@ -83,7 +84,7 @@ app = FastAPI(
 # CORS for local frontend dev (tighten in prod)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -486,6 +487,73 @@ async def user_brain_wiki():
     return {"wiki_files": list_brain_wiki_files()}
 
 
+# Phase 3: lint + index helpers (structural, fast). These make the vault maintainable by you + external agents
+# following the exact workflows in schema/capture-llm-wiki.md (ingest/query/lint section).
+# The real heavy synthesis/lint still lives in Obsidian + obsidian-skills equipped agents (or the app's light local LLM on +brain).
+
+@app.get("/user/brain/lint", tags=["user", "vault"])
+async def user_brain_lint():
+    """Structural lint of the native Knowledge Vault .md files (frontmatter + required schema sections).
+    Fast, no LLM. Returns actionable issues per entry + legacy dir warnings.
+    Use this (or the standalone script) before/after big ingests or when handing off to an external agent.
+    """
+    from .user_data import lint_brain_wiki
+    return lint_brain_wiki()
+
+
+@app.post("/user/brain/rebuild-index", tags=["user", "vault"])
+async def user_brain_rebuild_index():
+    """Rebuild data/knowledge/index.md from current native wiki entries.
+    Produces a clean, wikilink-rich catalog the LLM (local or external) is expected to maintain.
+    Also ensures log.md and index.md exist. Idempotent.
+    """
+    from .user_data import rebuild_vault_index
+    content = rebuild_vault_index()
+    return {"ok": True, "path": "data/knowledge/index.md", "bytes": len(content)}
+
+
+@app.post("/user/brain/fix", tags=["user", "vault"])
+async def user_fix_brain(payload: dict = Body(...)):
+    """LLM handles the admin: given a lint report, auto-append the missing schema sections
+    to the affected native .md files. Grounded in the capture-llm-wiki schema + entry context.
+    This is the button-activated agent pattern you want — you click, LLM does the maintenance.
+    """
+    from .user_data import auto_fix_vault_issues
+    report = payload.get("lint_report") or {}
+    result = await auto_fix_vault_issues(report)
+    return result
+
+
+# Global wiki endpoints for post-phase3 global + data integration
+@app.get("/user/global/list", tags=["user", "vault"])
+async def user_global_list():
+    """List global wiki .md files for display in vault UI. Now includes content preview so the app can show the actual wiki text in-viewer."""
+    from .user_data import list_global_files
+    return {"global_files": list_global_files()}
+
+
+@app.get("/user/knowledge/read", tags=["user", "vault"])
+async def user_knowledge_read(path: str = Query(..., description="relative path e.g. global/global_wiki/capture/xxx.md or brain/agencies/foo.md")):
+    """Read the full content of any vault .md for the in-app wiki viewer.
+    Safe (only under data/knowledge). Returns the complete markdown so you can read Key Signals, Citations, Personal Observations etc. directly in the UI.
+    Obsidian remains the place for heavy editing + graph navigation.
+    """
+    from .user_data import read_knowledge_file
+    res = read_knowledge_file(path)
+    if not res:
+        return {"ok": False, "error": "not found or path outside vault"}
+    return {"ok": True, **res}
+
+@app.post("/user/global/cross-seed", tags=["user", "vault"])
+async def user_global_cross_seed(payload: dict = Body(...)):
+    """Button-driven: LLM synthesizes cross-cutting global page(s) from current data views (intensity, flows etc.)
+    + ariadne/global knowledge. Writes native .md per schema with citations. You click, LLM integrates data + knowledge.
+    """
+    from .user_data import cross_seed_global_from_data
+    result = await cross_seed_global_from_data(payload)
+    return result
+
+
 # --- Button-activated agentic actions (LLM + MCP behind explicit user clicks) ---
 # Per recentering: primary interface for "agent does the admin task" is contextual buttons
 # (e.g. on an expiring contract: "Create SAM.gov monitor" runs LLM to pick smart keywords/notice_types
@@ -774,6 +842,8 @@ async def simple_dashboard():
     Current thin version is already very usable while the 10-year bulk download + incremental
     ingests continue in your other window.
     """
+    if os.path.exists("frontend/dist/index.html"):
+        return FileResponse("frontend/dist/index.html")
     html = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1376,6 +1446,28 @@ refreshAll();
 </body>
 </html>"""
     return html
+
+
+# Serve the built React frontend (from `npm exec -- vite build` in frontend/).
+# The full modern UI (Knowledge Vault with 155+ global entries, "View" buttons that read .md content in-app,
+# cross-seed LLM button, training data section, etc.) is now available on the single reliable backend port.
+# All API calls from the React bundle are relative and hit this same server (no proxy, no separate Vite dev server).
+from fastapi.staticfiles import StaticFiles
+app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def serve_favicon():
+    p = "frontend/dist/favicon.ico"
+    if os.path.exists(p):
+        return FileResponse(p)
+    return HTMLResponse(status_code=204)
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_spa(full_path: str):
+    idx = "frontend/dist/index.html"
+    if os.path.exists(idx):
+        return FileResponse(idx)
+    return await simple_dashboard()
 
 
 # TODO: Add more routers as we grow (chat, profile generation, stance, MCP tools, etc.)
