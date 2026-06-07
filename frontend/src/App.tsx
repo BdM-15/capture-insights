@@ -3,7 +3,7 @@ import {
   BarChart3, Target, Clock, TrendingUp,
   RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
-  GitBranch, PieChart, Crosshair, Lightbulb, Zap, Search, Radar,
+  GitBranch, PieChart, Crosshair, Lightbulb, Zap, Search, Radar, Users, MapPin,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
@@ -1495,63 +1495,74 @@ export default function App() {
       }
 
       case 'agency': {
-        // +BRAIN / +WIKI makes sense here. This is the deeper dive list behind the Intensity pulse you saw on Market Overview.
-        // Intensity quadrant is intentionally the overview "where to focus" chart (quick pulse + command decision).
+        const agencyRows = intensity.slice(0, 12)
         return (
-          <div className="space-y-4">
-            <div className="tab-title tab-title-cyan mb-1">Agency Intelligence — Deeper Dive</div>
-            <div className="insight">
-              See the Market Overview Intensity quadrant first for the quick pulse on hot agencies. This tab gives the full list + one-click +brain/wiki so you can accumulate the ones worth watching. Notes you add here compound in your Brain for chat context and future skills.
-            </div>
-
-            <DataTable
-              data={intensity.slice(0, 12)}
-              rowKey={(a) => a.agency}
-              rowClassName={(a) => ((a.total_oblig || 0) > 5e6) ? 'intensity-row-hot' : ''}
-              emptyMessage="No agency data in current NAICS slice."
-              columns={[
-                {
-                  key: 'agency',
-                  header: 'Agency',
-                  render: (a) => {
-                    const isHot = (a.total_oblig || 0) > 5e6
-                    return (
-                      <span>
+          <div className="page-sections">
+            <CollapsibleSection
+              title="Agency Rankings"
+              subtitle={`${agencyRows.length} agencies · NAICS ${naics}`}
+              icon={Users}
+              accent="cyan"
+              defaultOpen
+              badge={hotAgencyList.length > 0 ? <span className="pill text-[10px]">{hotAgencyList.length} hot</span> : undefined}
+            >
+              <div className="insight mb-3">
+                Full list behind the Market Overview intensity chart. +brain agencies worth watching — notes compound in Knowledge Vault for chat and skills.
+              </div>
+              <DataTable
+                data={agencyRows}
+                rowKey={(a) => a.agency}
+                rowClassName={(a) => isHotAgency(a) ? 'intensity-row-hot' : ''}
+                emptyMessage="No agency data in current NAICS slice."
+                columns={[
+                  {
+                    key: 'agency',
+                    header: 'Agency',
+                    cellClassName: 'max-w-[200px]',
+                    render: (a) => (
+                      <span className="truncate block" title={a.agency}>
                         {a.agency}
-                        {isHot && <span className="text-neon-magenta text-[10px] ml-1">★ hot</span>}
+                        {isHotAgency(a) && <span className="text-neon-magenta text-[10px] ml-1">★</span>}
                       </span>
-                    )
+                    ),
                   },
-                },
-                {
-                  key: 'actions',
-                  header: 'Actions',
-                  cellClassName: 'tabular-nums text-text-400',
-                  render: (a) => `${a.award_count} actions`,
-                },
-                {
-                  key: 'oblig',
-                  header: '$M',
-                  cellClassName: 'tabular-nums text-neon-cyan',
-                  render: (a) => `$${((a.total_oblig || 0) / 1e6).toFixed(1)}M`,
-                },
-                {
-                  key: 'cta',
-                  header: '',
-                  align: 'right',
-                  render: (a) => (
-                    <div className="row-actions">
-                      <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain">+ brain</button>
-                      <AskCoPilotButton
-                        prompt={`What capture approach should I take for ${a.agency}? They have ${a.award_count} actions and $${((a.total_oblig || 0) / 1e6).toFixed(1)}M in my NAICS slice.`}
-                        onAsk={askCoPilot}
-                      />
-                    </div>
-                  ),
-                },
-              ]}
-            />
-            <div className="text-[10px] text-text-500">Use +brain on agencies where you see real volume or existing relationships. Your Brain becomes the living packet the chat and future tools read from.</div>
+                  {
+                    key: 'actions',
+                    header: 'Act.',
+                    cellClassName: 'tabular-nums text-text-400 whitespace-nowrap',
+                    render: (a) => a.award_count?.toLocaleString(),
+                  },
+                  {
+                    key: 'oblig',
+                    header: '$M',
+                    cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap',
+                    render: (a) => `$${((a.total_oblig || 0) / 1e6).toFixed(1)}M`,
+                  },
+                  {
+                    key: 'cta',
+                    header: '',
+                    align: 'right',
+                    render: (a) => (
+                      <div className="row-actions">
+                        <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-xs">+ brain</button>
+                        <AskCoPilotButton
+                          prompt={`What capture approach should I take for ${a.agency}? They have ${a.award_count} actions and $${((a.total_oblig || 0) / 1e6).toFixed(1)}M in my NAICS slice.`}
+                          onAsk={askCoPilot}
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+              {hotAgencyList.length > 0 && (
+                <button
+                  onClick={() => hotAgencyList.slice(0, 5).forEach((a) => addToBrain(a, a.agency, 'agency'))}
+                  className="action-btn brain text-[10px] mt-2"
+                >
+                  +brain all ★ hot agencies
+                </button>
+              )}
+            </CollapsibleSection>
           </div>
         )
       }
@@ -1604,83 +1615,96 @@ export default function App() {
         }]
 
         return (
-          <div className="space-y-4">
-            <div className="tab-title tab-title-magenta mb-1">Competitive Analysis — Follow the Money</div>
-            <div className="insight magenta">
-              Quick 3-level pulse (down to specific Office) lives on Market Overview. This tab is for the full table + larger Sankey when you want to analyze a specific competitor-agency-office relationship or +brain names that matter.
-            </div>
+          <div className="page-sections">
+            <CollapsibleSection
+              title="Money Flows"
+              subtitle={`Recipient → agency → office · ${flows.length} flows`}
+              icon={GitBranch}
+              accent="cyan"
+              defaultOpen
+            >
+              <div className="insight magenta mb-3">
+                Deeper Sankey than Market Overview — trace who gets paid, through which agency and office. +brain competitors that matter.
+              </div>
+              <div className="chart-panel surface-accent-cyan border-0 shadow-none p-0 bg-transparent min-w-0">
+                {flows.length ? (
+                  <div className="chart-panel-plot" style={{ height: 360 }}>
+                    <Plot
+                      data={sankeyData}
+                      layout={{
+                        font: { size: 9, color: CHART.fontColor },
+                        paper_bgcolor: CHART.transparent,
+                        plot_bgcolor: CHART.transparent,
+                        margin: { t: 8, l: 8, r: 8, b: 8 },
+                      }}
+                      style={{ width: '100%', height: '100%' }}
+                      config={{ displayModeBar: false }}
+                    />
+                  </div>
+                ) : (
+                  <div className="chart-module-empty">Flows will appear with more data.</div>
+                )}
+              </div>
+            </CollapsibleSection>
 
-            {/* Sankey — detailed 3-level view here; compact pulse version lives on Overview. */}
-            <div className="chart-panel surface-accent-cyan">
-              <div className="chart-panel-title cyan mb-2">Follow the Money (Sankey — 3 levels)</div>
-              {flows.length ? (
-                <div style={{ width: '100%', height: 380 }}>
-                  <Plot
-                    data={sankeyData}
-                    layout={{
-                      font: { size: 11, color: CHART.fontColor },
-                      paper_bgcolor: CHART.transparent,
-                      plot_bgcolor: CHART.transparent,
-                      margin: { t: 10, l: 10, r: 10, b: 10 },
-                    }}
-                    style={{ width: '100%', height: '100%' }}
-                    config={{ displayModeBar: false }}
-                  />
-                </div>
-              ) : (
-                <div className="text-sm text-slate-400">Flows will appear with more data.</div>
-              )}
-            </div>
-
-            <DataTable
-              data={flows}
-              rowKey={(f) => `${f.recipient}-${f.agency}-${f.office ?? ''}`}
-              emptyMessage="Flows will appear with more bulk data ingested."
-              columns={[
-                {
-                  key: 'recipient',
-                  header: 'Recipient',
-                  render: (f) => <span className="font-medium text-text-primary">{f.recipient}</span>,
-                },
-                {
-                  key: 'agency',
-                  header: 'Agency',
-                  cellClassName: 'text-text-400 text-xs',
-                  render: (f) => f.agency,
-                },
-                {
-                  key: 'office',
-                  header: 'Office',
-                  cellClassName: 'text-text-500 text-xs',
-                  render: (f) => f.office || '—',
-                },
-                {
-                  key: 'value',
-                  header: '$M',
-                  cellClassName: 'tabular-nums',
-                  render: (f) => (
-                    <>
-                      ${f.millions}M <span className="text-[10px] text-text-500">({f.actions} actions)</span>
-                    </>
-                  ),
-                },
-                {
-                  key: 'cta',
-                  header: '',
-                  align: 'right',
-                  render: (f) => (
-                    <div className="row-actions">
-                      <button onClick={() => addToBrain(f, f.recipient, 'competitor')} className="action-btn brain">+ brain</button>
-                      <AskCoPilotButton
-                        prompt={`Draft a competitive brief angle for ${f.recipient} at ${f.agency}${f.office ? ` (${f.office})` : ''} — $${f.millions}M across ${f.actions} actions in NAICS ${naics}.`}
-                        label="Brief"
-                        onAsk={askCoPilot}
-                      />
-                    </div>
-                  ),
-                },
-              ]}
-            />
+            <CollapsibleSection
+              title="Flow Detail"
+              subtitle="Sortable relationships · +brain competitors"
+              icon={Target}
+              accent="magenta"
+              defaultOpen
+            >
+              <DataTable
+                data={flows}
+                rowKey={(f) => `${f.recipient}-${f.agency}-${f.office ?? ''}`}
+                emptyMessage="Flows will appear with more bulk data ingested."
+                columns={[
+                  {
+                    key: 'recipient',
+                    header: 'Recipient',
+                    cellClassName: 'max-w-[160px]',
+                    render: (f) => <span className="font-medium text-text-primary truncate block" title={f.recipient}>{f.recipient}</span>,
+                  },
+                  {
+                    key: 'agency',
+                    header: 'Agency',
+                    cellClassName: 'text-text-400 text-xs max-w-[140px] truncate',
+                    render: (f) => <span title={f.agency}>{f.agency}</span>,
+                  },
+                  {
+                    key: 'office',
+                    header: 'Office',
+                    cellClassName: 'text-text-500 text-xs max-w-[120px] truncate',
+                    render: (f) => <span title={f.office}>{f.office || '—'}</span>,
+                  },
+                  {
+                    key: 'value',
+                    header: '$M',
+                    cellClassName: 'tabular-nums whitespace-nowrap',
+                    render: (f) => (
+                      <>
+                        ${f.millions}M <span className="text-[10px] text-text-500">({f.actions})</span>
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'cta',
+                    header: '',
+                    align: 'right',
+                    render: (f) => (
+                      <div className="row-actions">
+                        <button onClick={() => addToBrain(f, f.recipient, 'competitor')} className="action-btn brain text-xs">+ brain</button>
+                        <AskCoPilotButton
+                          prompt={`Draft a competitive brief angle for ${f.recipient} at ${f.agency}${f.office ? ` (${f.office})` : ''} — $${f.millions}M across ${f.actions} actions in NAICS ${naics}.`}
+                          label="Brief"
+                          onAsk={askCoPilot}
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </CollapsibleSection>
           </div>
         )
       }
@@ -1733,85 +1757,111 @@ export default function App() {
 
       case 'geo': {
         return (
-          <div>
-            <div className="text-lg font-semibold mb-2">Geographic Concentration (Place of Performance)</div>
-            <div className="insight">
-              Where the actual work happens. Useful for deciding office footprint, regional teaming partners, and understanding customer concentration. Not usually a direct +pipeline or +brain item — more strategic context.
-            </div>
-            <DataTable
-              data={geo}
-              rowKey={(g) => g.state}
-              emptyMessage="No geographic data in current slice."
-              columns={[
-                {
-                  key: 'state',
-                  header: 'State',
-                  cellClassName: 'font-mono w-12',
-                  render: (g) => g.state,
-                },
-                {
-                  key: 'stats',
-                  header: 'Volume',
-                  render: (g) => `${g.actions} actions, $${g.millions}M`,
-                },
-                {
-                  key: 'bar',
-                  header: 'Share',
-                  render: (g) => {
-                    const w = Math.min(100, Math.round((g.millions / (geo[0]?.millions || 1)) * 100))
-                    return <div className="geo-bar" style={{ width: `${w}%` }} title={`${w}% of top state`} />
+          <div className="page-sections">
+            <CollapsibleSection
+              title="Place of Performance"
+              subtitle={`${geo.length} states · concentration by obligated $`}
+              icon={MapPin}
+              accent="cyan"
+              defaultOpen
+            >
+              <div className="insight mb-3">
+                Where work actually happens — office footprint, regional teaming, and customer concentration. Strategic context, not a pipeline action list.
+              </div>
+              <DataTable
+                data={geo}
+                rowKey={(g) => g.state}
+                emptyMessage="No geographic data in current slice."
+                columns={[
+                  {
+                    key: 'state',
+                    header: 'St',
+                    cellClassName: 'font-mono w-10 whitespace-nowrap',
+                    render: (g) => g.state,
                   },
-                },
-              ]}
-            />
+                  {
+                    key: 'stats',
+                    header: 'Volume',
+                    cellClassName: 'tabular-nums whitespace-nowrap text-xs',
+                    render: (g) => `${g.actions} act · $${g.millions}M`,
+                  },
+                  {
+                    key: 'bar',
+                    header: 'Share',
+                    cellClassName: 'min-w-[120px]',
+                    render: (g) => {
+                      const w = Math.min(100, Math.round((g.millions / (geo[0]?.millions || 1)) * 100))
+                      return <div className="geo-bar max-w-full" style={{ width: `${w}%` }} title={`${w}% of top state`} />
+                    },
+                  },
+                ]}
+              />
+            </CollapsibleSection>
           </div>
         )
       }
 
       case 'combo': {
+        const comboRows = comboExpiring.slice(0, 6)
         return (
-          <div>
-            <div className="tab-title tab-title-lime mb-1">Combo Insight — Expiring in Hot Agencies</div>
-            <div className="insight lime">
-              Recompetes where the buyer is already spending heavily in your space. Highest-leverage early capture signal — add to pipeline and +brain competitors from Competitive tab.
-            </div>
-            {comboExpiring.length ? (
-              <DataTable
-                data={comboExpiring.slice(0, 6)}
-                rowKey={(e, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
-                rowClassName={() => 'intensity-row-hot'}
-                columns={[
-                  { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs', render: (e) => e.end_date },
-                  { key: 'recipient', header: 'Recipient', render: (e) => e.recipient || '—' },
-                  { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan', render: (e) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M` },
-                  { key: 'agency', header: 'Hot agency', cellClassName: 'text-neon-lime text-xs', render: (e) => `${(e.agency || '').slice(0, 18)} ★` },
-                  {
-                    key: 'actions',
-                    header: '',
-                    align: 'right',
-                    render: (e) => (
-                      <div className="row-actions">
-                        <button onClick={() => addToPipeline(e, 'combo')} className="action-btn pipeline">+ pipeline</button>
-                        <AskCoPilotButton
-                          prompt={`Hot-agency recompete: ${e.recipient} at ${e.agency} ends ${e.end_date} ($${((e.obligation || 0) / 1e6).toFixed(1)}M). Why is this high-value and what should I do in the next 30 days?`}
-                          onAsk={askCoPilot}
-                        />
-                      </div>
-                    ),
-                  },
-                ]}
-              />
-            ) : (
-              <EmptyState
-                icon={TrendingUp}
-                title="No hot-agency overlaps yet"
-                description="Combo matches expiring contracts in high-intensity agencies. Ingest more bulk data or add brain entries to unlock intersections."
-                accent="lime"
-                actions={
-                  <Button variant="soft" onClick={() => { setSidebar('dashboard'); setDashTab('market') }}>Back to Market Overview</Button>
-                }
-              />
-            )}
+          <div className="page-sections">
+            <CollapsibleSection
+              title="Hot Recompetes"
+              subtitle="Expiring work in high-intensity agencies"
+              icon={TrendingUp}
+              accent="lime"
+              defaultOpen
+              badge={comboRows.length > 0 ? <span className="pill text-[10px]">{comboRows.length} matches</span> : undefined}
+            >
+              <div className="insight lime mb-3">
+                Highest-leverage early signal — recompetes where the buyer already spends heavily in your NAICS. +pipeline now; map competitors on Competitive Analysis.
+              </div>
+              {comboRows.length ? (
+                <>
+                  <DataTable
+                    data={comboRows}
+                    rowKey={(e, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
+                    rowClassName={() => 'intensity-row-hot'}
+                    columns={[
+                      { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs whitespace-nowrap', render: (e) => e.end_date?.slice(0, 10) },
+                      { key: 'recipient', header: 'Recipient', cellClassName: 'max-w-[160px] truncate', render: (e) => <span title={e.recipient}>{e.recipient || '—'}</span> },
+                      { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (e) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M` },
+                      { key: 'agency', header: 'Agency', cellClassName: 'text-neon-lime text-xs max-w-[140px] truncate', render: (e) => <span title={e.agency}>{(e.agency || '').slice(0, 20)} ★</span> },
+                      {
+                        key: 'actions',
+                        header: '',
+                        align: 'right',
+                        render: (e) => (
+                          <div className="row-actions">
+                            <button onClick={() => addToPipeline(e, 'combo')} className="action-btn pipeline text-xs">+ pipeline</button>
+                            <AskCoPilotButton
+                              prompt={`Hot-agency recompete: ${e.recipient} at ${e.agency} ends ${e.end_date} ($${((e.obligation || 0) / 1e6).toFixed(1)}M). Why is this high-value and what should I do in the next 30 days?`}
+                              onAsk={askCoPilot}
+                            />
+                          </div>
+                        ),
+                      },
+                    ]}
+                  />
+                  <button
+                    onClick={() => comboRows.forEach((e) => addToPipeline(e, 'combo'))}
+                    className="action-btn pipeline text-[10px] mt-2"
+                  >
+                    +pipeline all visible
+                  </button>
+                </>
+              ) : (
+                <EmptyState
+                  icon={TrendingUp}
+                  title="No hot-agency overlaps yet"
+                  description="Combo matches expiring contracts in high-intensity agencies. Ingest more bulk data or add brain entries to unlock intersections."
+                  accent="lime"
+                  actions={
+                    <Button variant="soft" onClick={() => { setSidebar('dashboard'); setDashTab('market') }}>Back to Market Overview</Button>
+                  }
+                />
+              )}
+            </CollapsibleSection>
           </div>
         )
       }
@@ -1839,8 +1889,8 @@ export default function App() {
 
     if (sidebar === 'pipeline') {
       return (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="page-sections">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
             <MetricCard label="Pipeline" value={String(pipeline.length)} accent="magenta" tooltip="Active pursuits you chose to track" />
             <MetricCard label="Expiring (loaded)" value={String(expiring.length)} accent="magenta" tooltip="From current NAICS slice on dashboard" />
             <MetricCard label="Brain entries" value={String(brain.length)} accent="purple" />
@@ -1852,11 +1902,15 @@ export default function App() {
             />
           </div>
 
-          <div className="island">
-            <div className="section-head">
-              <Briefcase size={15}/> Pipeline — Opportunities &amp; Pursuits <span className="count">{pipeline.length}</span>
-            </div>
-            <div className="text-xs text-text-500 mb-2">Living list of things you decided are worth tracking or bidding. Distinct from the Knowledge Vault.</div>
+          <CollapsibleSection
+            title="Pursuits"
+            subtitle="Active opportunities you chose to track"
+            icon={Briefcase}
+            accent="magenta"
+            defaultOpen
+            badge={pipeline.length > 0 ? <span className="pill text-[10px]">{pipeline.length}</span> : undefined}
+          >
+            <div className="text-xs text-text-500 mb-2">Distinct from Knowledge Vault — this is your bid/watch list.</div>
             {pipeline.length === 0 && (
               <EmptyState
                 icon={Briefcase}
@@ -1892,8 +1946,7 @@ export default function App() {
                 Clear pipeline
               </button>
             )}
-          </div>
-          <div className="text-[10px] text-text-500 px-1">Pipeline and Knowledge Vault are intentionally separate. Pipeline = active pursuits. Vault = compounding domain intelligence + your observations (see sidebar).</div>
+          </CollapsibleSection>
         </div>
       )
     }
