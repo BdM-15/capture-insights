@@ -3,8 +3,9 @@ import {
   BarChart3, Target, Clock, TrendingUp,
   RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
+  GitBranch, PieChart, Crosshair, Lightbulb, Zap,
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
 import { AppShell } from './components/shell/AppShell'
 import type { HealthState } from './components/shell/Topbar'
@@ -24,6 +25,9 @@ import {
   type SidebarId,
 } from './constants/viewMeta'
 import { CHART } from './constants/chartTheme'
+import { CollapsibleSection } from './components/ui/CollapsibleSection'
+import { SetAsideBarChart } from './components/charts/SetAsideBarChart'
+import { normalizeSetAsideRows } from './utils/chartLabels'
 
 // capture-insights React Frontend
 // Per latest feedback:
@@ -637,19 +641,16 @@ export default function App() {
         const pricingValues = Object.values(pricingAgg)
         const vehicleLabels = Object.keys(vehicleAgg)
         const vehicleValues = Object.values(vehicleAgg)
-        const setAsidePulse = setAside.slice(0, 4).map((s: any) => ({
-          name: (s.set_aside || 'Unknown').replace(' SET ASIDE', '').slice(0, 22),
-          millions: s.millions || 0,
-        }))
+        const setAsidePulse = normalizeSetAsideRows(setAside, 5)
 
         const fmtObl = (m: number) => m >= 1000 ? `$${(m / 1000).toFixed(2)}B` : `$${m.toFixed(0)}M`
         const fmtNum = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toLocaleString()
         const fmtAvg = (k: number) => `$${(k / 1000).toFixed(2)}M`
 
         return (
-          <div className="space-y-4">
-            {/* Pulse hero — 60-second market read for capture managers */}
-            <div className="market-pulse-hero">
+          <div className="page-sections">
+            <CollapsibleSection title="Market Pulse" subtitle={`NAICS ${naics} · ${fySpan}`} icon={BarChart3} accent="cyan" defaultOpen>
+            <div className="market-pulse-hero border-0 bg-transparent p-0 shadow-none">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold text-text-primary flex items-center gap-2">
@@ -747,8 +748,9 @@ export default function App() {
                 </div>
               </div>
             </div>
+            </CollapsibleSection>
 
-            {/* Capture workflow — what to do from this tab */}
+            <CollapsibleSection title="Capture Actions" subtitle="What to do from this view" icon={Zap} accent="amber" defaultOpen>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="market-action-card">
                 <div className="title">1. Prioritize customers</div>
@@ -775,8 +777,9 @@ export default function App() {
                 </div>
               </div>
             </div>
+            </CollapsibleSection>
 
-            {/* Original Data_Insights 2×2 chart grid: historical | future → intensity | agency list */}
+            <CollapsibleSection title="Trends & Capture Focus" subtitle="Spend history · recompete trajectory · intensity" icon={TrendingUp} accent="cyan" defaultOpen>
             <div className="market-chart-grid space-y-4">
               <div className="text-[9px] uppercase tracking-[1.5px] text-text-500 px-0.5">Market Trends &amp; Capture Focus</div>
 
@@ -786,15 +789,15 @@ export default function App() {
                   <div className="chart-panel-title cyan">Historical Spend &amp; Actions</div>
                   <div className="chart-panel-sub">FY obligation totals and action volume from loaded USASpending bulk history.</div>
                   {trendData.length > 0 ? (
-                    <div style={{ width: '100%', height: 240 }}>
-                      <ResponsiveContainer>
-                        <LineChart data={trendData}>
+                    <div className="chart-module" style={{ height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={trendData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={CHART.gridStroke} />
-                          <XAxis dataKey="fy" stroke={CHART.axisStroke} tick={CHART.axisTick} />
-                          <YAxis yAxisId="left" stroke={CHART.colors.cyan} tick={CHART.axisTick} />
-                          <YAxis yAxisId="right" orientation="right" stroke={CHART.colors.magenta} tick={CHART.axisTick} />
+                          <XAxis dataKey="fy" stroke={CHART.axisStroke} tick={CHART.axisTickSm} />
+                          <YAxis yAxisId="left" stroke={CHART.colors.cyan} tick={CHART.axisTickSm} width={42} />
+                          <YAxis yAxisId="right" orientation="right" stroke={CHART.colors.magenta} tick={CHART.axisTickSm} width={42} />
                           <Tooltip contentStyle={CHART.tooltipStyle} />
-                          <Legend wrapperStyle={CHART.legendStyle} />
+                          <Legend wrapperStyle={{ ...CHART.legendStyle, paddingTop: 4 }} />
                           <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M Obligations" stroke={CHART.colors.cyan} strokeWidth={2} dot={{ r: 3 }} />
                           <Line yAxisId="right" type="monotone" dataKey="actions" name="Actions" stroke={CHART.colors.magenta} strokeWidth={2} dot={{ r: 3 }} />
                         </LineChart>
@@ -807,15 +810,15 @@ export default function App() {
                   <div className="chart-panel-title magenta">Future Trajectory (Recurring Recompete)</div>
                   <div className="chart-panel-sub">Assumes requirements recur — obligated $ on contracts ending each year = addressable future funding pool.</div>
                   {futureTrendData.length > 0 ? (
-                    <div style={{ width: '100%', height: 240 }}>
-                      <ResponsiveContainer>
-                        <LineChart data={futureTrendData}>
+                    <div className="chart-module" style={{ height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={futureTrendData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={CHART.gridStroke} />
-                          <XAxis dataKey="fy" stroke={CHART.axisStroke} tick={CHART.axisTick} />
-                          <YAxis yAxisId="left" stroke={CHART.colors.magenta} tick={CHART.axisTick} />
-                          <YAxis yAxisId="right" orientation="right" stroke={CHART.colors.amber} tick={CHART.axisTick} />
+                          <XAxis dataKey="fy" stroke={CHART.axisStroke} tick={CHART.axisTickSm} />
+                          <YAxis yAxisId="left" stroke={CHART.colors.magenta} tick={CHART.axisTickSm} width={42} />
+                          <YAxis yAxisId="right" orientation="right" stroke={CHART.colors.amber} tick={CHART.axisTickSm} width={42} />
                           <Tooltip contentStyle={CHART.tooltipStyle} />
-                          <Legend wrapperStyle={CHART.legendStyle} />
+                          <Legend wrapperStyle={{ ...CHART.legendStyle, paddingTop: 4 }} />
                           <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M at Recompete" stroke={CHART.colors.magenta} strokeWidth={2} dot={{ r: 4 }} />
                           <Line yAxisId="right" type="monotone" dataKey="actions" name="Contracts Ending" stroke={CHART.colors.amber} strokeWidth={2} strokeDasharray="4 2" dot={{ r: 3 }} />
                         </LineChart>
@@ -923,15 +926,17 @@ export default function App() {
                 </div>
               </div>
             </div>
+            </CollapsibleSection>
 
-            {/* Follow the Money on overview — 3-level pulse (Recipient → Agency → Office). Click into Competitive for full table + larger view. */}
-            <div className="glass p-5 rounded-3xl">
-              <div className="text-sm font-semibold mb-2 flex items-center justify-between">
-                Follow the Money (Recipient → Agency → Office)
-                <button onClick={() => setDashTab('competitive')} className="text-xs text-neon-cyan hover:underline">Full table + deeper in Competitive →</button>
+            <CollapsibleSection title="Money Flows & Share" subtitle="Sankey · competitor concentration" icon={GitBranch} accent="magenta" defaultOpen={false}>
+            <div className="space-y-4">
+            <div className="chart-panel surface-accent-cyan">
+              <div className="chart-panel-title cyan">
+                <span>Follow the Money (Recipient → Agency → Office)</span>
+                <button onClick={() => setDashTab('competitive')} className="text-[10px] font-normal text-neon-cyan hover:underline">Full table →</button>
               </div>
               {sankeyData.length ? (
-                <div style={{ width: '100%', height: 260 }}>
+                <div className="chart-panel-plot" style={{ height: 260 }}>
                   <Plot
                     data={sankeyData}
                     layout={{ font: { size: 10, color: CHART.fontColor }, paper_bgcolor: CHART.transparent, plot_bgcolor: CHART.transparent, margin: { t: 5, l: 5, r: 5, b: 5 } }}
@@ -948,14 +953,13 @@ export default function App() {
               )}
             </div>
 
-            {/* Competitor share concentration — treemap (full width for readability on wide screens) */}
-            <div className="glass p-5 rounded-3xl">
-              <div className="text-sm font-semibold mb-2 flex items-baseline justify-between">
-                Top Competitors by Market Share
-                <span className="text-[10px] text-neon-magenta font-mono tabular-nums">{top3Pct}% in top 3</span>
+            <div className="chart-panel surface-accent-magenta">
+              <div className="chart-panel-title magenta">
+                <span>Top Competitors by Market Share</span>
+                <span className="text-[10px] font-mono tabular-nums font-normal">{top3Pct}% in top 3</span>
               </div>
               {topRecipients.length ? (
-                <div style={{ width: '100%', height: 200 }}>
+                <div className="chart-panel-plot" style={{ height: 200 }}>
                   <Plot
                     data={[{
                       type: 'treemap',
@@ -969,6 +973,8 @@ export default function App() {
                       margin: { t: 2, l: 2, r: 2, b: 2 },
                       paper_bgcolor: CHART.transparent,
                       plot_bgcolor: 'rgba(0,0,0,0)',
+                      font: { size: 9, color: CHART.fontColor },
+                      uniformtext: { minsize: 8, mode: 'hide' },
                     }}
                     style={{ width: '100%', height: '100%' }}
                     config={{ displayModeBar: false }}
@@ -987,29 +993,36 @@ export default function App() {
                 </button>
               </div>
             </div>
+            </div>
+            </CollapsibleSection>
 
-            {/* How the work is bought — two separate pie charts (pricing + vehicles) for the overview pulse */}
-            <div className="glass p-5 rounded-3xl">
-              <div className="text-sm font-semibold mb-3">How the Work is Bought</div>
+            <CollapsibleSection title="How Work is Bought" subtitle="Pricing types · contract vehicles" icon={PieChart} accent="lime" defaultOpen={false}>
+            <div className="chart-panel surface-accent-lime border-0 shadow-none p-0 bg-transparent">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Pricing pie */}
                 <div>
                   <div className="text-xs font-medium text-text-500 mb-1">Pricing Types (by $M)</div>
                   {pricingValues.length ? (
-                    <div style={{ width: '100%', height: 220 }}>
+                    <div className="chart-panel-plot" style={{ height: 220 }}>
                       <Plot
                         data={[{
                           type: 'pie',
                           labels: pricingLabels,
                           values: pricingValues,
-                          textinfo: 'label+percent',
+                          textinfo: 'percent',
+                          textposition: 'inside',
+                          insidetextorientation: 'radial',
+                          textfont: { size: 9, color: CHART.fontColor },
                           hovertemplate: '%{label}<br>$%{value}M (%{percent})<extra></extra>',
                           marker: { colors: ['#00f0ff', '#ff2bd6', '#39ff14', '#facc15', '#a78bfa', '#fb7185'] }
                         }]}
                         layout={{
-                          margin: { t: 10, l: 5, r: 5, b: 0 },
+                          margin: { t: 8, l: 4, r: 4, b: 4 },
                           paper_bgcolor: CHART.transparent,
-                          showlegend: false
+                          showlegend: true,
+                          legend: { font: { size: 9, color: CHART.fontColor }, orientation: 'h', y: -0.05 },
+                          font: { size: 9, color: CHART.fontColor },
+                          uniformtext: { minsize: 8, mode: 'hide' },
                         }}
                         style={{ width: '100%', height: '100%' }}
                         config={{ displayModeBar: false }}
@@ -1022,20 +1035,26 @@ export default function App() {
                 <div>
                   <div className="text-xs font-medium text-text-500 mb-1">Contract Vehicles / IDV (by $M)</div>
                   {vehicleValues.length ? (
-                    <div style={{ width: '100%', height: 220 }}>
+                    <div className="chart-panel-plot" style={{ height: 220 }}>
                       <Plot
                         data={[{
                           type: 'pie',
-                          labels: vehicleLabels,
+                          labels: vehicleLabels.map((l: string) => l.length > 22 ? `${l.slice(0, 21)}…` : l),
                           values: vehicleValues,
-                          textinfo: 'label+percent',
+                          textinfo: 'percent',
+                          textposition: 'inside',
+                          insidetextorientation: 'radial',
+                          textfont: { size: 9, color: CHART.fontColor },
                           hovertemplate: '%{label}<br>$%{value}M (%{percent})<extra></extra>',
                           marker: { colors: ['#00f0ff', '#ff2bd6', '#39ff14', '#facc15', '#a78bfa', '#fb7185'] }
                         }]}
                         layout={{
-                          margin: { t: 10, l: 5, r: 5, b: 0 },
+                          margin: { t: 8, l: 4, r: 4, b: 4 },
                           paper_bgcolor: CHART.transparent,
-                          showlegend: false
+                          showlegend: true,
+                          legend: { font: { size: 9, color: CHART.fontColor }, orientation: 'h', y: -0.05 },
+                          font: { size: 9, color: CHART.fontColor },
+                          uniformtext: { minsize: 8, mode: 'hide' },
                         }}
                         style={{ width: '100%', height: '100%' }}
                         config={{ displayModeBar: false }}
@@ -1048,28 +1067,20 @@ export default function App() {
                 See the Vehicles tab for full set-aside mix and detailed vehicle table.
               </div>
             </div>
+            </CollapsibleSection>
 
-            {/* Set-aside pulse + hot recompetes spotlight */}
+            <CollapsibleSection title="Competition & Recompetes" subtitle="Set-aside mix · hot agency expirations" icon={Crosshair} accent="magenta" defaultOpen>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="glass p-4 rounded-3xl">
-                <div className="text-sm font-semibold mb-2">Competition Mix (Set-Asides)</div>
-                {setAsidePulse.length ? (
-                  <div style={{ width: '100%', height: 160 }}>
-                    <ResponsiveContainer>
-                      <BarChart data={setAsidePulse} layout="vertical" margin={{ left: 4, right: 8 }}>
-                        <XAxis type="number" stroke={CHART.axisStroke} tickFormatter={(v) => `$${v}M`} />
-                        <YAxis dataKey="name" type="category" width={120} stroke={CHART.axisStroke} tick={CHART.axisTickSm} />
-                        <Tooltip contentStyle={CHART.tooltipStyle} />
-                        <Bar dataKey="millions" fill={CHART.colors.cyan} radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : <div className="text-sm text-slate-400">Set-aside data loads with ingest.</div>}
-                <button onClick={() => setDashTab('vehicles')} className="text-[10px] text-neon-cyan hover:underline mt-1">Full vehicle analysis →</button>
+              <div className="chart-panel surface-accent-cyan min-w-0">
+                <div className="chart-panel-title cyan">Competition Mix (Set-Asides)</div>
+                <div className="chart-panel-sub">Top set-aside categories by obligated dollars — compact labels, hover for full text.</div>
+                <SetAsideBarChart data={setAsidePulse} compact />
+                <button onClick={() => setDashTab('vehicles')} className="text-[10px] text-neon-cyan hover:underline mt-2">Full vehicle analysis →</button>
               </div>
 
-              <div className="glass p-4 rounded-3xl border border-[#ff2bd6]/20">
-                <div className="text-sm font-semibold mb-2 text-neon-magenta">Hot Recompetes in Focus Agencies</div>
+              <div className="chart-panel surface-accent-magenta min-w-0">
+                <div className="chart-panel-title magenta">Hot Recompetes in Focus Agencies</div>
+                <div className="chart-panel-sub">Expiring awards in high-intensity customer agencies.</div>
                 {comboExpiring.length ? (
                   <div className="space-y-1.5">
                     {comboExpiring.slice(0, 4).map((e, idx) => (
@@ -1091,7 +1102,10 @@ export default function App() {
                 )}
               </div>
             </div>
+            </CollapsibleSection>
 
+            <CollapsibleSection title="Capture Guidance" subtitle="How to use this tab" icon={Lightbulb} accent="none" defaultOpen={false}>
+            <div className="space-y-2">
             <div className="insight">
               <strong className="text-text-primary">What this tab tells you:</strong> Total market size, whether spend is growing or shrinking, which agencies and competitors matter, and how work is bought. This is your 60-second capture pulse before customer calls or pipeline reviews.
             </div>
@@ -1104,6 +1118,8 @@ export default function App() {
             <div className="insight vault">
               <strong className="text-text-primary">Suitability &amp; Synergy (vision stubs):</strong> These KPIs will activate when global wiki domain intel + company capabilities are built. Suitability = does this contract/agency fit <em>your</em> BU? Synergy = can <em>other</em> BUs strengthen the pursuit? Future research/web-scraping profile building feeds the match.
             </div>
+            </div>
+            </CollapsibleSection>
           </div>
         )
       }
@@ -1666,54 +1682,47 @@ export default function App() {
       }
 
       case 'vehicles': {
-        // Contract Vehicle Analysis tab owns deeper vehicle + competition mechanics (set-aside mix lives here per usage model).
-        const setAsideData = setAside.slice(0, 10).map((s: any) => ({
-          name: (s.set_aside || 'Unknown').slice(0, 28),
-          millions: s.millions || 0,
-          actions: s.actions || 0,
-        }))
+        const setAsideRows = normalizeSetAsideRows(setAside, 10)
         return (
-          <div className="space-y-4">
-            <div className="text-lg font-semibold mb-2">Contract Vehicle & Pricing Breakdown</div>
-            <div className="insight lime">
-              This tells you the actual buying mechanisms in your NAICS. High volume on a particular IDIQ or FFP tells you which vehicles to chase or team through. Not every opportunity is a good +pipeline candidate — use this lens to decide capture strategy first.
-            </div>
-            <DataTable
-              data={vehicles.slice(0, 7)}
-              rowKey={(v, i) => `${v.pricing}-${v.vehicle}-${i}`}
-              emptyMessage="Vehicle breakdown loads with more ingest data."
-              columns={[
-                { key: 'vehicle', header: 'Vehicle / Pricing', render: (v) => `${v.pricing} / ${v.vehicle}` },
-                { key: 'actions', header: 'Actions', render: (v) => `${v.actions} actions` },
-                { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan', render: (v) => `$${v.millions}M` },
-                { key: 'note', header: '', align: 'right', cellClassName: 'text-xs text-text-500', render: () => 'vehicle intel' },
-              ]}
-            />
-
-            {/* Set-aside mix moved here: it's a contract vehicle / competition strategy item, not the top-level pulse. */}
-            <div className="glass p-5 rounded-3xl">
-              <div className="text-sm font-semibold mb-2">How the Work is Competed — Set-Aside Mix (by $)</div>
-              {setAsideData.length ? (
-                <div style={{ width: '100%', height: 240 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={setAsideData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART.gridStroke} />
-                      <XAxis type="number" stroke={CHART.axisStroke} />
-                      <YAxis dataKey="name" type="category" width={160} stroke={CHART.axisStroke} />
-                      <Tooltip contentStyle={CHART.tooltipStyle} />
-                      <Bar dataKey="millions" name="$ Millions" fill={CHART.colors.cyan}>
-                        {setAsideData.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? CHART.colors.magenta : CHART.colors.cyan} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : <div className="text-sm text-slate-400">Set-aside breakdown loads with more ingest data.</div>}
-              <div className="text-[11px] text-text-500 mt-2">
-                "NO SET ASIDE / FULL OPEN" dominant → expect prime-level competition or large IDIQs; plan for strong past performance emphasis or teaming. High small-business set-asides → look for JV / mentor-protégé or sub opportunities. This pairs with the vehicle table above to shape your bid strategy.
+          <div className="page-sections">
+            <CollapsibleSection title="Contract Vehicles & Pricing" subtitle={`NAICS ${naics} · buying mechanisms`} icon={Layers} accent="lime" defaultOpen>
+              <div className="insight lime mb-3">
+                This tells you the actual buying mechanisms in your NAICS. High volume on a particular IDIQ or FFP tells you which vehicles to chase or team through. Not every opportunity is a good +pipeline candidate — use this lens to decide capture strategy first.
               </div>
-            </div>
+              <DataTable
+                data={vehicles.slice(0, 7)}
+                rowKey={(v, i) => `${v.pricing}-${v.vehicle}-${i}`}
+                emptyMessage="Vehicle breakdown loads with more ingest data."
+                columns={[
+                  { key: 'vehicle', header: 'Vehicle / Pricing', cellClassName: 'max-w-[200px] truncate', render: (v) => <span title={`${v.pricing} / ${v.vehicle}`}>{v.pricing} / {v.vehicle}</span> },
+                  { key: 'actions', header: 'Actions', cellClassName: 'tabular-nums whitespace-nowrap', render: (v) => `${v.actions} actions` },
+                  { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (v) => `$${v.millions}M` },
+                  { key: 'note', header: '', align: 'right', cellClassName: 'text-[10px] text-text-500', render: () => 'vehicle intel' },
+                ]}
+              />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Set-Aside Mix" subtitle="How work is competed · by obligated $" icon={Crosshair} accent="magenta" defaultOpen>
+              <div className="chart-panel surface-accent-magenta border-0 shadow-none p-0 bg-transparent min-w-0">
+                <div className="chart-panel-sub mb-3">
+                  Dominant full-and-open spend → prime-level competition. High small-business share → teaming / sub opportunities.
+                </div>
+                <SetAsideBarChart data={setAsideRows} />
+                {setAsideRows.length > 0 && (
+                  <DataTable
+                    className="mt-3"
+                    data={setAsideRows}
+                    rowKey={(s) => s.fullName}
+                    emptyMessage=""
+                    columns={[
+                      { key: 'type', header: 'Set-Aside', cellClassName: 'max-w-[180px] truncate text-text-primary', render: (s) => <span title={s.fullName}>{s.name}</span> },
+                      { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (s) => `$${s.millions}M` },
+                      { key: 'actions', header: 'Actions', cellClassName: 'tabular-nums text-text-400 whitespace-nowrap', render: (s) => s.actions?.toLocaleString() ?? '—' },
+                    ]}
+                  />
+                )}
+              </div>
+            </CollapsibleSection>
           </div>
         )
       }
