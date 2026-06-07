@@ -918,6 +918,42 @@ body {
   border-radius: 8px;
 }
 
+/* Form fields */
+.input-field {
+  @apply bg-ink-card border border-edge text-sm text-text-primary rounded-lg px-3 py-1.5;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: rgba(var(--neon-cyan-rgb), 0.5);
+  box-shadow: 0 0 0 1px rgba(var(--neon-cyan-rgb), 0.25);
+}
+
+/* Tab section titles */
+.tab-title {
+  @apply text-lg font-semibold mb-1;
+}
+
+.tab-title-cyan { color: var(--neon-cyan); }
+.tab-title-magenta { color: var(--neon-magenta); }
+.tab-title-lime { color: var(--neon-lime); }
+
+/* Row action clusters in tables */
+.row-actions {
+  @apply flex flex-wrap items-center justify-end gap-1;
+}
+
+/* Citation / ID chips */
+.cite-chip {
+  @apply inline-block font-mono text-[9px] px-1.5 py-px rounded border border-edge text-text-500;
+  background: rgba(var(--neon-cyan-rgb), 0.05);
+}
+
+/* Geo concentration bar */
+.geo-bar {
+  @apply h-2 rounded bg-neon-cyan/80;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .topbar-vibrant::after,
   .sidebar-vibrant::after,

@@ -15,6 +15,8 @@ import { EmptyState } from './components/ui/EmptyState'
 import { Toast, type ToastState, type ToastTone } from './components/ui/Toast'
 import { DataTable } from './components/lists/DataTable'
 import { EntryRow } from './components/lists/EntryRow'
+import { BrainEntryCard } from './components/lists/BrainEntryCard'
+import { AskCoPilotButton } from './components/ui/AskCoPilotButton'
 import {
   NAV_GROUPS,
   DASHBOARD_TABS,
@@ -429,13 +431,23 @@ export default function App() {
   }
 
   // === Holistic chat with rich live context + suggested actions that can mutate state ===
-  async function sendChat() {
-    if (!chatInput.trim()) return
-    const userMsg = { role: 'user', content: chatInput.trim() }
+  function askCoPilot(prompt: string, autoSend = false) {
+    setShowChat(true)
+    setChatInput(prompt)
+    if (autoSend) {
+      setTimeout(() => {
+        void sendChatMessage(prompt)
+        setChatInput('')
+      }, 40)
+    }
+  }
+
+  async function sendChatMessage(userText: string) {
+    const text = userText.trim()
+    if (!text) return
+    const userMsg = { role: 'user', content: text }
     const newHistory = [...chatHistory, userMsg]
     setChatHistory(newHistory)
-    const userText = chatInput.trim()
-    setChatInput('')
 
     // Build rich live context from the current dashboard + the persisted accumulators + MCP tool catalog.
     // The catalog tells the LLM what admin/MCP actions it can perform on the user's behalf (search SAM,
@@ -446,7 +458,7 @@ export default function App() {
       kpis: kpis || null,
       brain: brain || [],
       pipeline: pipeline || [],
-      message: userText,
+      message: text,
       use_llm: useSmartModel,
       mcp_tools: mcpInfo.tools || [],
     }
@@ -478,6 +490,13 @@ export default function App() {
     setTimeout(() => {
       setChatHistory(prev => [...prev, { role: 'assistant', content: fallback, source: 'local-fallback' }])
     }, 150)
+  }
+
+  async function sendChat() {
+    const text = chatInput.trim()
+    if (!text) return
+    setChatInput('')
+    await sendChatMessage(text)
   }
 
   // Allow chat to drive actions (for the "suggested actions" in responses)
@@ -1101,8 +1120,8 @@ export default function App() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="text-lg font-semibold text-[#ff2bd6]">Expiring / Recompete Radar (from USASpending history)</div>
-                  <div className="text-xs text-slate-400">Current PoP end in next 36 months — {filteredExpiring.length} shown (of {expiring.length}). Use historical cycles to get ahead of SAM notices.</div>
+                  <div className="tab-title tab-title-magenta">Expiring / Recompete Radar</div>
+                  <div className="text-xs text-text-400">PoP end in next 36 months — {filteredExpiring.length} shown (of {expiring.length}). Use historical cycles to get ahead of SAM notices.</div>
                 </div>
                 <button onClick={() => addToPipeline({label:'expiring batch'}, 'expiring')} className="action-btn pipeline flex items-center gap-1 px-3 py-1 text-xs"><Plus size={13}/> Add visible batch to pipeline</button>
               </div>
@@ -1114,81 +1133,118 @@ export default function App() {
                 value={oppSearch}
                 onChange={(e) => setOppSearch(e.target.value)}
                 placeholder="Filter by recipient or agency name..."
-                className="mb-2 w-full bg-[#16161f] border border-[#1f1f2e] text-sm px-3 py-1.5 rounded"
+                className="input-field mb-2 w-full"
               />
-              <div className="glass rounded-3xl overflow-hidden text-sm">
-                <table className="w-full"><tbody>
-                  {filteredExpiring.slice(0,10).map((e: any, idx: number) => {
-                    const isHot = hotAgencies.has(e.agency || '')
-                    const inBrain = brain.some((b: any) => (b.name || '').toLowerCase().includes((e.recipient || '').toLowerCase().slice(0, 15)))
-                    return (
-                      <tr key={idx} className="border-b border-[#1f1f2e] hover:bg-[#16161f]">
-                        <td className="p-3 font-mono text-xs">{e.end_date}</td>
-                        <td className="p-3 truncate max-w-[200px]">{e.recipient || '—'}</td>
-                        <td className="p-3 tabular-nums">${((e.obligation||0)/1e6).toFixed(1)}M</td>
-                        <td className="p-3 text-[#00f0ff] text-xs">{(e.agency||'').slice(0,22)}</td>
-                        <td className="p-3 text-xs">
-                          {isHot && <span className="text-[#ff2bd6] mr-1">★ Hot</span>}
-                          {inBrain && <span className="text-[#39ff14] mr-1">🧠 Brain</span>}
-                        </td>
-                        <td className="p-3 text-right space-x-1">
-                          <button onClick={() => addToPipeline(e,'expiring')} className="action-btn pipeline text-xs">+ pipeline</button>
-                          <button 
-                            onClick={() => {
-                              setSamKeywords(e.agency || e.recipient || '')
-                              setSamNoticeTypes('RFI,Sources Sought,Special Notice,Presolicitation')
-                              // auto-trigger search for this cycle
-                              searchSamLive()
-                            }} 
-                            className="text-xs text-[#00f0ff] hover:underline"
-                          >
-                            Search SAM for this
-                          </button>
-                          {/* Agentic button (per recentering): click activates LLM + optional MCP to create a *smart* sam-monitor
-                              with good keywords/notice_types + rationale + citation back to this expiring award_key.
-                              This is the primary "agent does the admin task" path; chat is for open questions. */}
-                          <button
-                            onClick={async () => {
-                              try {
-                                setLoading(true)
-                                const res = await fetch('/user/actions/create-sam-monitor', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ item: e, naics, brain, use_llm: useSmartModel })
-                                })
-                                if (res.ok) {
-                                  const data = await res.json()
-                                  await syncAccumulators()
-                                  setChatHistory(h => [...h, { role: 'assistant', content: `Agent created smart SAM monitor: ${data.entry?.title || 'monitor'}. ${data.rationale || ''} (saved to pipeline)` }])
-                                } else {
-                                  // fallback to the simple URL builder the old buttons used
-                                  const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(e.agency || e.recipient || '')}&naics=${naics}`
-                                  addToPipeline({ ...e, title: `SAM Monitor: ${e.agency || e.recipient}`, monitorUrl, type: 'sam-monitor' }, 'sam-monitor')
-                                }
-                              } catch {
+              <DataTable
+                data={filteredExpiring.slice(0, 10)}
+                rowKey={(e: any, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
+                rowClassName={(e: any) => hotAgencies.has(e.agency || '') ? 'intensity-row-hot' : ''}
+                emptyMessage="No expiring awards in current slice."
+                columns={[
+                  {
+                    key: 'end',
+                    header: 'Ends',
+                    cellClassName: 'font-mono text-xs',
+                    render: (e: any) => e.end_date,
+                  },
+                  {
+                    key: 'recipient',
+                    header: 'Recipient',
+                    render: (e: any) => (
+                      <span className="truncate max-w-[180px] block" title={e.recipient}>
+                        {e.recipient || '—'}
+                        {e.award_key && <span className="cite-chip ml-1">{String(e.award_key).slice(0, 12)}</span>}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'oblig',
+                    header: '$M',
+                    cellClassName: 'tabular-nums text-neon-cyan',
+                    render: (e: any) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M`,
+                  },
+                  {
+                    key: 'agency',
+                    header: 'Agency',
+                    cellClassName: 'text-neon-cyan text-xs',
+                    render: (e: any) => (e.agency || '').slice(0, 22),
+                  },
+                  {
+                    key: 'flags',
+                    header: 'Flags',
+                    render: (e: any) => {
+                      const isHot = hotAgencies.has(e.agency || '')
+                      const inBrain = brain.some((b: any) => (b.name || '').toLowerCase().includes((e.recipient || '').toLowerCase().slice(0, 15)))
+                      return (
+                        <span className="text-xs">
+                          {isHot && <span className="text-neon-magenta mr-1">★ Hot</span>}
+                          {inBrain && <span className="text-neon-lime mr-1">🧠 Brain</span>}
+                        </span>
+                      )
+                    },
+                  },
+                  {
+                    key: 'actions',
+                    header: '',
+                    align: 'right',
+                    render: (e: any) => (
+                      <div className="row-actions">
+                        <button onClick={() => addToPipeline(e, 'expiring')} className="action-btn pipeline text-xs">+ pipeline</button>
+                        <AskCoPilotButton
+                          prompt={`This contract expires ${e.end_date}: ${e.recipient || 'unknown'} at ${e.agency || 'unknown agency'} for $${((e.obligation || 0) / 1e6).toFixed(1)}M. What SAM notices should I watch, who is the likely incumbent, and what capture moves make sense now?`}
+                          onAsk={askCoPilot}
+                        />
+                        <button
+                          onClick={() => {
+                            setSamKeywords(e.agency || e.recipient || '')
+                            setSamNoticeTypes('RFI,Sources Sought,Special Notice,Presolicitation')
+                            searchSamLive()
+                          }}
+                          className="action-btn ghost text-xs"
+                        >
+                          Search SAM
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              setLoading(true)
+                              const res = await fetch('/user/actions/create-sam-monitor', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ item: e, naics, brain, use_llm: useSmartModel }),
+                              })
+                              if (res.ok) {
+                                const data = await res.json()
+                                await syncAccumulators()
+                                showToast(`SAM monitor created: ${data.entry?.title || 'monitor'}`, 'success')
+                                setChatHistory(h => [...h, { role: 'assistant', content: `Agent created smart SAM monitor: ${data.entry?.title || 'monitor'}. ${data.rationale || ''}` }])
+                              } else {
                                 const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(e.agency || e.recipient || '')}&naics=${naics}`
                                 addToPipeline({ ...e, title: `SAM Monitor: ${e.agency || e.recipient}`, monitorUrl, type: 'sam-monitor' }, 'sam-monitor')
-                              } finally {
-                                setLoading(false)
                               }
-                            }}
-                            className="text-xs text-[#39ff14] hover:underline"
-                            title="Agent (LLM + MCP) builds smart keywords/notice types + rationale from this expiring item + your Brain, then saves the monitor"
-                          >
-                            Create SAM monitor (smart)
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody></table>
-              </div>
+                            } catch {
+                              const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(e.agency || e.recipient || '')}&naics=${naics}`
+                              addToPipeline({ ...e, title: `SAM Monitor: ${e.agency || e.recipient}`, monitorUrl, type: 'sam-monitor' }, 'sam-monitor')
+                            } finally {
+                              setLoading(false)
+                            }
+                          }}
+                          className="action-btn pipeline text-xs"
+                          title="Agent builds smart monitor params from this row + your Brain"
+                        >
+                          Monitor (smart)
+                        </button>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
               <div className="text-[10px] text-[#606080] mt-2">Click +pipeline on the ones that fit your capabilities or relationships. "Search SAM for this" prefills a live search for the actual notice/RFI on that cycle. These items accumulate in the separate Pipeline view (sidebar). Use +brain / + to Knowledge Vault from Competitive & Agency tabs for the standalone vault.</div>
             </div>
 
             {/* Live SAM layer — the "new + emerging" that complements historical recompete cycles */}
             <div>
-              <div className="text-lg font-semibold text-[#00f0ff] mb-2">Live & Emerging from SAM.gov (new requirements + notices on known cycles)</div>
+              <div className="tab-title tab-title-cyan mb-2">Live & Emerging from SAM.gov</div>
               <div className="mb-2 flex flex-wrap gap-1 text-[10px]">
                 <span className="text-[#606080] mr-1 self-center">Example prompts for the co-pilot (drives MCP for you):</span>
                 <button onClick={() => { const p = 'Search SAM for live RFI/Sources Sought/Special Notice matching the agencies and recipients in my Brain and the expiring contracts. Then propose 2-3 to create monitors for and add to pipeline.'; setChatInput(p); setTimeout(() => sendChat(), 20); }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20 border border-[#00f0ff]/20">Search SAM for my Brain + expiring</button>
@@ -1377,28 +1433,58 @@ export default function App() {
         // Intensity quadrant is intentionally the overview "where to focus" chart (quick pulse + command decision).
         return (
           <div className="space-y-4">
-            <div className="text-lg font-semibold mb-1">Agency Intelligence — Deeper Dive</div>
+            <div className="tab-title tab-title-cyan mb-1">Agency Intelligence — Deeper Dive</div>
             <div className="insight">
               See the Market Overview Intensity quadrant first for the quick pulse on hot agencies. This tab gives the full list + one-click +brain/wiki so you can accumulate the ones worth watching. Notes you add here compound in your Brain for chat context and future skills.
             </div>
 
-            <div className="glass rounded-3xl overflow-hidden text-sm">
-              <table className="w-full"><tbody>
-                {intensity.slice(0,12).map((a,idx) => {
-                  const isHot = (a.total_oblig || 0) > 5e6
-                  return (
-                    <tr key={idx} className="border-b border-[#1f1f2e] hover:bg-[#16161f]">
-                      <td className="p-3">{a.agency} {isHot && <span className="text-[#ff2bd6] text-[10px]">★ hot</span>}</td>
-                      <td className="p-3 tabular-nums">{a.award_count} actions</td>
-                      <td className="p-3 tabular-nums">${((a.total_oblig||0)/1e6).toFixed(1)}M</td>
-                      <td className="p-3 text-right">
-                        <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain">+ brain / wiki</button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody></table>
-            </div>
+            <DataTable
+              data={intensity.slice(0, 12)}
+              rowKey={(a) => a.agency}
+              rowClassName={(a) => ((a.total_oblig || 0) > 5e6) ? 'intensity-row-hot' : ''}
+              emptyMessage="No agency data in current NAICS slice."
+              columns={[
+                {
+                  key: 'agency',
+                  header: 'Agency',
+                  render: (a) => {
+                    const isHot = (a.total_oblig || 0) > 5e6
+                    return (
+                      <span>
+                        {a.agency}
+                        {isHot && <span className="text-neon-magenta text-[10px] ml-1">★ hot</span>}
+                      </span>
+                    )
+                  },
+                },
+                {
+                  key: 'actions',
+                  header: 'Actions',
+                  cellClassName: 'tabular-nums text-text-400',
+                  render: (a) => `${a.award_count} actions`,
+                },
+                {
+                  key: 'oblig',
+                  header: '$M',
+                  cellClassName: 'tabular-nums text-neon-cyan',
+                  render: (a) => `$${((a.total_oblig || 0) / 1e6).toFixed(1)}M`,
+                },
+                {
+                  key: 'cta',
+                  header: '',
+                  align: 'right',
+                  render: (a) => (
+                    <div className="row-actions">
+                      <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain">+ brain</button>
+                      <AskCoPilotButton
+                        prompt={`What capture approach should I take for ${a.agency}? They have ${a.award_count} actions and $${((a.total_oblig || 0) / 1e6).toFixed(1)}M in my NAICS slice.`}
+                        onAsk={askCoPilot}
+                      />
+                    </div>
+                  ),
+                },
+              ]}
+            />
             <div className="text-[10px] text-[#606080]">Use +brain on agencies where you see real volume or existing relationships. Your Brain becomes the living packet the chat and future tools read from.</div>
           </div>
         )
@@ -1453,14 +1539,14 @@ export default function App() {
 
         return (
           <div className="space-y-4">
-            <div className="text-lg font-semibold mb-1">Competitive Analysis — Follow the Money (Recipient → Agency → Office Deep Dive)</div>
+            <div className="tab-title tab-title-magenta mb-1">Competitive Analysis — Follow the Money</div>
             <div className="insight magenta">
               Quick 3-level pulse (down to specific Office) lives on Market Overview. This tab is for the full table + larger Sankey when you want to analyze a specific competitor-agency-office relationship or +brain names that matter.
             </div>
 
             {/* Sankey — detailed 3-level view here; compact pulse version lives on Overview. */}
-            <div className="glass p-5 rounded-3xl">
-              <div className="text-sm font-semibold mb-2">Follow the Money (Sankey — Detailed, 3 levels)</div>
+            <div className="chart-panel surface-accent-cyan">
+              <div className="chart-panel-title cyan mb-2">Follow the Money (Sankey — 3 levels)</div>
               {flows.length ? (
                 <div style={{ width: '100%', height: 380 }}>
                   <Plot
@@ -1480,22 +1566,55 @@ export default function App() {
               )}
             </div>
 
-            <div className="glass rounded-3xl overflow-hidden text-sm">
-              <div className="px-3 pt-2 text-[10px] text-[#606080]">Recipient (Competitor) | Agency | Office | $M (actions) | +brain</div>
-              <table className="w-full"><tbody>
-                {flows.map((f,idx) => (
-                  <tr key={idx} className="border-b border-[#1f1f2e] hover:bg-[#16161f]">
-                    <td className="p-3 font-medium">{f.recipient}</td>
-                    <td className="p-3 text-xs text-[#a0a0c0]">{f.agency}</td>
-                    <td className="p-3 text-xs text-[#707080]">{(f as any).office || ''}</td>
-                    <td className="p-3 tabular-nums">${f.millions}M <span className="text-[10px] text-[#606080]">({f.actions} actions)</span></td>
-                    <td className="p-3 text-right">
-                      <button onClick={() => addToBrain(f, f.recipient, 'competitor')} className="action-btn brain">+ brain / wiki</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody></table>
-            </div>
+            <DataTable
+              data={flows}
+              rowKey={(f) => `${f.recipient}-${f.agency}-${f.office ?? ''}`}
+              emptyMessage="Flows will appear with more bulk data ingested."
+              columns={[
+                {
+                  key: 'recipient',
+                  header: 'Recipient',
+                  render: (f) => <span className="font-medium text-text-primary">{f.recipient}</span>,
+                },
+                {
+                  key: 'agency',
+                  header: 'Agency',
+                  cellClassName: 'text-text-400 text-xs',
+                  render: (f) => f.agency,
+                },
+                {
+                  key: 'office',
+                  header: 'Office',
+                  cellClassName: 'text-text-500 text-xs',
+                  render: (f) => f.office || '—',
+                },
+                {
+                  key: 'value',
+                  header: '$M',
+                  cellClassName: 'tabular-nums',
+                  render: (f) => (
+                    <>
+                      ${f.millions}M <span className="text-[10px] text-text-500">({f.actions} actions)</span>
+                    </>
+                  ),
+                },
+                {
+                  key: 'cta',
+                  header: '',
+                  align: 'right',
+                  render: (f) => (
+                    <div className="row-actions">
+                      <button onClick={() => addToBrain(f, f.recipient, 'competitor')} className="action-btn brain">+ brain</button>
+                      <AskCoPilotButton
+                        prompt={`Draft a competitive brief angle for ${f.recipient} at ${f.agency}${f.office ? ` (${f.office})` : ''} — $${f.millions}M across ${f.actions} actions in NAICS ${naics}.`}
+                        label="Brief"
+                        onAsk={askCoPilot}
+                      />
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </div>
         )
       }
@@ -1513,18 +1632,17 @@ export default function App() {
             <div className="insight lime">
               This tells you the actual buying mechanisms in your NAICS. High volume on a particular IDIQ or FFP tells you which vehicles to chase or team through. Not every opportunity is a good +pipeline candidate — use this lens to decide capture strategy first.
             </div>
-            <div className="glass rounded-3xl overflow-hidden text-sm">
-              <table className="w-full"><tbody>
-                {vehicles.slice(0,7).map((v,idx) => (
-                  <tr key={idx} className="border-b border-[#1f1f2e]">
-                    <td className="p-3">{v.pricing} / {v.vehicle}</td>
-                    <td className="p-3">{v.actions} actions</td>
-                    <td className="p-3 tabular-nums">${v.millions}M</td>
-                    <td className="p-3 text-right text-xs text-[#606080]">vehicle intel</td>
-                  </tr>
-                ))}
-              </tbody></table>
-            </div>
+            <DataTable
+              data={vehicles.slice(0, 7)}
+              rowKey={(v, i) => `${v.pricing}-${v.vehicle}-${i}`}
+              emptyMessage="Vehicle breakdown loads with more ingest data."
+              columns={[
+                { key: 'vehicle', header: 'Vehicle / Pricing', render: (v) => `${v.pricing} / ${v.vehicle}` },
+                { key: 'actions', header: 'Actions', render: (v) => `${v.actions} actions` },
+                { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan', render: (v) => `$${v.millions}M` },
+                { key: 'note', header: '', align: 'right', cellClassName: 'text-xs text-text-500', render: () => 'vehicle intel' },
+              ]}
+            />
 
             {/* Set-aside mix moved here: it's a contract vehicle / competition strategy item, not the top-level pulse. */}
             <div className="glass p-5 rounded-3xl">
@@ -1561,20 +1679,32 @@ export default function App() {
             <div className="insight">
               Where the actual work happens. Useful for deciding office footprint, regional teaming partners, and understanding customer concentration. Not usually a direct +pipeline or +brain item — more strategic context.
             </div>
-            <div className="glass rounded-3xl overflow-hidden text-sm">
-              <table className="w-full"><tbody>
-                {geo.map((g,idx) => {
-                  const w = Math.min(100, Math.round((g.millions / (geo[0]?.millions || 1)) * 100))
-                  return (
-                    <tr key={idx} className="border-b border-[#1f1f2e]">
-                      <td className="p-3 w-12 font-mono">{g.state}</td>
-                      <td className="p-3">{g.actions} actions, ${g.millions}M</td>
-                      <td className="p-3"><div className="h-2 bg-[#00f0ff] rounded" style={{width: w + '%'}} /></td>
-                    </tr>
-                  )
-                })}
-              </tbody></table>
-            </div>
+            <DataTable
+              data={geo}
+              rowKey={(g) => g.state}
+              emptyMessage="No geographic data in current slice."
+              columns={[
+                {
+                  key: 'state',
+                  header: 'State',
+                  cellClassName: 'font-mono w-12',
+                  render: (g) => g.state,
+                },
+                {
+                  key: 'stats',
+                  header: 'Volume',
+                  render: (g) => `${g.actions} actions, $${g.millions}M`,
+                },
+                {
+                  key: 'bar',
+                  header: 'Share',
+                  render: (g) => {
+                    const w = Math.min(100, Math.round((g.millions / (geo[0]?.millions || 1)) * 100))
+                    return <div className="geo-bar" style={{ width: `${w}%` }} title={`${w}% of top state`} />
+                  },
+                },
+              ]}
+            />
           </div>
         )
       }
@@ -1775,43 +1905,20 @@ export default function App() {
                 return bn && wn && (bn.includes(wn) || wn.includes(bn))
               })
               const display = wiki ? (wiki.excerpt || wiki.content) : (b.notes || '')
-              const wikiPath = wiki ? wiki.path : null
               return (
-                <div key={i} className="entry">
-                  <div className="entry-head">
-                    <div>
-                      <span className="entry-title">{b.name}</span>
-                      <span className="entry-type">{b.type}</span>
-                    </div>
-                    <button onClick={() => removeFromBrain(bid)} className="text-[#fda4af] text-xs hover:underline" title="Remove this entry from the JSON accumulator (native .md on disk stays)">remove</button>
-                  </div>
-                  {wiki ? (
-                    <div className="entry-body">
-                      <div className="text-[#67e8f9] text-[10px] mb-0.5">SYNTHESIZED FROM USASPENDING + CITATIONS (see schema for exact sections)</div>
-                      <div className="whitespace-pre-wrap text-[#c0c0d8]">{display}</div>
-                      {wikiPath && (
-                        <div className="mt-1.5 flex items-center gap-2 text-[9px] text-[#606080] font-mono">
-                          {wikiPath}
-                          <button onClick={() => { try { navigator.clipboard.writeText(display) } catch {} }} className="action-btn vault" title="Copy the full LLM-synthesized note (data signals + citations + any prior overlays) to clipboard. Paste into Obsidian, reports, or external tools. Provenance stays in the .md frontmatter and sections.">
-                            <Copy size={12}/> Copy full synthesized
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="entry-body text-[#a8b4d0]">{display}</div>
-                  )}
-                  <div className="entry-meta">Citation: {b.citation}</div>
-                  <div className="mt-2">
-                    <div className="text-[9px] text-[#64748b] mb-0.5">Your overlay (appends to the native .md on save)</div>
-                    <input
-                      defaultValue={b.notes}
-                      onBlur={(e) => updateBrainNote(bid, e.target.value)}
-                      className="w-full bg-[#05070d] border border-[#1f2a44] text-xs rounded px-2 py-1 text-[#e6ecff]"
-                      placeholder="Add Shipley angle, negotiation lever, new intel, ontology idea..."
-                    />
-                  </div>
-                </div>
+                <BrainEntryCard
+                  key={i}
+                  name={b.name}
+                  type={b.type}
+                  citation={b.citation ? `Citation: ${b.citation}` : undefined}
+                  display={display}
+                  wikiPath={wiki?.path}
+                  hasWiki={!!wiki}
+                  overlayValue={b.notes}
+                  onRemove={() => removeFromBrain(bid)}
+                  onOverlayBlur={(v) => updateBrainNote(bid, v)}
+                  onAsk={askCoPilot}
+                />
               )
             })}
             {brain.length > 0 && (
