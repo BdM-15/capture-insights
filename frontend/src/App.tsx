@@ -4,6 +4,7 @@ import {
   RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
   GitBranch, PieChart, Crosshair, Lightbulb, Zap, Search, Radar, Users, MapPin,
+  Settings, Sparkles,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
@@ -2297,64 +2298,231 @@ export default function App() {
     }
 
     if (sidebar === 'tools') {
-      // Dedicated MCP Tools view — educational + status, not for manual calling.
-      // The catalog is populated by the app's warmup at startup (see lifespan).
-      // These tools power the agent: "Create SAM monitor (smart)" button (and future ones) + the chat co-pilot.
-      // Per the design: the LLM/agent drives them; you as the user never use MCPs or uvx directly.
       const tools = mcpInfo.tools || []
+      const mcpOnline = !!mcpInfo.mcp_available
       return (
-        <div className="space-y-4">
-          <div className="surface surface-hover rounded-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="text-lg font-semibold h1-gradient">MCP Tools</div>
-                <div className="text-xs text-text-400">Battle-tested clients from https://github.com/1102tools/federal-contracting-mcps (we only consume, never implement servers ourselves).</div>
-              </div>
-              <button
-                onClick={() => loadMcpTools(true)}
-                className="action-btn"
-              >
-                <RefreshCw size={12}/> Refresh catalog
-              </button>
-            </div>
+        <div className="page-sections">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+            <MetricCard label="Tools" value={String(tools.length)} accent="magenta" tooltip="Discovered MCP tool catalog" />
+            <MetricCard label="MCP server" value={mcpOnline ? 'Online' : 'Fallback'} accent={mcpOnline ? 'lime' : 'amber'} tooltip="External MCP vs direct API fallbacks" />
+            <MetricCard label="Backend" value={health === 'live' ? 'Healthy' : health === 'checking' ? '…' : 'Issue'} accent={health === 'live' ? 'cyan' : 'amber'} />
+            <MetricCard label="Chat context" value={useSmartModel ? 'Smart' : 'Fast'} accent="purple" tooltip="Model path used by co-pilot actions" />
+          </div>
 
+          <CollapsibleSection
+            title="Tool Catalog"
+            subtitle="federal-contracting-mcps · agent-driven only"
+            icon={Wrench}
+            accent="magenta"
+            defaultOpen
+            badge={
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); loadMcpTools(true) }}
+                className="action-btn flex items-center gap-1 px-2 py-0.5 text-[10px] shrink-0"
+              >
+                <RefreshCw size={11} /> Refresh
+              </button>
+            }
+          >
+            <div className="text-[10px] text-text-500 mb-3">
+              Consumers only — we use battle-tested clients from{' '}
+              <a href="https://github.com/1102tools/federal-contracting-mcps" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">
+                federal-contracting-mcps
+              </a>
+              . You never call MCPs directly; buttons and co-pilot do.
+            </div>
             {tools.length === 0 ? (
-              <div className="text-sm text-slate-400">
-                No tools discovered yet (app will use direct API fallbacks for SAM etc.).
-                <div className="mt-2 text-[11px]">{mcpInfo.how_to_enable || mcpInfo.note || ''}</div>
-                <div className="mt-1 text-[10px] text-text-500">The catalog is attempted at startup (warmup). External sam-gov-mcp server enables the richest tool set.</div>
-              </div>
+              <EmptyState
+                icon={Wrench}
+                title="No tools discovered yet"
+                description={mcpInfo.how_to_enable || mcpInfo.note || 'App uses direct API fallbacks for SAM. Run uvx sam-gov-mcp for the richest tool set. Catalog warms up at backend start.'}
+                accent="magenta"
+              />
             ) : (
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 min-w-0">
                 {tools.map((t, idx) => (
-                  <div key={idx} className="border border-edge rounded p-2 bg-ink-900">
-                    <div className="font-medium text-neon-cyan">{t.name}</div>
-                    {t.description && <div className="text-xs text-text-400 mt-0.5">{t.description}</div>}
+                  <div key={idx} className="tool-card">
+                    <div className="tool-card-name">{t.name}</div>
+                    {t.description && <div className="tool-card-desc">{t.description}</div>}
                   </div>
                 ))}
               </div>
             )}
+            {mcpInfo.note && <div className="text-[10px] text-neon-magenta mt-2">{mcpInfo.note}</div>}
+          </CollapsibleSection>
 
-            <div className="mt-4 text-[11px] text-text-500">
-              These tools are used automatically by the agent when you click contextual buttons (e.g. "Create SAM monitor (smart)" on an expiring row) or ask the floating co-pilot natural-language questions. The catalog is sent to the chat so suggestions stay grounded in what is actually available.
+          <CollapsibleSection
+            title="How Agents Use Tools"
+            subtitle="Buttons · co-pilot · suggested actions"
+            icon={MessageSquare}
+            accent="magenta"
+            defaultOpen={false}
+          >
+            <div className="insight mb-2">
+              Contextual buttons (e.g. Monitor smart on expiring rows) and the floating co-pilot invoke these tools under the hood. The catalog is injected into chat so suggestions stay grounded in what is actually available.
             </div>
-            {mcpInfo.note && <div className="mt-2 text-[10px] text-neon-magenta">{mcpInfo.note}</div>}
-          </div>
-
-          <div className="text-[10px] text-text-500 px-1">
-            Status is also visible in /health and the top status line. Warmup happens automatically when the backend starts.
-          </div>
+            <div className="text-[10px] text-text-500">Status also appears in /health and the topbar. Warmup runs when the backend starts.</div>
+          </CollapsibleSection>
         </div>
       )
     }
 
-    // Stubs for other future sidebars (skills, settings) — clean and honest
-    return (
-      <div className="surface surface-hover rounded-2xl p-8 text-center">
-        <div className="text-2xl mb-2 h1-gradient">{VIEW_META[sidebar].title}</div>
-        <div className="text-sm text-slate-400">Placeholder for later (full grounded chat/agent with citations over the DuckDB, skills like huashu-design for artifacts, profile settings, etc.).<br/>Right now the priority is the data foundation + contextual Dashboard tabs + the two distinct accumulators (Pipeline for pursuits; Knowledge Vault as the standalone LLM wiki/Karpathy foundation) + the always-available resizable chat + button-driven agentic actions. Exactly as discussed.</div>
-      </div>
-    )
+    if (sidebar === 'skills') {
+      const plannedSkills = [
+        { name: 'Capture brief', status: 'Planned', note: 'Competitive + agency angles from vault + data' },
+        { name: 'SAM monitor builder', status: 'Partial', note: 'Smart monitor buttons on Future Opportunities' },
+        { name: 'Vault synthesizer', status: 'Partial', note: 'Seed + lint/fix via Knowledge Vault' },
+        { name: 'Artifact design', status: 'Planned', note: 'huashu-design style pursuit artifacts' },
+        { name: 'Pipeline packet', status: 'Planned', note: 'Ariadne milestone living packets' },
+      ]
+      return (
+        <div className="page-sections">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-1">
+            <MetricCard label="Active skills" value="0" accent="magenta" tooltip="Runnable agent skills — coming soon" />
+            <MetricCard label="Partial" value="2" accent="amber" tooltip="Behaviors already live via buttons elsewhere" />
+            <MetricCard label="Planned" value={String(plannedSkills.length)} accent="cyan" />
+          </div>
+
+          <CollapsibleSection
+            title="Skills Library"
+            subtitle="Capture automations · agent workflows"
+            icon={Layers}
+            accent="magenta"
+            defaultOpen
+          >
+            <EmptyState
+              icon={Sparkles}
+              title="Skills hub coming soon"
+              description="Focused automations that run with your NAICS slice, vault, and pipeline context — beyond one-off co-pilot prompts."
+              accent="magenta"
+              actions={
+                <Button variant="soft" onClick={() => setSidebar('tools')}>
+                  <Wrench className="w-3.5 h-3.5" /> View MCP Tools
+                </Button>
+              }
+            />
+            <div className="mt-4 space-y-2">
+              {plannedSkills.map((s) => (
+                <div key={s.name} className="tool-card flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="tool-card-name">{s.name}</div>
+                    <div className="tool-card-desc">{s.note}</div>
+                  </div>
+                  <span className={`pill text-[9px] shrink-0 ${s.status === 'Partial' ? 'text-neon-amber border-neon-amber/40' : ''}`}>
+                    {s.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Roadmap"
+            subtitle="What ships before full skill runner"
+            icon={Lightbulb}
+            accent="none"
+            defaultOpen={false}
+          >
+            <div className="text-[10px] text-text-500 leading-relaxed">
+              Priority order: data foundation → contextual dashboard → Pipeline + Vault accumulators → button-driven agent actions (live today) → registered skills with parameters, citations, and rerun from chat.
+            </div>
+          </CollapsibleSection>
+        </div>
+      )
+    }
+
+    if (sidebar === 'settings') {
+      return (
+        <div className="page-sections">
+          <CollapsibleSection
+            title="Workspace"
+            subtitle="NAICS filter · backend health"
+            icon={Settings}
+            accent="lime"
+            defaultOpen
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+              <div className="market-stat-chip">
+                <div className="label">Default NAICS</div>
+                <div className="value text-base font-mono">{naics}</div>
+                <div className="text-[9px] text-text-500 mt-0.5">Change via topbar — applies across dashboard data</div>
+              </div>
+              <div className="market-stat-chip">
+                <div className="label">Backend</div>
+                <div className={`value text-base ${health === 'live' ? 'text-neon-lime' : 'text-neon-amber'}`}>
+                  {health === 'live' ? 'Connected' : health === 'checking' ? 'Checking…' : 'Unreachable'}
+                </div>
+                <div className="text-[9px] text-text-500 mt-0.5">Restart via scripts/start.ps1 if needed</div>
+              </div>
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Agent & Chat"
+            subtitle="Co-pilot model path"
+            icon={MessageSquare}
+            accent="purple"
+            defaultOpen
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm text-text-primary">Response path</div>
+                <div className="text-[10px] text-text-500 mt-0.5">
+                  Fast = deterministic context from your data. Smart = local LLM when configured.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUseSmartModel(!useSmartModel)}
+                className={`chat-model-toggle ${useSmartModel ? 'is-active' : ''}`}
+              >
+                {useSmartModel ? 'Smart model' : 'Fast context'}
+              </button>
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Integrations"
+            subtitle="MCP · SAM.gov API"
+            icon={Wrench}
+            accent="magenta"
+            defaultOpen={false}
+          >
+            <div className="space-y-2 text-[10px] text-text-500">
+              <p>
+                <span className="text-text-400">MCP:</span>{' '}
+                {mcpInfo.mcp_available ? 'External server connected.' : (mcpInfo.how_to_enable || 'Run uvx sam-gov-mcp for full SAM tool coverage.')}
+              </p>
+              <p>
+                <span className="text-text-400">SAM live search:</span> Set SAM_API_KEY on the backend for direct API results when MCP is unavailable.
+              </p>
+              {mcpInfo.note && <p className="text-neon-magenta">{mcpInfo.note}</p>}
+            </div>
+            <Button variant="soft" className="mt-3" onClick={() => setSidebar('tools')}>
+              Open MCP Tools
+            </Button>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Appearance"
+            subtitle="Theme · density · typography"
+            icon={Eye}
+            accent="none"
+            defaultOpen={false}
+          >
+            <EmptyState
+              icon={Settings}
+              title="Theme settings coming soon"
+              description="Shell tokens are unified today. Per-user theme presets and compact density modes will land here."
+              accent="lime"
+            />
+          </CollapsibleSection>
+        </div>
+      )
+    }
+
+    return null
   }
 
   // === Resizable chat pane logic (makes the always-on chat actually useful for longer responses + context) ===

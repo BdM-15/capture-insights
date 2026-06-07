@@ -1089,6 +1089,18 @@ body {
   @apply bg-ink-950 border border-edge rounded-lg p-3 max-h-[420px] overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-text-300 min-w-0;
 }
 
+.tool-card {
+  @apply border border-edge rounded-lg p-2.5 bg-ink-900/80 min-w-0;
+}
+
+.tool-card-name {
+  @apply text-sm font-medium text-neon-cyan truncate;
+}
+
+.tool-card-desc {
+  @apply text-xs text-text-400 mt-0.5 leading-snug;
+}
+
 .chart-tooltip {
   background: var(--ink-card);
   border: 1px solid var(--edge);
