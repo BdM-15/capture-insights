@@ -385,6 +385,51 @@ def get_fy_spend_trends(
     ]
 
 
+def get_future_funding_trajectory(
+    naics_codes: Optional[List[str]] = None,
+    horizon_months: int = 60,
+    db_path: Path | None = None,
+) -> List[Dict[str, Any]]:
+    """Future funding trajectory by year — recurring recompete assumption.
+
+    Groups obligations on contracts whose PoP ends in each future year.
+    Plain English: if requirements recur, this is where the money comes back
+    up for competition (your forward-looking funding radar).
+    """
+    con = get_db_connection(db_path)
+
+    naics_filter = ""
+    if naics_codes:
+        quoted = ",".join(f"'{c}'" for c in naics_codes)
+        naics_filter = f"AND naics_code IN ({quoted})"
+
+    rows = con.execute(f"""
+        SELECT
+            EXTRACT(YEAR FROM period_of_performance_current_end_date)::INTEGER AS end_year,
+            COUNT(*) AS actions,
+            ROUND(SUM(federal_action_obligation) / 1000000.0, 2) AS millions
+        FROM {TABLE}
+        WHERE period_of_performance_current_end_date IS NOT NULL
+          AND period_of_performance_current_end_date >= CURRENT_DATE
+          AND period_of_performance_current_end_date <= CURRENT_DATE + INTERVAL '{horizon_months}' MONTH
+          {naics_filter}
+        GROUP BY end_year
+        ORDER BY end_year
+    """).fetchall()
+    con.close()
+
+    return [
+        {
+            "year": r[0],
+            "fy": f"FY{r[0]}",
+            "actions": r[1],
+            "millions": r[2],
+        }
+        for r in rows
+        if r[0] is not None
+    ]
+
+
 def get_set_aside_breakdown(
     naics_codes: Optional[List[str]] = None,
     db_path: Path | None = None,

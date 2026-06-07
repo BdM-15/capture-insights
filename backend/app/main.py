@@ -151,6 +151,7 @@ from .queries import (
     get_filter_options,
     get_market_potential_summary,
     get_fy_spend_trends,
+    get_future_funding_trajectory,
     get_set_aside_breakdown,
     get_executive_kpis,
     get_agency_intensity,
@@ -267,6 +268,13 @@ async def data_fy_trends(naics: str = "561210"):
     """Fiscal year spend and action counts for trend visualization."""
     naics_list = [n.strip() for n in naics.split(",") if n.strip()]
     return get_fy_spend_trends(naics_list or None)
+
+
+@app.get("/data/future-trajectory", tags=["data"])
+async def data_future_trajectory(naics: str = "561210", months: int = 60):
+    """Forward funding trajectory by year — recurring recompete assumption from expiring PoP dates."""
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_future_funding_trajectory(naics_list or None, horizon_months=months)
 
 
 @app.get("/data/set-aside", tags=["data"])

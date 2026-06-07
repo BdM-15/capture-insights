@@ -497,3 +497,7 @@ body {
 .intensity-row-hot {
   background: rgba(255, 43, 214, 0.04);
 }
+
+.market-chart-grid .market-chart-panel {
+  min-height: 0;
+}

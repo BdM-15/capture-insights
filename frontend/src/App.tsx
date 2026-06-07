@@ -112,6 +112,7 @@ export default function App() {
   const [vehicles, setVehicles] = useState<any[]>([])
   const [geo, setGeo] = useState<any[]>([])
   const [fyTrends, setFyTrends] = useState<any[]>([])
+  const [futureTrajectory, setFutureTrajectory] = useState<any[]>([])
   const [setAside, setSetAside] = useState<any[]>([])
   const [topRecipients, setTopRecipients] = useState<any[]>([])
   const [marketPotential, setMarketPotential] = useState<MarketPotentialData | null>(null)
@@ -245,7 +246,7 @@ export default function App() {
     setStatus('Fetching real bulk data from backend...')
     try {
       const q = `?naics=${naics}`
-      const [k, f, i, e, v, g, tr, sa, trp, mp] = await Promise.all([
+      const [k, f, i, e, v, g, tr, ft, sa, trp, mp] = await Promise.all([
         fetch(`/data/kpis${q}`).then(r => r.json()),
         fetch(`/data/flows${q}&limit=6`).then(r => r.json()),
         fetch(`/data/agency-intensity${q}&limit=12`).then(r => r.json()),
@@ -253,6 +254,7 @@ export default function App() {
         fetch(`/data/vehicles${q}`).then(r => r.json()),
         fetch(`/data/geo${q}&limit=8`).then(r => r.json()),
         fetch(`/data/fy-trends${q}`).then(r => r.json()),
+        fetch(`/data/future-trajectory${q}&months=60`).then(r => r.json()),
         fetch(`/data/set-aside${q}`).then(r => r.json()),
         fetch(`/data/top-recipients${q}&limit=8`).then(r => r.json()),
         fetch(`/data/market_potential${q}`).then(r => r.json()),
@@ -265,6 +267,7 @@ export default function App() {
       setVehicles(v || [])
       setGeo(g || [])
       setFyTrends(tr || [])
+      setFutureTrajectory(Array.isArray(ft) ? ft : [])
       setSetAside(sa || [])
       setTopRecipients(trp || [])
       setStatus(`Live • ${naics} • ${new Date().toLocaleTimeString()} (data from bulk ingest; add more chunks for depth)`)
@@ -497,6 +500,11 @@ export default function App() {
           obligationsM: t.millions || 0,
           actions: t.actions || 0,
         }))
+        const futureTrendData = futureTrajectory.map((t: any) => ({
+          fy: t.fy || `FY${t.year}`,
+          obligationsM: t.millions || 0,
+          actions: t.actions || 0,
+        }))
         const fySpan = trendData.length >= 2
           ? `${trendData[0].fy}–${trendData[trendData.length - 1].fy}`
           : trendData.length === 1 ? trendData[0].fy : 'limited history'
@@ -707,141 +715,139 @@ export default function App() {
               </div>
             </div>
 
-            {/* High-Intensity Agencies — original Data_Insights capture intensity table */}
-            {intensityRanked.length > 0 && (
-              <div className="glass p-4 rounded-3xl border border-[#ff2bd6]/20">
-                <div className="text-sm font-semibold mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-2"><Target size={15} className="text-[#ff2bd6]" /> High-Intensity Agencies (Capture Intensity)</span>
-                  <button onClick={() => setDashTab('agency')} className="text-xs text-[#00f0ff] hover:underline">Agency Intelligence — engage leads →</button>
+            {/* Original Data_Insights 2×2 chart grid: historical | future → intensity | agency list */}
+            <div className="market-chart-grid space-y-4">
+              <div className="text-[9px] uppercase tracking-[1.5px] text-[#64748b] px-0.5">Market Trends &amp; Capture Focus</div>
+
+              {/* Row 1: Historical spend (left) | Future trajectory (right) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="glass p-5 rounded-3xl market-chart-panel">
+                  <div className="text-sm font-semibold mb-1 text-[#00f0ff]">Historical Spend &amp; Actions</div>
+                  <div className="text-[10px] text-[#64748b] mb-2">FY obligation totals and action volume from loaded USASpending bulk history.</div>
+                  {trendData.length > 0 ? (
+                    <div style={{ width: '100%', height: 240 }}>
+                      <ResponsiveContainer>
+                        <LineChart data={trendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1f1f2e" />
+                          <XAxis dataKey="fy" stroke="#606080" tick={{ fontSize: 10 }} />
+                          <YAxis yAxisId="left" stroke="#00f0ff" tick={{ fontSize: 10 }} />
+                          <YAxis yAxisId="right" orientation="right" stroke="#ff2bd6" tick={{ fontSize: 10 }} />
+                          <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e', fontSize: 11 }} />
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                          <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M Obligations" stroke="#00f0ff" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line yAxisId="right" type="monotone" dataKey="actions" name="Actions" stroke="#ff2bd6" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : <div className="text-sm text-slate-400 h-[240px] flex items-center justify-center">Need FY history in bulk data.</div>}
                 </div>
-                <div className="text-[10px] text-[#64748b] mb-2">
-                  Agencies above median on both actions and obligations (pink ★) — prime BD engagement targets from the original Data_Insights pulse. +brain to accumulate; dive deeper in Agency Intelligence.
-                </div>
-                <div className="overflow-auto rounded-xl border border-[#1f2a44]">
-                  <table className="w-full text-xs intensity-table">
-                    <thead>
-                      <tr className="text-[#64748b] text-left border-b border-[#1f2a44]">
-                        <th className="p-2 font-medium">Agency</th>
-                        <th className="p-2 font-medium tabular-nums">Actions</th>
-                        <th className="p-2 font-medium tabular-nums">Obligations</th>
-                        <th className="p-2 font-medium">Intensity</th>
-                        <th className="p-2 font-medium text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {intensityRanked.map((a, idx) => {
-                        const hot = isHotAgency(a)
-                        return (
-                          <tr key={idx} className={`border-b border-[#1f2a44]/60 hover:bg-[#0f1422]/80 ${hot ? 'intensity-row-hot' : ''}`}>
-                            <td className="p-2 text-[#e6ecff] max-w-[200px] truncate" title={a.agency}>{a.agency}</td>
-                            <td className="p-2 tabular-nums">{a.award_count?.toLocaleString()}</td>
-                            <td className="p-2 tabular-nums text-[#00f0ff]">${((a.total_oblig || 0) / 1e6).toFixed(1)}M</td>
-                            <td className="p-2">{hot ? <span className="text-[#ff2bd6] font-medium">★ Hot</span> : <span className="text-[#64748b]">—</span>}</td>
-                            <td className="p-2 text-right">
-                              <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-[10px]">+brain</button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button onClick={() => hotAgencyList.slice(0, 5).forEach((a) => addToBrain(a, a.agency, 'agency'))} className="action-btn brain text-[10px]">+brain all hot agencies</button>
-                  <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">Open Agency Intelligence for engagement notes →</button>
+
+                <div className="glass p-5 rounded-3xl market-chart-panel border border-[#ff2bd6]/15">
+                  <div className="text-sm font-semibold mb-1 text-[#ff2bd6]">Future Trajectory (Recurring Recompete)</div>
+                  <div className="text-[10px] text-[#64748b] mb-2">Assumes requirements recur — obligated $ on contracts ending each year = addressable future funding pool.</div>
+                  {futureTrendData.length > 0 ? (
+                    <div style={{ width: '100%', height: 240 }}>
+                      <ResponsiveContainer>
+                        <LineChart data={futureTrendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1f1f2e" />
+                          <XAxis dataKey="fy" stroke="#606080" tick={{ fontSize: 10 }} />
+                          <YAxis yAxisId="left" stroke="#ff2bd6" tick={{ fontSize: 10 }} />
+                          <YAxis yAxisId="right" orientation="right" stroke="#ffb020" tick={{ fontSize: 10 }} />
+                          <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e', fontSize: 11 }} />
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                          <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M at Recompete" stroke="#ff2bd6" strokeWidth={2} dot={{ r: 4 }} />
+                          <Line yAxisId="right" type="monotone" dataKey="actions" name="Contracts Ending" stroke="#ffb020" strokeWidth={2} strokeDasharray="4 2" dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : <div className="text-sm text-slate-400 h-[240px] flex items-center justify-center">No forward PoP end dates in current slice.</div>}
+                  <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-[#ff2bd6] hover:underline mt-1">Drill into recompete list →</button>
                 </div>
               </div>
-            )}
 
-            {/* Pulse visuals: Momentum + Focus (Intensity) + Flows (Sankey) — at a glance for C2 decisions */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* FY Trends — momentum pulse */}
-              <div className="glass p-5 rounded-3xl">
-                <div className="text-sm font-semibold mb-2">FY Trajectory (Momentum)</div>
-                {trendData.length > 1 ? (
-                  <div style={{ width: '100%', height: 220 }}>
-                    <ResponsiveContainer>
-                      <LineChart data={trendData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1f1f2e" />
-                        <XAxis dataKey="fy" stroke="#606080" />
-                        <YAxis yAxisId="left" stroke="#00f0ff" />
-                        <YAxis yAxisId="right" orientation="right" stroke="#ff2bd6" />
-                        <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e' }} />
-                        <Legend />
-                        <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M" stroke="#00f0ff" strokeWidth={2} dot={false} />
-                        <Line yAxisId="right" type="monotone" dataKey="actions" name="Actions" stroke="#ff2bd6" strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : <div className="text-sm text-slate-400">Ingest more years for trend.</div>}
-              </div>
-
-              {/* Intensity on overview — the key pulse for "where to focus" capture resources */}
-              <div className="glass p-5 rounded-3xl">
-                <div className="text-sm font-semibold mb-2">Capture Intensity</div>
-                {intensity.length ? (
-                  <div style={{ width: '100%', height: 220 }}>
-                    <ResponsiveContainer>
-                      <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
-                        <CartesianGrid stroke="#1f1f2e" />
-                        <XAxis 
-                          type="number" 
-                          dataKey="x" 
-                          name="Actions" 
-                          stroke="#606080" 
-                          tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} 
-                        />
-                        <YAxis 
-                          type="number" 
-                          dataKey="y" 
-                          name="Obligations" 
-                          stroke="#606080" 
-                          tickFormatter={(v) => {
-                            if (v >= 1e9) return `$${(v/1e9).toFixed(1)}B`
-                            if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`
-                            if (v >= 1e3) return `$${(v/1e3).toFixed(0)}K`
-                            return `$${v}`
-                          }} 
-                        />
-                        <ZAxis type="number" dataKey="z" range={[35, 220]} />
-                        <Tooltip 
-                          cursor={{ strokeDasharray: '3 3' }}
-                          content={({ payload }) => {
-                            if (!payload || !payload.length) return null
+              {/* Row 2: Capture intensity scatter (left) | High-intensity agency table (right) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="glass p-5 rounded-3xl market-chart-panel">
+                  <div className="text-sm font-semibold mb-1 text-[#ff2bd6]">Capture Intensity</div>
+                  <div className="text-[10px] text-[#64748b] mb-2">Agencies by volume vs. value — upper-right (pink) = high-intensity BD targets.</div>
+                  {intensity.length ? (
+                    <div style={{ width: '100%', height: 280 }}>
+                      <ResponsiveContainer>
+                        <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
+                          <CartesianGrid stroke="#1f1f2e" />
+                          <XAxis type="number" dataKey="x" name="Actions" stroke="#606080" tick={{ fontSize: 9 }}
+                            tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                          <YAxis type="number" dataKey="y" name="Obligations" stroke="#606080" tick={{ fontSize: 9 }}
+                            tickFormatter={(v) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v}`} />
+                          <ZAxis type="number" dataKey="z" range={[40, 200]} />
+                          <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ payload }) => {
+                            if (!payload?.length) return null
                             const d = payload[0].payload
                             return (
                               <div style={{ background: '#16161f', border: '1px solid #1f1f2e', padding: '6px 8px', fontSize: 11 }}>
-                                <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
+                                <div style={{ fontWeight: 600 }}>{d.name}</div>
                                 <div>Actions: {d.x.toLocaleString()}</div>
                                 <div>Obligations: ${(d.y / 1e6).toFixed(1)}M</div>
+                                {d.isHot && <div style={{ color: '#ff2bd6' }}>★ Hot intensity</div>}
                               </div>
                             )
-                          }}
-                        />
-                        <ReferenceLine x={medActions} stroke="#ff2bd6" strokeDasharray="3 3" />
-                        <ReferenceLine y={medOblig} stroke="#00f0ff" strokeDasharray="3 3" />
-                        <Scatter name="Agencies" data={intensityScatterData}>
-                          {intensityScatterData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.isHot ? '#ff2bd6' : '#00f0ff'} />
-                          ))}
-                        </Scatter>
-                      </ScatterChart>
-                    </ResponsiveContainer>
+                          }} />
+                          <ReferenceLine x={medActions} stroke="#ff2bd6" strokeDasharray="3 3" />
+                          <ReferenceLine y={medOblig} stroke="#00f0ff" strokeDasharray="3 3" />
+                          <Scatter data={intensityScatterData}>
+                            {intensityScatterData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.isHot ? '#ff2bd6' : '#00f0ff'} />
+                            ))}
+                          </Scatter>
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : <div className="text-sm text-slate-400 h-[280px] flex items-center justify-center">Need agency data.</div>}
+                </div>
+
+                <div className="glass p-4 rounded-3xl market-chart-panel border border-[#ff2bd6]/15 flex flex-col">
+                  <div className="text-sm font-semibold mb-1 text-[#ff2bd6] flex items-center justify-between">
+                    <span className="flex items-center gap-2"><Target size={14} /> Top Agencies (Intensity Score)</span>
+                    <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">Agency Intel →</button>
                   </div>
-                ) : <div className="text-sm text-slate-400">Need more agency data.</div>}
-                <div className="text-[10px] text-[#606080] mt-1">Pink dots = hot quadrant (above median actions AND obligations). Size = avg award. Crosshairs = market median.</div>
-                {hotAgencyList.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {hotAgencyList.slice(0, 4).map((a, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-[10px] py-0.5">
-                        <span className="text-[#ff2bd6] truncate">{a.agency}</span>
-                        <span className="text-[#64748b] shrink-0 ml-2">{a.award_count?.toLocaleString()} actions • ${((a.total_oblig || 0) / 1e6).toFixed(0)}M</span>
-                        <button onClick={() => addToBrain(a, a.agency, 'agency')} className="text-[9px] text-[#00f0ff] hover:underline ml-2 shrink-0">+brain</button>
-                      </div>
-                    ))}
-                    <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">All agencies in Agency Intelligence →</button>
-                  </div>
-                )}
+                  <div className="text-[10px] text-[#64748b] mb-2">Ranked by capture intensity — hot (★) agencies first, then by obligations.</div>
+                  {intensityRanked.length > 0 ? (
+                    <div className="flex-1 overflow-auto rounded-xl border border-[#1f2a44] min-h-[280px] max-h-[320px]">
+                      <table className="w-full text-xs intensity-table">
+                        <thead className="sticky top-0 bg-[#11172a] z-10">
+                          <tr className="text-[#64748b] text-left border-b border-[#1f2a44]">
+                            <th className="p-2 font-medium">Agency</th>
+                            <th className="p-2 font-medium tabular-nums">Act.</th>
+                            <th className="p-2 font-medium tabular-nums">$M</th>
+                            <th className="p-2 font-medium">★</th>
+                            <th className="p-2 text-right"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {intensityRanked.map((a, idx) => {
+                            const hot = isHotAgency(a)
+                            return (
+                              <tr key={idx} className={`border-b border-[#1f2a44]/60 hover:bg-[#0f1422]/80 ${hot ? 'intensity-row-hot' : ''}`}>
+                                <td className="p-2 text-[#e6ecff] max-w-[140px] truncate" title={a.agency}>{a.agency}</td>
+                                <td className="p-2 tabular-nums text-[#94a3b8]">{a.award_count?.toLocaleString()}</td>
+                                <td className="p-2 tabular-nums text-[#00f0ff]">{((a.total_oblig || 0) / 1e6).toFixed(1)}</td>
+                                <td className="p-2">{hot ? <span className="text-[#ff2bd6]">★</span> : <span className="text-[#64748b]">—</span>}</td>
+                                <td className="p-2 text-right">
+                                  <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-[9px] px-1">+brain</button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-400 flex-1 flex items-center justify-center min-h-[280px]">No agency intensity data.</div>
+                  )}
+                  {hotAgencyList.length > 0 && (
+                    <button onClick={() => hotAgencyList.forEach((a) => addToBrain(a, a.agency, 'agency'))} className="action-btn brain text-[10px] mt-2 self-start">+brain all ★ hot agencies</button>
+                  )}
+                </div>
               </div>
             </div>
 
