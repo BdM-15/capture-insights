@@ -445,19 +445,31 @@ def get_executive_kpis(
         {naics_filter}
     """).fetchone()
 
-    # Expiring approx (next 24 months)
-    exp = con.execute(f"""
-        SELECT COUNT(*) FROM {TABLE}
-        {naics_filter}
-        AND period_of_performance_current_end_date IS NOT NULL
-        AND period_of_performance_current_end_date >= CURRENT_DATE
-        AND period_of_performance_current_end_date <= CURRENT_DATE + INTERVAL '24' MONTH
-    """).fetchone()[0] if naics_filter else con.execute("""
-        SELECT COUNT(*) FROM usaspending_prime_awards
-        WHERE period_of_performance_current_end_date IS NOT NULL
-          AND period_of_performance_current_end_date >= CURRENT_DATE
-          AND period_of_performance_current_end_date <= CURRENT_DATE + INTERVAL '24' MONTH
-    """).fetchone()[0]
+    def _expiring_window(months: int) -> tuple[int, float]:
+        """Count + obligated $M for awards ending in the next N months (recompete / future funding radar)."""
+        if naics_filter:
+            row = con.execute(f"""
+                SELECT COUNT(*),
+                       ROUND(COALESCE(SUM(federal_action_obligation), 0) / 1000000.0, 2)
+                FROM {TABLE}
+                {naics_filter}
+                AND period_of_performance_current_end_date IS NOT NULL
+                AND period_of_performance_current_end_date >= CURRENT_DATE
+                AND period_of_performance_current_end_date <= CURRENT_DATE + INTERVAL '{months}' MONTH
+            """).fetchone()
+        else:
+            row = con.execute(f"""
+                SELECT COUNT(*),
+                       ROUND(COALESCE(SUM(federal_action_obligation), 0) / 1000000.0, 2)
+                FROM {TABLE}
+                WHERE period_of_performance_current_end_date IS NOT NULL
+                  AND period_of_performance_current_end_date >= CURRENT_DATE
+                  AND period_of_performance_current_end_date <= CURRENT_DATE + INTERVAL '{months}' MONTH
+            """).fetchone()
+        return int(row[0] or 0), float(row[1] or 0)
+
+    exp, future_funding_24m_m = _expiring_window(24)
+    expiring_36m, future_funding_36m_m = _expiring_window(36)
 
     # Rough "active": awards with current PoP end in future or null (very loose)
     active = con.execute(f"""
@@ -479,10 +491,13 @@ def get_executive_kpis(
         "avg_award_value_k": avg_k,
         "unique_awards": uniq_aw,
         "expiring_24m": exp,
+        "expiring_36m": expiring_36m,
+        "future_funding_potential_24m_m": future_funding_24m_m,
+        "future_funding_potential_36m_m": future_funding_36m_m,
         "active_contracts_approx": active,
-        "suitability_pct": 9,   # stub - will be real once we load user capabilities + descriptions match
-        "synergy_pct": 14,      # stub - cross-company fit
-        "note": "Suitability & Synergy are placeholders until your past performance + capability profile is loaded for real matching."
+        "suitability_pct": 9,   # stub — future: match expiring reqs vs global wiki domain/company intel
+        "synergy_pct": 14,      # stub — future: cross business-unit capabilities from global wiki
+        "note": "Suitability & Synergy are vision stubs until global wiki domain intel + company capabilities are loaded and matched against opportunity/agency requirements."
     }
 
 
