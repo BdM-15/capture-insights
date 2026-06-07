@@ -13,6 +13,7 @@ export default defineConfig({
       '/docs': 'http://127.0.0.1:8000',
       '/user': 'http://127.0.0.1:8000',   // Pipeline + Brain persistence (user_accumulators.json)
       '/chat': 'http://127.0.0.1:8000',   // Context-aware chat (uses current NAICS + brain/pipeline + data)
+      '/mcp': 'http://127.0.0.1:8000',
     },
   },
 })

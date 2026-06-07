@@ -241,40 +241,62 @@ export default function App() {
   // MCP info for the dedicated sidebar view + for feeding the chat co-pilot (catalog of what the agent can drive)
   const [mcpInfo, setMcpInfo] = useState<{tools: any[], mcp_available?: boolean, note?: string, how_to_enable?: string}>({ tools: [] })
 
+  async function fetchJson(path: string) {
+    const r = await fetch(path)
+    if (!r.ok) throw new Error(`${r.status} ${path}`)
+    return r.json()
+  }
+
   async function loadData() {
     setLoading(true)
     setStatus('Fetching real bulk data from backend...')
-    try {
-      const q = `?naics=${naics}`
-      const [k, f, i, e, v, g, tr, ft, sa, trp, mp] = await Promise.all([
-        fetch(`/data/kpis${q}`).then(r => r.json()),
-        fetch(`/data/flows${q}&limit=6`).then(r => r.json()),
-        fetch(`/data/agency-intensity${q}&limit=12`).then(r => r.json()),
-        fetch(`/data/expiring${q}&months=36&limit=10`).then(r => r.json()),
-        fetch(`/data/vehicles${q}`).then(r => r.json()),
-        fetch(`/data/geo${q}&limit=8`).then(r => r.json()),
-        fetch(`/data/fy-trends${q}`).then(r => r.json()),
-        fetch(`/data/future-trajectory${q}&months=60`).then(r => r.json()),
-        fetch(`/data/set-aside${q}`).then(r => r.json()),
-        fetch(`/data/top-recipients${q}&limit=8`).then(r => r.json()),
-        fetch(`/data/market_potential${q}`).then(r => r.json()),
-      ])
-      setKpis(k)
-      setMarketPotential(mp)
-      setFlows(f || [])
-      setIntensity(i || [])
-      setExpiring(e || [])
-      setVehicles(v || [])
-      setGeo(g || [])
-      setFyTrends(tr || [])
-      setFutureTrajectory(Array.isArray(ft) ? ft : [])
-      setSetAside(sa || [])
-      setTopRecipients(trp || [])
-      setStatus(`Live • ${naics} • ${new Date().toLocaleTimeString()} (data from bulk ingest; add more chunks for depth)`)
-    } catch (err) {
-      console.error(err)
-      setStatus('Backend unreachable — run "uv run uvicorn backend.app.main:app --reload" in project root. Ingest with the command shown under the NAICS box (now supports simple --dir form).')
+    const q = `?naics=${naics}`
+    const endpoints: { key: string; path: string; required?: boolean }[] = [
+      { key: 'kpis', path: `/data/kpis${q}`, required: true },
+      { key: 'flows', path: `/data/flows${q}&limit=6` },
+      { key: 'intensity', path: `/data/agency-intensity${q}&limit=12` },
+      { key: 'expiring', path: `/data/expiring${q}&months=36&limit=10` },
+      { key: 'vehicles', path: `/data/vehicles${q}` },
+      { key: 'geo', path: `/data/geo${q}&limit=8` },
+      { key: 'fyTrends', path: `/data/fy-trends${q}` },
+      { key: 'futureTrajectory', path: `/data/future-trajectory${q}&months=60` },
+      { key: 'setAside', path: `/data/set-aside${q}` },
+      { key: 'topRecipients', path: `/data/top-recipients${q}&limit=8` },
+      { key: 'marketPotential', path: `/data/market_potential${q}` },
+    ]
+    const settled = await Promise.allSettled(endpoints.map((e) => fetchJson(e.path)))
+    const data: Record<string, unknown> = {}
+    const failures: string[] = []
+    settled.forEach((result, idx) => {
+      const { key, required } = endpoints[idx]
+      if (result.status === 'fulfilled') {
+        data[key] = result.value
+      } else {
+        failures.push(`${key}: ${result.reason?.message || result.reason}`)
+        if (required) data._requiredFailed = true
+      }
+    })
+
+    if (data._requiredFailed || !data.kpis) {
+      console.error('Dashboard data load failed:', failures)
+      setStatus('Backend unreachable — run .\\scripts\\start.ps1 from project root (or open http://127.0.0.1:8000 after backend starts).')
+      setLoading(false)
+      return
     }
+
+    setKpis(data.kpis as KpiData)
+    setMarketPotential((data.marketPotential as MarketPotentialData) || null)
+    setFlows((data.flows as FlowData[]) || [])
+    setIntensity((data.intensity as IntensityData[]) || [])
+    setExpiring((data.expiring as ExpiringData[]) || [])
+    setVehicles((data.vehicles as any[]) || [])
+    setGeo((data.geo as any[]) || [])
+    setFyTrends((data.fyTrends as any[]) || [])
+    setFutureTrajectory(Array.isArray(data.futureTrajectory) ? data.futureTrajectory as any[] : [])
+    setSetAside((data.setAside as any[]) || [])
+    setTopRecipients((data.topRecipients as any[]) || [])
+    const partial = failures.length ? ` • ${failures.length} optional endpoint(s) skipped` : ''
+    setStatus(`Live • ${naics} • ${new Date().toLocaleTimeString()}${partial}`)
     setLoading(false)
   }
 
