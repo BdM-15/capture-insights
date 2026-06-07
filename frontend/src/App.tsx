@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { 
-  BarChart3, Target, Clock, 
+  BarChart3, Target, Clock, TrendingUp,
   RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
 } from 'lucide-react'
@@ -23,6 +23,7 @@ import {
   VIEW_META,
   type SidebarId,
 } from './constants/viewMeta'
+import { CHART } from './constants/chartTheme'
 
 // capture-insights React Frontend
 // Per latest feedback:
@@ -651,15 +652,15 @@ export default function App() {
             <div className="market-pulse-hero">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-semibold text-[#e6ecff] flex items-center gap-2">
-                    <BarChart3 size={18} className="text-[#00f0ff]" />
+                  <div className="text-lg font-semibold text-text-primary flex items-center gap-2">
+                    <BarChart3 size={18} className="text-neon-cyan" />
                     Market Pulse <span className="pill">NAICS {naics}</span>
                   </div>
-                  <div className="text-xs text-[#94a3b8] mt-1 max-w-2xl">
+                  <div className="text-xs text-text-400 mt-1 max-w-2xl">
                     Your command view: total market size, momentum, where money flows, who dominates, and where to focus BD effort. Use the action cards below — then dive into Agency Intelligence for lead engagement.
                   </div>
                 </div>
-                <div className="text-right text-[10px] text-[#64748b] font-mono">
+                <div className="text-right text-[10px] text-text-500 font-mono">
                   <div>FY span: {fySpan}</div>
                   <div>{kpis.total_actions?.toLocaleString()} actions in slice</div>
                 </div>
@@ -675,7 +676,7 @@ export default function App() {
                 </div>
                 <div className="market-stat-chip">
                   <div className="label">Momentum</div>
-                  <div className="value text-[#ff2bd6] text-base">{marketPotential?.trend || '—'}</div>
+                  <div className="value text-neon-magenta text-base">{marketPotential?.trend || '—'}</div>
                 </div>
                 <div className="market-stat-chip">
                   <div className="label">Recompete Radar (24m)</div>
@@ -686,7 +687,7 @@ export default function App() {
 
             {/* Executive KPI row — original Data_Insights 7-card glance + vision stubs for global wiki matching */}
             <div>
-              <div className="text-[9px] uppercase tracking-[1.5px] text-[#64748b] mb-1.5 px-0.5">Executive Summary — Glanceable for Capture Managers</div>
+              <div className="text-[9px] uppercase tracking-[1.5px] text-text-500 mb-1.5 px-0.5">Executive Summary — Glanceable for Capture Managers</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
                 <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip="TAM in your NAICS slice — size pipeline and executive briefs." accent="amber" />
                 <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume — high count = active or fragmented market." accent="cyan" />
@@ -714,10 +715,10 @@ export default function App() {
             <div className="glass p-4 rounded-3xl border border-[#ff2bd6]/25 market-funding-panel">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-[#ff2bd6] flex items-center gap-2">
+                  <div className="text-sm font-semibold text-neon-magenta flex items-center gap-2">
                     <Clock size={15} /> Future Funding Potential
                   </div>
-                  <div className="text-[10px] text-[#94a3b8] mt-1 max-w-xl">
+                  <div className="text-[10px] text-text-400 mt-1 max-w-xl">
                     Total obligated dollars on contracts ending soon — your addressable recompete pool. Chase these via Future Opportunities + SAM monitors before RFPs drop.
                   </div>
                 </div>
@@ -726,23 +727,23 @@ export default function App() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                 <div className="market-stat-chip">
                   <div className="label">24-Month Funding at Risk</div>
-                  <div className="value text-[#ff2bd6]">{fmtObl(kpis.future_funding_potential_24m_m || 0)}</div>
-                  <div className="text-[9px] text-[#64748b] mt-0.5">{fmtNum(kpis.expiring_24m || 0)} contracts</div>
+                  <div className="value text-neon-magenta">{fmtObl(kpis.future_funding_potential_24m_m || 0)}</div>
+                  <div className="text-[9px] text-text-500 mt-0.5">{fmtNum(kpis.expiring_24m || 0)} contracts</div>
                 </div>
                 <div className="market-stat-chip">
                   <div className="label">36-Month Funding at Risk</div>
-                  <div className="value text-[#ff2bd6]">{fmtObl(kpis.future_funding_potential_36m_m || 0)}</div>
-                  <div className="text-[9px] text-[#64748b] mt-0.5">{fmtNum(kpis.expiring_36m || 0)} contracts</div>
+                  <div className="value text-neon-magenta">{fmtObl(kpis.future_funding_potential_36m_m || 0)}</div>
+                  <div className="text-[9px] text-text-500 mt-0.5">{fmtNum(kpis.expiring_36m || 0)} contracts</div>
                 </div>
                 <div className="market-stat-chip">
                   <div className="label">Hot-Agency Recompetes</div>
                   <div className="value">{fmtObl(hotRecompeteM)}</div>
-                  <div className="text-[9px] text-[#64748b] mt-0.5">{hotRecompeteCount} in focus agencies</div>
+                  <div className="text-[9px] text-text-500 mt-0.5">{hotRecompeteCount} in focus agencies</div>
                 </div>
                 <div className="market-stat-chip">
                   <div className="label">Match Lens (Future)</div>
-                  <div className="value text-base text-[#ffb020]">{kpis.suitability_pct}% / {kpis.synergy_pct}%</div>
-                  <div className="text-[9px] text-[#64748b] mt-0.5">suitability • synergy when wiki live</div>
+                  <div className="value text-base text-neon-amber">{kpis.suitability_pct}% / {kpis.synergy_pct}%</div>
+                  <div className="text-[9px] text-text-500 mt-0.5">suitability • synergy when wiki live</div>
                 </div>
               </div>
             </div>
@@ -753,7 +754,7 @@ export default function App() {
                 <div className="title">1. Prioritize customers</div>
                 <div className="body">{hotAgencyList.length} hot agencies (high volume + high value). These are your best BD engagement targets.</div>
                 <div className="actions">
-                  <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">Agency Intelligence →</button>
+                  <button onClick={() => setDashTab('agency')} className="text-[10px] text-neon-cyan hover:underline">Agency Intelligence →</button>
                   <button onClick={() => hotAgencyList.slice(0, 3).forEach((a) => addToBrain(a, a.agency, 'agency'))} className="action-btn brain text-[10px]">+brain top 3</button>
                 </div>
               </div>
@@ -761,7 +762,7 @@ export default function App() {
                 <div className="title">2. Track recompetes</div>
                 <div className="body">{hotRecompeteCount} expiring awards in hot agencies (${hotRecompeteM.toFixed(1)}M). Start positioning before SAM notices drop.</div>
                 <div className="actions">
-                  <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-[#00f0ff] hover:underline">Future Opportunities →</button>
+                  <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-neon-cyan hover:underline">Future Opportunities →</button>
                   {hotRecompeteCount > 0 && <button onClick={() => comboExpiring.slice(0, 2).forEach((e) => addToPipeline(e, 'expiring'))} className="action-btn pipeline text-[10px]">+pipeline top 2</button>}
                 </div>
               </div>
@@ -769,7 +770,7 @@ export default function App() {
                 <div className="title">3. Map the competitive field</div>
                 <div className="body">Top 3 primes hold {top3Pct}% of spend. Know who to team with, ghost, or displace.</div>
                 <div className="actions">
-                  <button onClick={() => setDashTab('competitive')} className="text-[10px] text-[#00f0ff] hover:underline">Competitive Analysis →</button>
+                  <button onClick={() => setDashTab('competitive')} className="text-[10px] text-neon-cyan hover:underline">Competitive Analysis →</button>
                   <button onClick={() => topRecipients.slice(0, 3).forEach((r: any) => addToBrain({ recipient: r.recipient }, r.recipient, 'competitor'))} className="action-btn brain text-[10px]">+brain top 3</button>
                 </div>
               </div>
@@ -777,7 +778,7 @@ export default function App() {
 
             {/* Original Data_Insights 2×2 chart grid: historical | future → intensity | agency list */}
             <div className="market-chart-grid space-y-4">
-              <div className="text-[9px] uppercase tracking-[1.5px] text-[#64748b] px-0.5">Market Trends &amp; Capture Focus</div>
+              <div className="text-[9px] uppercase tracking-[1.5px] text-text-500 px-0.5">Market Trends &amp; Capture Focus</div>
 
               {/* Row 1: Historical spend (left) | Future trajectory (right) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -788,14 +789,14 @@ export default function App() {
                     <div style={{ width: '100%', height: 240 }}>
                       <ResponsiveContainer>
                         <LineChart data={trendData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1f1f2e" />
-                          <XAxis dataKey="fy" stroke="#606080" tick={{ fontSize: 10 }} />
-                          <YAxis yAxisId="left" stroke="#00f0ff" tick={{ fontSize: 10 }} />
-                          <YAxis yAxisId="right" orientation="right" stroke="#ff2bd6" tick={{ fontSize: 10 }} />
-                          <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e', fontSize: 11 }} />
-                          <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M Obligations" stroke="#00f0ff" strokeWidth={2} dot={{ r: 3 }} />
-                          <Line yAxisId="right" type="monotone" dataKey="actions" name="Actions" stroke="#ff2bd6" strokeWidth={2} dot={{ r: 3 }} />
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART.gridStroke} />
+                          <XAxis dataKey="fy" stroke={CHART.axisStroke} tick={CHART.axisTick} />
+                          <YAxis yAxisId="left" stroke={CHART.colors.cyan} tick={CHART.axisTick} />
+                          <YAxis yAxisId="right" orientation="right" stroke={CHART.colors.magenta} tick={CHART.axisTick} />
+                          <Tooltip contentStyle={CHART.tooltipStyle} />
+                          <Legend wrapperStyle={CHART.legendStyle} />
+                          <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M Obligations" stroke={CHART.colors.cyan} strokeWidth={2} dot={{ r: 3 }} />
+                          <Line yAxisId="right" type="monotone" dataKey="actions" name="Actions" stroke={CHART.colors.magenta} strokeWidth={2} dot={{ r: 3 }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -809,19 +810,19 @@ export default function App() {
                     <div style={{ width: '100%', height: 240 }}>
                       <ResponsiveContainer>
                         <LineChart data={futureTrendData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1f1f2e" />
-                          <XAxis dataKey="fy" stroke="#606080" tick={{ fontSize: 10 }} />
-                          <YAxis yAxisId="left" stroke="#ff2bd6" tick={{ fontSize: 10 }} />
-                          <YAxis yAxisId="right" orientation="right" stroke="#ffb020" tick={{ fontSize: 10 }} />
-                          <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e', fontSize: 11 }} />
-                          <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M at Recompete" stroke="#ff2bd6" strokeWidth={2} dot={{ r: 4 }} />
-                          <Line yAxisId="right" type="monotone" dataKey="actions" name="Contracts Ending" stroke="#ffb020" strokeWidth={2} strokeDasharray="4 2" dot={{ r: 3 }} />
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART.gridStroke} />
+                          <XAxis dataKey="fy" stroke={CHART.axisStroke} tick={CHART.axisTick} />
+                          <YAxis yAxisId="left" stroke={CHART.colors.magenta} tick={CHART.axisTick} />
+                          <YAxis yAxisId="right" orientation="right" stroke={CHART.colors.amber} tick={CHART.axisTick} />
+                          <Tooltip contentStyle={CHART.tooltipStyle} />
+                          <Legend wrapperStyle={CHART.legendStyle} />
+                          <Line yAxisId="left" type="monotone" dataKey="obligationsM" name="$M at Recompete" stroke={CHART.colors.magenta} strokeWidth={2} dot={{ r: 4 }} />
+                          <Line yAxisId="right" type="monotone" dataKey="actions" name="Contracts Ending" stroke={CHART.colors.amber} strokeWidth={2} strokeDasharray="4 2" dot={{ r: 3 }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                   ) : <div className="text-sm text-slate-400 h-[240px] flex items-center justify-center">No forward PoP end dates in current slice.</div>}
-                  <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-[#ff2bd6] hover:underline mt-1">Drill into recompete list →</button>
+                  <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-neon-magenta hover:underline mt-1">Drill into recompete list →</button>
                 </div>
               </div>
 
@@ -834,10 +835,10 @@ export default function App() {
                     <div style={{ width: '100%', height: 280 }}>
                       <ResponsiveContainer>
                         <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
-                          <CartesianGrid stroke="#1f1f2e" />
-                          <XAxis type="number" dataKey="x" name="Actions" stroke="#606080" tick={{ fontSize: 9 }}
+                          <CartesianGrid stroke={CHART.gridStroke} />
+                          <XAxis type="number" dataKey="x" name="Actions" stroke={CHART.axisStroke} tick={CHART.axisTickSm}
                             tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
-                          <YAxis type="number" dataKey="y" name="Obligations" stroke="#606080" tick={{ fontSize: 9 }}
+                          <YAxis type="number" dataKey="y" name="Obligations" stroke={CHART.axisStroke} tick={CHART.axisTickSm}
                             tickFormatter={(v) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v}`} />
                           <ZAxis type="number" dataKey="z" range={[40, 200]} />
                           <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ payload }) => {
@@ -848,15 +849,15 @@ export default function App() {
                                 <div style={{ fontWeight: 600 }}>{d.name}</div>
                                 <div>Actions: {d.x.toLocaleString()}</div>
                                 <div>Obligations: ${(d.y / 1e6).toFixed(1)}M</div>
-                                {d.isHot && <div style={{ color: '#ff2bd6' }}>★ Hot intensity</div>}
+                                {d.isHot && <div className="text-neon-magenta">★ Hot intensity</div>}
                               </div>
                             )
                           }} />
-                          <ReferenceLine x={medActions} stroke="#ff2bd6" strokeDasharray="3 3" />
-                          <ReferenceLine y={medOblig} stroke="#00f0ff" strokeDasharray="3 3" />
+                          <ReferenceLine x={medActions} stroke={CHART.colors.magenta} strokeDasharray="3 3" />
+                          <ReferenceLine y={medOblig} stroke={CHART.colors.cyan} strokeDasharray="3 3" />
                           <Scatter data={intensityScatterData}>
                             {intensityScatterData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.isHot ? '#ff2bd6' : '#00f0ff'} />
+                              <Cell key={`cell-${index}`} fill={entry.isHot ? CHART.colors.magenta : CHART.colors.cyan} />
                             ))}
                           </Scatter>
                         </ScatterChart>
@@ -927,22 +928,22 @@ export default function App() {
             <div className="glass p-5 rounded-3xl">
               <div className="text-sm font-semibold mb-2 flex items-center justify-between">
                 Follow the Money (Recipient → Agency → Office)
-                <button onClick={() => setDashTab('competitive')} className="text-xs text-[#00f0ff] hover:underline">Full table + deeper in Competitive →</button>
+                <button onClick={() => setDashTab('competitive')} className="text-xs text-neon-cyan hover:underline">Full table + deeper in Competitive →</button>
               </div>
               {sankeyData.length ? (
                 <div style={{ width: '100%', height: 260 }}>
                   <Plot
                     data={sankeyData}
-                    layout={{ font: { size: 10, color: '#e0e0ff' }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', margin: { t: 5, l: 5, r: 5, b: 5 } }}
+                    layout={{ font: { size: 10, color: CHART.fontColor }, paper_bgcolor: CHART.transparent, plot_bgcolor: CHART.transparent, margin: { t: 5, l: 5, r: 5, b: 5 } }}
                     style={{ width: '100%', height: '100%' }}
                     config={{ displayModeBar: false }}
                   />
                 </div>
               ) : <div className="text-sm text-slate-400">Flows appear with more data.</div>}
               {flows.length > 0 && (
-                <div className="mt-2 text-[10px] text-[#606080]">
+                <div className="mt-2 text-[10px] text-text-500">
                   Top flow: <span className="text-white">{flows[0]?.recipient}</span> → {flows[0]?.agency} ({flows[0]?.office}) ${flows[0]?.millions}M
-                  <button onClick={() => addToBrain(flows[0], flows[0].recipient, 'competitor')} className="ml-2 text-[#00f0ff] hover:underline">+brain</button>
+                  <button onClick={() => addToBrain(flows[0], flows[0].recipient, 'competitor')} className="ml-2 text-neon-cyan hover:underline">+brain</button>
                 </div>
               )}
             </div>
@@ -951,7 +952,7 @@ export default function App() {
             <div className="glass p-5 rounded-3xl">
               <div className="text-sm font-semibold mb-2 flex items-baseline justify-between">
                 Top Competitors by Market Share
-                <span className="text-[10px] text-[#ff2bd6] font-mono tabular-nums">{top3Pct}% in top 3</span>
+                <span className="text-[10px] text-neon-magenta font-mono tabular-nums">{top3Pct}% in top 3</span>
               </div>
               {topRecipients.length ? (
                 <div style={{ width: '100%', height: 200 }}>
@@ -966,7 +967,7 @@ export default function App() {
                     }]}
                     layout={{
                       margin: { t: 2, l: 2, r: 2, b: 2 },
-                      paper_bgcolor: 'rgba(0,0,0,0)',
+                      paper_bgcolor: CHART.transparent,
                       plot_bgcolor: 'rgba(0,0,0,0)',
                     }}
                     style={{ width: '100%', height: '100%' }}
@@ -974,7 +975,7 @@ export default function App() {
                   />
                 </div>
               ) : <div className="text-sm text-slate-400">Load more data for competitor share treemap.</div>}
-              <div className="text-[10px] text-[#606080] mt-1">If a few names dominate, relationship mapping + teaming strategy with (or against) them is high-leverage.</div>
+              <div className="text-[10px] text-text-500 mt-1">If a few names dominate, relationship mapping + teaming strategy with (or against) them is high-leverage.</div>
               <div className="mt-2">
                 <button 
                   onClick={() => {
@@ -993,7 +994,7 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Pricing pie */}
                 <div>
-                  <div className="text-xs font-medium text-[#606080] mb-1">Pricing Types (by $M)</div>
+                  <div className="text-xs font-medium text-text-500 mb-1">Pricing Types (by $M)</div>
                   {pricingValues.length ? (
                     <div style={{ width: '100%', height: 220 }}>
                       <Plot
@@ -1007,7 +1008,7 @@ export default function App() {
                         }]}
                         layout={{
                           margin: { t: 10, l: 5, r: 5, b: 0 },
-                          paper_bgcolor: 'rgba(0,0,0,0)',
+                          paper_bgcolor: CHART.transparent,
                           showlegend: false
                         }}
                         style={{ width: '100%', height: '100%' }}
@@ -1019,7 +1020,7 @@ export default function App() {
 
                 {/* Vehicles pie */}
                 <div>
-                  <div className="text-xs font-medium text-[#606080] mb-1">Contract Vehicles / IDV (by $M)</div>
+                  <div className="text-xs font-medium text-text-500 mb-1">Contract Vehicles / IDV (by $M)</div>
                   {vehicleValues.length ? (
                     <div style={{ width: '100%', height: 220 }}>
                       <Plot
@@ -1033,7 +1034,7 @@ export default function App() {
                         }]}
                         layout={{
                           margin: { t: 10, l: 5, r: 5, b: 0 },
-                          paper_bgcolor: 'rgba(0,0,0,0)',
+                          paper_bgcolor: CHART.transparent,
                           showlegend: false
                         }}
                         style={{ width: '100%', height: '100%' }}
@@ -1043,7 +1044,7 @@ export default function App() {
                   ) : <div className="text-sm text-slate-400 h-[220px] flex items-center">No vehicle data.</div>}
                 </div>
               </div>
-              <div className="text-[10px] text-[#606080] mt-2">
+              <div className="text-[10px] text-text-500 mt-2">
                 See the Vehicles tab for full set-aside mix and detailed vehicle table.
               </div>
             </div>
@@ -1056,52 +1057,52 @@ export default function App() {
                   <div style={{ width: '100%', height: 160 }}>
                     <ResponsiveContainer>
                       <BarChart data={setAsidePulse} layout="vertical" margin={{ left: 4, right: 8 }}>
-                        <XAxis type="number" stroke="#606080" tickFormatter={(v) => `$${v}M`} />
-                        <YAxis dataKey="name" type="category" width={120} stroke="#606080" tick={{ fontSize: 9 }} />
-                        <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e', fontSize: 11 }} />
-                        <Bar dataKey="millions" fill="#00f0ff" radius={[0, 4, 4, 0]} />
+                        <XAxis type="number" stroke={CHART.axisStroke} tickFormatter={(v) => `$${v}M`} />
+                        <YAxis dataKey="name" type="category" width={120} stroke={CHART.axisStroke} tick={CHART.axisTickSm} />
+                        <Tooltip contentStyle={CHART.tooltipStyle} />
+                        <Bar dataKey="millions" fill={CHART.colors.cyan} radius={[0, 4, 4, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 ) : <div className="text-sm text-slate-400">Set-aside data loads with ingest.</div>}
-                <button onClick={() => setDashTab('vehicles')} className="text-[10px] text-[#00f0ff] hover:underline mt-1">Full vehicle analysis →</button>
+                <button onClick={() => setDashTab('vehicles')} className="text-[10px] text-neon-cyan hover:underline mt-1">Full vehicle analysis →</button>
               </div>
 
               <div className="glass p-4 rounded-3xl border border-[#ff2bd6]/20">
-                <div className="text-sm font-semibold mb-2 text-[#ff2bd6]">Hot Recompetes in Focus Agencies</div>
+                <div className="text-sm font-semibold mb-2 text-neon-magenta">Hot Recompetes in Focus Agencies</div>
                 {comboExpiring.length ? (
                   <div className="space-y-1.5">
                     {comboExpiring.slice(0, 4).map((e, idx) => (
-                      <div key={idx} className="flex items-center justify-between gap-2 text-[11px] py-1 border-b border-[#1f2a44]/60">
+                      <div key={idx} className="flex items-center justify-between gap-2 text-[11px] py-1 border-b border-edge/60">
                         <div className="min-w-0 truncate">
-                          <span className="text-[#e6ecff]">{e.recipient}</span>
-                          <span className="text-[#64748b]"> @ {e.agency}</span>
+                          <span className="text-text-primary">{e.recipient}</span>
+                          <span className="text-text-500"> @ {e.agency}</span>
                         </div>
                         <div className="shrink-0 flex items-center gap-2">
-                          <span className="text-[#00f0ff] tabular-nums">${((e.obligation || 0) / 1e6).toFixed(1)}M</span>
-                          <button onClick={() => setDashTab('opportunities')} className="text-[9px] text-[#64748b] hover:text-[#00f0ff]">{e.end_date?.slice(0, 7)}</button>
+                          <span className="text-neon-cyan tabular-nums">${((e.obligation || 0) / 1e6).toFixed(1)}M</span>
+                          <button onClick={() => setDashTab('opportunities')} className="text-[9px] text-text-500 hover:text-neon-cyan">{e.end_date?.slice(0, 7)}</button>
                         </div>
                       </div>
                     ))}
                     <button onClick={() => setDashTab('opportunities')} className="action-btn pipeline text-[10px] mt-2">View all + create SAM monitors →</button>
                   </div>
                 ) : (
-                  <div className="text-xs text-[#64748b]">No expiring awards in hot agencies in current slice. Add brain entries or check Future Opportunities for full radar.</div>
+                  <div className="text-xs text-text-500">No expiring awards in hot agencies in current slice. Add brain entries or check Future Opportunities for full radar.</div>
                 )}
               </div>
             </div>
 
             <div className="insight">
-              <strong className="text-[#e6ecff]">What this tab tells you:</strong> Total market size, whether spend is growing or shrinking, which agencies and competitors matter, and how work is bought. This is your 60-second capture pulse before customer calls or pipeline reviews.
+              <strong className="text-text-primary">What this tab tells you:</strong> Total market size, whether spend is growing or shrinking, which agencies and competitors matter, and how work is bought. This is your 60-second capture pulse before customer calls or pipeline reviews.
             </div>
             <div className="insight magenta">
-              <strong className="text-[#e6ecff]">Act today:</strong> +brain hot agencies and top competitors from this view. They compound in Knowledge Vault and feed your co-pilot. Use Future Opportunities for expiring work and SAM monitors.
+              <strong className="text-text-primary">Act today:</strong> +brain hot agencies and top competitors from this view. They compound in Knowledge Vault and feed your co-pilot. Use Future Opportunities for expiring work and SAM monitors.
             </div>
             <div className="insight lime">
-              <strong className="text-[#e6ecff]">Go deeper next:</strong> Agency Intelligence tab — engagement notes and lead development on the high-intensity customers surfaced above. (Next polish target.)
+              <strong className="text-text-primary">Go deeper next:</strong> Agency Intelligence tab — engagement notes and lead development on the high-intensity customers surfaced above. (Next polish target.)
             </div>
             <div className="insight vault">
-              <strong className="text-[#e6ecff]">Suitability &amp; Synergy (vision stubs):</strong> These KPIs will activate when global wiki domain intel + company capabilities are built. Suitability = does this contract/agency fit <em>your</em> BU? Synergy = can <em>other</em> BUs strengthen the pursuit? Future research/web-scraping profile building feeds the match.
+              <strong className="text-text-primary">Suitability &amp; Synergy (vision stubs):</strong> These KPIs will activate when global wiki domain intel + company capabilities are built. Suitability = does this contract/agency fit <em>your</em> BU? Synergy = can <em>other</em> BUs strengthen the pursuit? Future research/web-scraping profile building feeds the match.
             </div>
           </div>
         )
@@ -1128,7 +1129,7 @@ export default function App() {
               <div className="insight magenta">
                 Why this matters: These are live recompete opportunities you can start positioning for today. Early engagement is the highest-leverage capture activity. Prioritize the ones in agencies where you already see high intensity or existing flows.
               </div>
-              <div className="text-[10px] text-[#39ff14] mt-1">Buttons like "Create SAM monitor (smart)" activate the agent (LLM + MCP) to complete the task with smart params + citations. Chat co-pilot is great for questions and exploration.</div>
+              <div className="text-[10px] text-neon-lime mt-1">Buttons like "Create SAM monitor (smart)" activate the agent (LLM + MCP) to complete the task with smart params + citations. Chat co-pilot is great for questions and exploration.</div>
               <input
                 value={oppSearch}
                 onChange={(e) => setOppSearch(e.target.value)}
@@ -1239,108 +1240,153 @@ export default function App() {
                   },
                 ]}
               />
-              <div className="text-[10px] text-[#606080] mt-2">Click +pipeline on the ones that fit your capabilities or relationships. "Search SAM for this" prefills a live search for the actual notice/RFI on that cycle. These items accumulate in the separate Pipeline view (sidebar). Use +brain / + to Knowledge Vault from Competitive & Agency tabs for the standalone vault.</div>
+              <div className="text-[10px] text-text-500 mt-2">Click +pipeline on the ones that fit your capabilities or relationships. "Search SAM for this" prefills a live search for the actual notice/RFI on that cycle. These items accumulate in the separate Pipeline view (sidebar). Use +brain / + to Knowledge Vault from Competitive & Agency tabs for the standalone vault.</div>
             </div>
 
             {/* Live SAM layer — the "new + emerging" that complements historical recompete cycles */}
             <div>
               <div className="tab-title tab-title-cyan mb-2">Live & Emerging from SAM.gov</div>
               <div className="mb-2 flex flex-wrap gap-1 text-[10px]">
-                <span className="text-[#606080] mr-1 self-center">Example prompts for the co-pilot (drives MCP for you):</span>
-                <button onClick={() => { const p = 'Search SAM for live RFI/Sources Sought/Special Notice matching the agencies and recipients in my Brain and the expiring contracts. Then propose 2-3 to create monitors for and add to pipeline.'; setChatInput(p); setTimeout(() => sendChat(), 20); }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20 border border-[#00f0ff]/20">Search SAM for my Brain + expiring</button>
-                <button onClick={() => { const p = 'Using my current hot agencies from intensity and Brain, find any new CSO/OTA or open solicitation on SAM and suggest monitors.'; setChatInput(p); setTimeout(() => sendChat(), 20); }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20 border border-[#00f0ff]/20">Find new work for hot agencies in Brain</button>
+                <span className="text-text-500 mr-1 self-center">Example prompts for the co-pilot (drives MCP for you):</span>
+                <button type="button" onClick={() => askCoPilot('Search SAM for live RFI/Sources Sought/Special Notice matching the agencies and recipients in my Brain and the expiring contracts. Then propose 2-3 to create monitors for and add to pipeline.', true)} className="filter-pill">Search SAM for my Brain + expiring</button>
+                <button type="button" onClick={() => askCoPilot('Using my current hot agencies from intensity and Brain, find any new CSO/OTA or open solicitation on SAM and suggest monitors.', true)} className="filter-pill">Find new work for hot agencies</button>
               </div>
               <div className="insight">
                 USASpending tells you the historical cycles and who wins recurring work. SAM.gov is where the actual RFIs, Sources Sought, Special Notices, and eventual RFPs appear — plus brand new work (CSOs, OTAs, open solicitations, traditional FAR requirements with no prior history). Use the expiring list above to seed searches for "the known universe", then discover net-new.
-                <span className="block mt-1 text-[#39ff14]">The co-pilot (chat) is the intended way to drive these searches and create monitors via MCP — tell it in natural language what you want researched/monitored. Manual controls here are escape hatches.</span>
+                <span className="block mt-1 text-neon-lime">The co-pilot (chat) is the intended way to drive these searches and create monitors via MCP — tell it in natural language what you want researched/monitored. Manual controls here are escape hatches.</span>
               </div>
-              <div className="flex gap-2 mb-2">
+              <div className="flex gap-2 mb-2 flex-wrap">
                 <input
                   value={samKeywords}
                   onChange={(e) => setSamKeywords(e.target.value)}
-                  placeholder="Keywords (agency, recipient, 'facilities support', etc.)"
-                  className="flex-1 bg-[#16161f] border border-[#1f1f2e] text-sm px-3 py-1.5 rounded"
+                  placeholder="Keywords (agency, recipient, facilities support…)"
+                  className="input-field flex-1 min-w-[200px]"
                 />
                 <input
                   value={samNoticeTypes}
                   onChange={(e) => setSamNoticeTypes(e.target.value)}
                   placeholder="Notice types (comma separated)"
-                  className="w-72 bg-[#16161f] border border-[#1f1f2e] text-sm px-3 py-1.5 rounded"
+                  className="input-field w-72"
                 />
-                <button onClick={searchSamLive} disabled={loading} className="px-4 py-1.5 rounded bg-[#00f0ff] text-black text-sm font-semibold">Search SAM</button>
-                <button onClick={() => {
+                <Button variant="primary" onClick={searchSamLive} disabled={loading}>Search SAM</Button>
+                <Button variant="soft" onClick={() => {
                   const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords)}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`
                   addToPipeline({ title: `SAM Monitor: ${samKeywords || 'custom'}`, agency: 'Custom', monitorUrl, notes: `Notice types: ${samNoticeTypes}` }, 'sam-monitor')
-                }} className="px-3 py-1.5 text-sm border border-[#00f0ff]/50 rounded hover:bg-[#00f0ff]/10">Create custom monitor</button>
+                }}>Create custom monitor</Button>
               </div>
               <div className="flex flex-wrap gap-1 mb-2 text-xs">
                 {['RFI','Sources Sought','Special Notice','Presolicitation','Solicitation'].map(t => (
-                  <button key={t} onClick={() => {
+                  <button key={t} type="button" onClick={() => {
                     const current = samNoticeTypes.split(',').map(s=>s.trim()).filter(Boolean);
                     if (!current.includes(t)) setSamNoticeTypes([...current, t].join(','));
-                  }} className="px-2 py-0.5 bg-[#1f1f2e] rounded hover:bg-[#00f0ff]/20">{t}</button>
+                  }} className="filter-pill">{t}</button>
                 ))}
               </div>
-              <div className="text-[10px] text-[#606080] mb-2">Tip: Primary path = tell the AI Co-pilot (e.g. "search SAM for hot agencies in my vault and expiring cycles, create monitors for relevant RFIs"). It will use available MCP tools under the hood and surface +pipeline actions. The controls below and "Search SAM for this" are manual escape hatches. (To enable richer live MCP: run `uvx sam-gov-mcp` in another terminal.)</div>
-              <div className="glass rounded-3xl overflow-hidden text-sm">
-                <table className="w-full"><tbody>
-                  {samResults.length === 0 && <tr><td className="p-3 text-slate-400">No SAM results yet — enter keywords and search (requires SAM_API_KEY on backend for live data).</td></tr>}
-                  {samResults.map((s: any, idx: number) => (
-                    <tr key={idx} className="border-b border-[#1f1f2e] hover:bg-[#16161f]">
-                      <td className="p-3 truncate max-w-[260px]">{s.title}</td>
-                      <td className="p-3 text-xs text-[#a0a0c0]">{s.noticeType}</td>
-                      <td className="p-3 text-xs">{s.responseDeadLine}</td>
-                      <td className="p-3 text-xs text-[#00f0ff]">{(s.agency || '').slice(0,20)}</td>
-                      <td className="p-3 text-[9px] text-[#606080]">{s._source ? (s._source.startsWith('mcp') ? 'via MCP' : 'direct API') : ''}</td>
-                      <td className="p-3 text-right space-x-1">
-                        {s.link && <a href={s.link} target="_blank" rel="noopener" className="text-xs text-[#00f0ff] hover:underline">sam.gov ↗</a>}
+              <div className="text-[10px] text-text-500 mb-2">Tip: Primary path = tell the AI Co-pilot (e.g. "search SAM for hot agencies in my vault and expiring cycles, create monitors for relevant RFIs"). It will use available MCP tools under the hood and surface +pipeline actions. The controls below and "Search SAM for this" are manual escape hatches. (To enable richer live MCP: run `uvx sam-gov-mcp` in another terminal.)</div>
+              <DataTable
+                data={samResults}
+                rowKey={(s: any, i) => s.noticeId || s.title || i}
+                emptyMessage="No SAM results yet — enter keywords and search (requires SAM_API_KEY on backend)."
+                columns={[
+                  {
+                    key: 'title',
+                    header: 'Notice',
+                    render: (s: any) => <span className="truncate max-w-[220px] block" title={s.title}>{s.title}</span>,
+                  },
+                  { key: 'type', header: 'Type', cellClassName: 'text-text-400 text-xs', render: (s: any) => s.noticeType || '—' },
+                  { key: 'deadline', header: 'Due', cellClassName: 'text-xs', render: (s: any) => s.responseDeadLine || '—' },
+                  { key: 'agency', header: 'Agency', cellClassName: 'text-neon-cyan text-xs', render: (s: any) => (s.agency || '').slice(0, 20) },
+                  {
+                    key: 'source',
+                    header: 'Src',
+                    cellClassName: 'text-[9px] text-text-500',
+                    render: (s: any) => (s._source?.startsWith('mcp') ? 'MCP' : s._source ? 'API' : ''),
+                  },
+                  {
+                    key: 'actions',
+                    header: '',
+                    align: 'right',
+                    render: (s: any) => (
+                      <div className="row-actions">
+                        {s.link && (
+                          <a href={s.link} target="_blank" rel="noopener" className="text-xs text-neon-cyan hover:underline">
+                            sam.gov ↗
+                          </a>
+                        )}
                         <button onClick={() => addToPipeline(s, 'sam-opp')} className="action-btn pipeline text-xs">+ pipeline</button>
-                        <button 
+                        <AskCoPilotButton
+                          prompt={`Evaluate this SAM notice for NAICS ${naics}: "${s.title}" (${s.noticeType || 'unknown type'}) at ${s.agency || 'unknown agency'}. Fit, risks, and next capture steps?`}
+                          onAsk={askCoPilot}
+                        />
+                        <button
                           onClick={async () => {
                             try {
                               setLoading(true)
                               const res = await fetch('/user/actions/create-sam-monitor', {
-                                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ item: s, naics, brain, use_llm: useSmartModel })
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ item: s, naics, brain, use_llm: useSmartModel }),
                               })
-                              if (res.ok) { const d = await res.json(); await syncAccumulators(); setChatHistory(h => [...h, { role: 'assistant', content: `Agent created smart monitor: ${d.entry?.title || s.title}` }]) }
-                              else { /* fallback */ const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords || s.title || '')}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`; addToPipeline({ ...s, type: 'sam-monitor', monitorUrl, notes: `Monitor for: ${samKeywords || 'cycle'} | ${s.agency}` }, 'sam-monitor') }
-                            } catch { const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords || s.title || '')}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`; addToPipeline({ ...s, type: 'sam-monitor', monitorUrl, notes: `Monitor for: ${samKeywords || 'cycle'} | ${s.agency}` }, 'sam-monitor') }
-                            finally { setLoading(false) }
+                              if (res.ok) {
+                                const d = await res.json()
+                                await syncAccumulators()
+                                showToast(`Monitor created: ${d.entry?.title || s.title}`, 'success')
+                              } else {
+                                const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords || s.title || '')}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`
+                                addToPipeline({ ...s, type: 'sam-monitor', monitorUrl, notes: `Monitor for: ${samKeywords || 'cycle'} | ${s.agency}` }, 'sam-monitor')
+                              }
+                            } catch {
+                              const monitorUrl = `https://sam.gov/search/?index=opp&q=${encodeURIComponent(samKeywords || s.title || '')}&naics=${naics}${samNoticeTypes ? '&noticeType=' + encodeURIComponent(samNoticeTypes) : ''}`
+                              addToPipeline({ ...s, type: 'sam-monitor', monitorUrl, notes: `Monitor for: ${samKeywords || 'cycle'} | ${s.agency}` }, 'sam-monitor')
+                            } finally {
+                              setLoading(false)
+                            }
                           }}
-                          className="text-xs text-[#39ff14] hover:underline"
-                          title="Agent builds smart monitor params + rationale from this result + your Brain"
+                          className="action-btn pipeline text-xs"
+                          title="Agent builds smart monitor from this result + Brain"
                         >
-                          Create Monitor (smart)
+                          Monitor
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody></table>
-              </div>
-              <div className="text-[10px] text-[#606080] mt-2">Results via /mcp/sam (prefers MCP when available). Use the "Create SAM monitor (smart)" button (or on expiring rows) for agent-assisted monitors with LLM-chosen params + citations. Chat also works for open-ended discovery.</div>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+              <div className="text-[10px] text-text-500 mt-2">Results via /mcp/sam (prefers MCP when available). Use the "Create SAM monitor (smart)" button (or on expiring rows) for agent-assisted monitors with LLM-chosen params + citations. Chat also works for open-ended discovery.</div>
 
               {/* My SAM Monitors - saved searches from Create Monitor */}
               <div className="mt-4">
                 <div className="text-sm font-semibold mb-2">My SAM Monitors (saved searches)</div>
-                {pipeline.filter((p: any) => p.type === 'sam-monitor').length === 0 ? (
-                  <div className="text-xs text-slate-400">No monitors yet. Use "Create Monitor" on search results or expiring items to save recurring SAM searches.</div>
-                ) : (
-                  <div className="glass rounded-3xl overflow-hidden text-sm">
-                    <table className="w-full"><tbody>
-                      {pipeline.filter((p: any) => p.type === 'sam-monitor').map((m: any, i: number) => (
-                        <tr key={i} className="border-b border-[#1f1f2e] hover:bg-[#16161f]">
-                          <td className="p-3 truncate">{m.title || m.monitorUrl || 'SAM Monitor'}</td>
-                          <td className="p-3 text-xs">{m.agency}</td>
-                          <td className="p-3 text-right">
-                            {m.monitorUrl && <a href={m.monitorUrl} target="_blank" className="text-xs text-[#00f0ff] hover:underline mr-2">Open in SAM ↗</a>}
-                            <button onClick={() => removeFromPipeline(m.id || m.ts)} className="text-xs text-[#ff3b6b]">× remove</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody></table>
-                  </div>
-                )}
+                <DataTable
+                  data={pipeline.filter((p: any) => p.type === 'sam-monitor')}
+                  rowKey={(m: any) => m.id || m.ts}
+                  emptyMessage="No monitors yet — create from SAM results or expiring rows."
+                  columns={[
+                    {
+                      key: 'title',
+                      header: 'Monitor',
+                      render: (m: any) => m.title || m.monitorUrl || 'SAM Monitor',
+                    },
+                    { key: 'agency', header: 'Agency', cellClassName: 'text-xs text-text-400', render: (m: any) => m.agency || '—' },
+                    {
+                      key: 'actions',
+                      header: '',
+                      align: 'right',
+                      render: (m: any) => (
+                        <div className="row-actions">
+                          {m.monitorUrl && (
+                            <a href={m.monitorUrl} target="_blank" rel="noopener" className="text-xs text-neon-cyan hover:underline">
+                              Open SAM ↗
+                            </a>
+                          )}
+                          <button onClick={() => removeFromPipeline(m.id || m.ts)} className="action-btn destructive text-xs">
+                            remove
+                          </button>
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
               </div>
 
               {/* My Focus - ultra-light derived view on the *current* simple JSON Brain + native wiki excerpts (per plan).
@@ -1349,7 +1395,7 @@ export default function App() {
                   Will get even richer as the full Obsidian/Karpathy wiki (global/, pursuits/, more synthesis) lands. */}
               <div className="mt-4">
                 <div className="text-sm font-semibold mb-1">My Focus (lightweight intersections from your Brain + wiki excerpts + recent agent-created smart monitors + live data)</div>
-                <div className="text-[10px] text-[#606080] mb-2">Ultra-light client-side view. Uses both the JSON accumulator and the native wiki .md excerpts (synthesized by LLM from USASpending signals + citations). Add +brain or create smart monitors to populate. Will become much more powerful with the full Obsidian/Karpathy LLM wiki (global seeds, per-pursuit folders, backlinks, etc.).</div>
+                <div className="text-[10px] text-text-500 mb-2">Ultra-light client-side view. Uses both the JSON accumulator and the native wiki .md excerpts (synthesized by LLM from USASpending signals + citations). Add +brain or create smart monitors to populate. Will become much more powerful with the full Obsidian/Karpathy LLM wiki (global seeds, per-pursuit folders, backlinks, etc.).</div>
 
                 {/* Simple intersections - reuse existing state and logic patterns. Now also folds in brainWiki excerpts for matches. */}
                 {(() => {
@@ -1389,7 +1435,7 @@ export default function App() {
                           {brainMatchedExpiring.map((e: any, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 pl-2">
                               <span>{e.recipient || '—'} @ {e.agency} (ends {e.end_date})</span>
-                              <button onClick={() => addToPipeline(e, 'expiring-from-focus')} className="text-[#00f0ff] hover:underline">+ pipeline</button>
+                              <button onClick={() => addToPipeline(e, 'expiring-from-focus')} className="text-neon-cyan hover:underline">+ pipeline</button>
                             </div>
                           ))}
                         </div>
@@ -1400,7 +1446,7 @@ export default function App() {
                           {monitorOverlaps.map((m: any, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 pl-2">
                               <span>{m.title || m.agency}</span>
-                              {m.monitorUrl && <a href={m.monitorUrl} target="_blank" className="text-[#00f0ff] hover:underline">open ↗</a>}
+                              {m.monitorUrl && <a href={m.monitorUrl} target="_blank" className="text-neon-cyan hover:underline">open ↗</a>}
                             </div>
                           ))}
                         </div>
@@ -1411,7 +1457,7 @@ export default function App() {
                           {brainHotAgencies.map((a: any, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 pl-2">
                               <span>{a.agency} — {a.award_count} actions, ${(a.total_oblig||0)/1e6}M</span>
-                              <button onClick={() => addToBrain(a, a.agency, 'agency')} className="text-[#39ff14] hover:underline">+ brain (already tracked)</button>
+                              <button onClick={() => addToBrain(a, a.agency, 'agency')} className="text-neon-lime hover:underline">+ brain (already tracked)</button>
                             </div>
                           ))}
                         </div>
@@ -1485,7 +1531,7 @@ export default function App() {
                 },
               ]}
             />
-            <div className="text-[10px] text-[#606080]">Use +brain on agencies where you see real volume or existing relationships. Your Brain becomes the living packet the chat and future tools read from.</div>
+            <div className="text-[10px] text-text-500">Use +brain on agencies where you see real volume or existing relationships. Your Brain becomes the living packet the chat and future tools read from.</div>
           </div>
         )
       }
@@ -1525,15 +1571,15 @@ export default function App() {
           node: {
             pad: 15,
             thickness: 20,
-            line: { color: '#1f1f2e', width: 0.5 },
+            line: { color: CHART.sankeyNodeLine, width: 0.5 },
             label: sankeyNodes.map(n => n.label),
-            color: '#00f0ff',
+            color: CHART.colors.cyan,
           },
           link: {
             source: sankeyLinks.map(l => l.source),
             target: sankeyLinks.map(l => l.target),
             value: sankeyLinks.map(l => l.value),
-            color: 'rgba(0,240,255,0.3)',
+            color: CHART.sankeyLink,
           },
         }]
 
@@ -1552,9 +1598,9 @@ export default function App() {
                   <Plot
                     data={sankeyData}
                     layout={{
-                      font: { size: 11, color: '#e0e0ff' },
-                      paper_bgcolor: 'rgba(0,0,0,0)',
-                      plot_bgcolor: 'rgba(0,0,0,0)',
+                      font: { size: 11, color: CHART.fontColor },
+                      paper_bgcolor: CHART.transparent,
+                      plot_bgcolor: CHART.transparent,
                       margin: { t: 10, l: 10, r: 10, b: 10 },
                     }}
                     style={{ width: '100%', height: '100%' }}
@@ -1651,20 +1697,20 @@ export default function App() {
                 <div style={{ width: '100%', height: 240 }}>
                   <ResponsiveContainer>
                     <BarChart data={setAsideData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1f1f2e" />
-                      <XAxis type="number" stroke="#606080" />
-                      <YAxis dataKey="name" type="category" width={160} stroke="#606080" />
-                      <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e' }} />
-                      <Bar dataKey="millions" name="$ Millions" fill="#00f0ff">
+                      <CartesianGrid strokeDasharray="3 3" stroke={CHART.gridStroke} />
+                      <XAxis type="number" stroke={CHART.axisStroke} />
+                      <YAxis dataKey="name" type="category" width={160} stroke={CHART.axisStroke} />
+                      <Tooltip contentStyle={CHART.tooltipStyle} />
+                      <Bar dataKey="millions" name="$ Millions" fill={CHART.colors.cyan}>
                         {setAsideData.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? '#ff2bd6' : '#00f0ff'} />
+                          <Cell key={`cell-${index}`} fill={index === 0 ? CHART.colors.magenta : CHART.colors.cyan} />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               ) : <div className="text-sm text-slate-400">Set-aside breakdown loads with more ingest data.</div>}
-              <div className="text-[11px] text-[#606080] mt-2">
+              <div className="text-[11px] text-text-500 mt-2">
                 "NO SET ASIDE / FULL OPEN" dominant → expect prime-level competition or large IDIQs; plan for strong past performance emphasis or teaming. High small-business set-asides → look for JV / mentor-protégé or sub opportunities. This pairs with the vehicle table above to shape your bid strategy.
               </div>
             </div>
@@ -1712,25 +1758,47 @@ export default function App() {
       case 'combo': {
         return (
           <div>
-            <div className="text-lg font-semibold mb-1 text-[#39ff14]">Combo Insight: Expiring contracts inside High-Intensity ("hot") agencies</div>
+            <div className="tab-title tab-title-lime mb-1">Combo Insight — Expiring in Hot Agencies</div>
             <div className="insight lime">
-              This is the non-obvious high-value signal: recompetes where the buyer is already spending heavily in your space (both volume and dollars). These are the gaps most worth early capture investment. Add the right ones to pipeline. If the recipient is a player you need to understand, also +brain them from the competitive tab.
+              Recompetes where the buyer is already spending heavily in your space. Highest-leverage early capture signal — add to pipeline and +brain competitors from Competitive tab.
             </div>
             {comboExpiring.length ? (
-              <div className="glass rounded-3xl overflow-hidden text-sm">
-                <table className="w-full"><tbody>
-                  {comboExpiring.slice(0,6).map((e,idx) => (
-                    <tr key={idx} className="border-b border-[#1f1f2e]">
-                      <td className="p-3 font-mono text-xs">{e.end_date}</td>
-                      <td className="p-3 truncate">{e.recipient}</td>
-                      <td className="p-3 tabular-nums">${((e.obligation||0)/1e6).toFixed(1)}M</td>
-                      <td className="p-3 text-[#39ff14]">{(e.agency||'').slice(0,18)} ★</td>
-                      <td className="p-3 text-right"><button onClick={() => addToPipeline(e,'combo')} className="action-btn pipeline">+ pipeline</button></td>
-                    </tr>
-                  ))}
-                </tbody></table>
-              </div>
-            ) : <div className="text-sm text-slate-400">No overlaps in current slice. Ingest more chunks (your download is still producing zips) — this view becomes extremely powerful fast.</div>}
+              <DataTable
+                data={comboExpiring.slice(0, 6)}
+                rowKey={(e, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
+                rowClassName={() => 'intensity-row-hot'}
+                columns={[
+                  { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs', render: (e) => e.end_date },
+                  { key: 'recipient', header: 'Recipient', render: (e) => e.recipient || '—' },
+                  { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan', render: (e) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M` },
+                  { key: 'agency', header: 'Hot agency', cellClassName: 'text-neon-lime text-xs', render: (e) => `${(e.agency || '').slice(0, 18)} ★` },
+                  {
+                    key: 'actions',
+                    header: '',
+                    align: 'right',
+                    render: (e) => (
+                      <div className="row-actions">
+                        <button onClick={() => addToPipeline(e, 'combo')} className="action-btn pipeline">+ pipeline</button>
+                        <AskCoPilotButton
+                          prompt={`Hot-agency recompete: ${e.recipient} at ${e.agency} ends ${e.end_date} ($${((e.obligation || 0) / 1e6).toFixed(1)}M). Why is this high-value and what should I do in the next 30 days?`}
+                          onAsk={askCoPilot}
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            ) : (
+              <EmptyState
+                icon={TrendingUp}
+                title="No hot-agency overlaps yet"
+                description="Combo matches expiring contracts in high-intensity agencies. Ingest more bulk data or add brain entries to unlock intersections."
+                accent="lime"
+                actions={
+                  <Button variant="soft" onClick={() => { setSidebar('dashboard'); setDashTab('market') }}>Back to Market Overview</Button>
+                }
+              />
+            )}
           </div>
         )
       }
@@ -1802,7 +1870,7 @@ export default function App() {
                     <div><span className="font-medium">{p.type}</span> — {p.recipient || p.agency || p.label || JSON.stringify(p).slice(0,70)}</div>
                     <div className="entry-meta">from {p.source || 'dashboard'} • NAICS {p.naics} • {new Date(p.ts).toLocaleDateString()}</div>
                   </div>
-                  <button onClick={() => removeFromPipeline(pid)} className="text-[#fda4af] text-xs hover:underline shrink-0" title="Remove this pursuit from the accumulator (native files if any stay)">remove</button>
+                  <button onClick={() => removeFromPipeline(pid)} className="text-neon-red/80 text-xs hover:underline shrink-0" title="Remove this pursuit from the accumulator (native files if any stay)">remove</button>
                 </div>
               )
             })}
@@ -1812,7 +1880,7 @@ export default function App() {
               </button>
             )}
           </div>
-          <div className="text-[10px] text-[#64748b] px-1">Pipeline and Knowledge Vault are intentionally separate. Pipeline = active pursuits. Vault = compounding domain intelligence + your observations (see sidebar).</div>
+          <div className="text-[10px] text-text-500 px-1">Pipeline and Knowledge Vault are intentionally separate. Pipeline = active pursuits. Vault = compounding domain intelligence + your observations (see sidebar).</div>
         </div>
       )
     }
@@ -1830,18 +1898,18 @@ export default function App() {
               <BookOpen size={15}/> Knowledge Vault <span className="pill">LLM wiki • Karpathy notes</span>
               <span className="count">{brain.length} brain + {globalFiles.length} global</span>
             </div>
-            <div className="text-sm text-[#c0c0d8] leading-snug">
+            <div className="text-sm text-text-300 leading-snug">
               Standalone foundation for domain intelligence, personal observations, Shipley/negotiation/training guidance, new BD intel. Compounds as native .md (full Karpathy pattern — see schema/capture-llm-wiki.md). App seeds from data + citations. Enhance in Obsidian desktop (obsidian-skills for agents). Richer seeds from your recent ingest. Data + vault = power foundation.
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-[#606080] font-mono">data/knowledge/</span>
+              <span className="text-text-500 font-mono">data/knowledge/</span>
               <button onClick={() => { try { navigator.clipboard.writeText('data/knowledge') } catch {} }} className="action-btn vault" title="Copy the vault root. In Obsidian: Open folder as vault → get graph, backlinks, search, and edit your education/ notes alongside LLM-synthesized entries while keeping all provenance.">
                 <Copy size={13}/> Copy root (for Obsidian)
               </button>
               <button onClick={() => { try { navigator.clipboard.writeText('cd C:\\Users\\benma\\capture-insights\n# Open data/knowledge as vault in Obsidian desktop for full wiki + your Shipley notes') } catch {} }} className="action-btn vault" title="Copy the cd + open instructions. Run it, then point Obsidian at data/knowledge/. Unlocks rich editing of the real .md files (frontmatter, sections, education/, [[wikilinks]]) while the app continues seeding from USASpending.">
                 <FolderOpen size={13}/> Open in Obsidian desktop
               </button>
-              <span className="text-[10px] text-[#606080] ml-1">Education &amp; schema live inside the vault folder.</span>
+              <span className="text-[10px] text-text-500 ml-1">Education &amp; schema live inside the vault folder.</span>
             </div>
           </div>
 
@@ -1849,7 +1917,7 @@ export default function App() {
           {(intensity.length > 0 || expiring.length > 0) && (
             <div className="island">
               <div className="section-head">
-                <Plus size={15}/> Seed from current views <span className="text-[10px] text-[#606080] normal-case">(live intensity / expiring → vault with citations. Compounds on re-add.)</span>
+                <Plus size={15}/> Seed from current views <span className="text-[10px] text-text-500 normal-case">(live intensity / expiring → vault with citations. Compounds on re-add.)</span>
               </div>
               <div className="action-group">
                 {intensity.length > 0 && (
@@ -1869,7 +1937,7 @@ export default function App() {
                   </button>
                 )}
               </div>
-              <div className="text-[10px] text-[#606080] mt-1.5">Pulls directly from whatever is loaded in the current NAICS slice. Your recent historical ingest makes these seeds higher signal. LLM later synthesizes full atomic notes per schema.</div>
+              <div className="text-[10px] text-text-500 mt-1.5">Pulls directly from whatever is loaded in the current NAICS slice. Your recent historical ingest makes these seeds higher signal. LLM later synthesizes full atomic notes per schema.</div>
             </div>
           )}
 
@@ -1877,7 +1945,7 @@ export default function App() {
           <div className="island">
             <div className="section-head">
               <Layers size={15}/> Entries — synthesized + your overlays
-              {brain.length === 0 && <span className="text-[10px] text-[#606080] normal-case ml-2">(add via + brain/wiki buttons in Competitive or Agency tabs, or seed above)</span>}
+              {brain.length === 0 && <span className="text-[10px] text-text-500 normal-case ml-2">(add via + brain/wiki buttons in Competitive or Agency tabs, or seed above)</span>}
             </div>
             {brain.length === 0 && (
               <EmptyState
@@ -1938,9 +2006,9 @@ export default function App() {
           {/* Global Wiki — foundational evergreen knowledge (browse/read/Obsidian). Cross-seed from dashboard data = future. */}
           <div className="island">
             <div className="section-head">
-              <Layers size={15}/> Global Wiki <span className="text-[10px] text-[#606080] normal-case">({globalFiles.length} entries)</span>
+              <Layers size={15}/> Global Wiki <span className="text-[10px] text-text-500 normal-case">({globalFiles.length} entries)</span>
             </div>
-            <div className="text-[10px] text-[#64748b] mb-1">
+            <div className="text-[10px] text-text-500 mb-1">
               Evergreen capture knowledge (Shipley, domain intel, process guides) from the ariadne base. Browse and read here or in Obsidian at data/knowledge/global/. Separate from brain/ (data-tied entries) and from USASpending dashboard numbers.
             </div>
             <div className="action-group">
@@ -1949,7 +2017,7 @@ export default function App() {
               </button>
             </div>
             {globalFiles.length === 0 && (
-              <div className="text-xs text-[#64748b] mt-1">No global files in UI state yet — click Refresh Global List (or restart app). Backend has 155+ from ariadne global_wiki + domain_intel.</div>
+              <div className="text-xs text-text-500 mt-1">No global files in UI state yet — click Refresh Global List (or restart app). Backend has 155+ from ariadne global_wiki + domain_intel.</div>
             )}
             {globalFiles.length > 0 && (
               <div className="mt-2 text-xs">
@@ -1977,10 +2045,10 @@ export default function App() {
                     }
                   />
                 ))}
-                {globalFiles.length > 12 && <div className="text-[#606080] text-[10px]">+ {globalFiles.length - 12} more — open data/knowledge/global/ in Obsidian for full graph/search. Use View on any row to read the actual text in-app.</div>}
+                {globalFiles.length > 12 && <div className="text-text-500 text-[10px]">+ {globalFiles.length - 12} more — open data/knowledge/global/ in Obsidian for full graph/search. Use View on any row to read the actual text in-app.</div>}
               </div>
             )}
-            <div className="text-[9px] text-[#606080] mt-1">Ariadne knowledge under global/global_wiki + domain_intel. Edit in Obsidian; use brain/ for USASpending-seeded entries. Cross-seed from dashboard → global pages is a future feature.</div>
+            <div className="text-[9px] text-text-500 mt-1">Ariadne knowledge under global/global_wiki + domain_intel. Edit in Obsidian; use brain/ for USASpending-seeded entries. Cross-seed from dashboard → global pages is a future feature.</div>
 
             {/* In-app Wiki Viewer: the main way to actually *read* the content without only copying paths.
                 Click View on any global row (or native .md row below) → this appears with the real text (synthesized Key Signals, Citations & Sources, Personal Observations, full ariadne pages, etc.).
@@ -1991,14 +2059,14 @@ export default function App() {
               <div className="mt-3 island border border-[#a78bfa]/50">
                 <div className="section-head flex items-center justify-between">
                   <div>
-                    <Eye size={15}/> Viewing wiki page: <span className="text-[#c0c0d8]">{viewedWiki.name}</span>
-                    <span className="text-[#606080] ml-1">({viewedWiki.type || 'wiki'})</span>
+                    <Eye size={15}/> Viewing wiki page: <span className="text-text-300">{viewedWiki.name}</span>
+                    <span className="text-text-500 ml-1">({viewedWiki.type || 'wiki'})</span>
                   </div>
-                  <button onClick={() => setViewedWiki(null)} className="text-xs px-2 py-0.5 border border-[#1f2a44] rounded hover:bg-[#16161f]">Close viewer</button>
+                  <button onClick={() => setViewedWiki(null)} className="text-xs px-2 py-0.5 border border-edge rounded hover:bg-ink-card">Close viewer</button>
                 </div>
-                <div className="text-[10px] font-mono text-[#606080] mb-1">{viewedWiki.path}</div>
+                <div className="text-[10px] font-mono text-text-500 mb-1">{viewedWiki.path}</div>
 
-                <div className="bg-[#05070d] border border-[#1f2a44] rounded p-3 max-h-[420px] overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-[#d0d8f0]">
+                <div className="bg-ink-950 border border-edge rounded p-3 max-h-[420px] overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-text-300">
                   {(viewedWiki.content || viewedWiki.excerpt || '(no preview loaded — click Load complete file)')}
                 </div>
 
@@ -2041,7 +2109,7 @@ export default function App() {
                     Obsidian jump (copy)
                   </button>
                 </div>
-                <div className="text-[9px] text-[#606080] mt-1">
+                <div className="text-[9px] text-text-500 mt-1">
                   Reading here is for speed while you stay on the data + chat flow. For serious curation, [[wikilinks]], backlinks, canvas, daily notes on the wiki: use Obsidian pointed at the data/knowledge folder.
                 </div>
               </div>
@@ -2053,12 +2121,12 @@ export default function App() {
             <div className="section-head">
               <BookOpen size={15}/> Training data (unsloth fine-tunes)
             </div>
-            <div className="text-[10px] text-[#64748b]">
+            <div className="text-[10px] text-text-500">
               High-signal datasets for local specialized agents live in <span className="font-mono">data/knowledge/training/datasets/</span> (JSONL convos ready for unsloth), examples/, prompts/.
               Schema defines the workflow: LLM proposes only valuable gaps (e.g. hot quadrant signals with no matching ariadne intel), you review/approve before append (human-in-loop, full provenance).
               No raw dump — only high-value. Buttons for "Suggest Valuable Training Examples" coming next (will use current global + brain + intensity data).
             </div>
-            <div className="text-[9px] text-[#606080] mt-1">This saves frontier calls + gives focused capture agents. See schema/capture-llm-wiki.md "Training Data Collection".</div>
+            <div className="text-[9px] text-text-500 mt-1">This saves frontier calls + gives focused capture agents. See schema/capture-llm-wiki.md "Training Data Collection".</div>
           </div>
 
           {/* Phase 3 maintenance island — button-driven vault chores (lint + index) so LLM/agent handles the schema work */}
@@ -2066,7 +2134,7 @@ export default function App() {
             <div className="section-head">
               <Wrench size={15}/> Vault Maintenance (LLM/agent tasks)
             </div>
-            <div className="text-[10px] text-[#64748b] mb-1">
+            <div className="text-[10px] text-text-500 mb-1">
               Stats: {brainWiki.length} native .md files on disk | {brain.length} brain entries. 
               These run the exact lint + catalog tasks defined in the schema. You click once — the system/LLM does the work (no terminal, no --lint flags). 
               Click lint to see problems → click fix, LLM auto-appends the missing sections per schema (Key Signals, Citations, Open Questions, Personal Observations, etc.).
@@ -2080,13 +2148,13 @@ export default function App() {
               </button>
             </div>
             {lintReport && (
-              <div className="mt-2 text-xs border border-[#1f2a44] rounded p-2 bg-[#0a0e1a]">
+              <div className="mt-2 text-xs border border-edge rounded p-2 bg-ink-900">
                 <div className="font-medium">Lint result: {lintReport.ok ? 'CLEAN' : 'ISSUES FOUND'} — {lintReport.summary}</div>
-                {lintReport.legacy_dirs?.length > 0 && <div className="text-[#fda4af]">Legacy dirs: {lintReport.legacy_dirs.join(', ')}</div>}
+                {lintReport.legacy_dirs?.length > 0 && <div className="text-neon-red/80">Legacy dirs: {lintReport.legacy_dirs.join(', ')}</div>}
                 {lintReport.entries?.filter((e: any) => !e.ok).slice(0, 4).map((e: any, i: number) => (
-                  <div key={i} className="text-[#fda4af] mt-0.5">{e.name} ({e.type}): {e.issues?.join('; ')}</div>
+                  <div key={i} className="text-neon-red/80 mt-0.5">{e.name} ({e.type}): {e.issues?.join('; ')}</div>
                 ))}
-                {lintReport.ok && <div className="text-[#67e8f9]">All native .md files follow the schema rules.</div>}
+                {lintReport.ok && <div className="text-neon-cyan">All native .md files follow the schema rules.</div>}
                 {!lintReport.ok && (
                   <button
                     onClick={async () => {
@@ -2117,9 +2185,9 @@ export default function App() {
               </div>
             )}
             {indexStatus && (
-              <div className="mt-1 text-xs text-[#67e8f9]">Index catalog rebuilt ({indexStatus.bytes} bytes). Open data/knowledge/index.md in Obsidian to see the fresh list.</div>
+              <div className="mt-1 text-xs text-neon-cyan">Index catalog rebuilt ({indexStatus.bytes} bytes). Open data/knowledge/index.md in Obsidian to see the fresh list.</div>
             )}
-            <div className="text-[9px] text-[#606080] mt-1">Run these before handing off to external agents or after big data seeds. Script in scripts/vault_maintain.py does the same for Obsidian-skills agents.</div>
+            <div className="text-[9px] text-text-500 mt-1">Run these before handing off to external agents or after big data seeds. Script in scripts/vault_maintain.py does the same for Obsidian-skills agents.</div>
           </div>
 
           {/* 4. Native on-disk island — source of truth, easy copy path for Obsidian */}
@@ -2128,7 +2196,7 @@ export default function App() {
               <div className="section-head">
                 <FolderOpen size={15}/> Native .md on disk — the real source of truth
               </div>
-              <div className="text-[10px] text-[#64748b] mb-2">These files live in data/knowledge/brain/. Point Obsidian at data/knowledge/ for graph, backlinks, full editing of your education/ notes + the synthesized sections. App + LLM only append; you curate.</div>
+              <div className="text-[10px] text-text-500 mb-2">These files live in data/knowledge/brain/. Point Obsidian at data/knowledge/ for graph, backlinks, full editing of your education/ notes + the synthesized sections. App + LLM only append; you curate.</div>
               {brainWiki.slice(0,8).map((w, i) => (
                 <EntryRow
                   key={i}
@@ -2153,13 +2221,13 @@ export default function App() {
                   }
                 />
               ))}
-              {brainWiki.length > 8 && <div className="text-[10px] text-[#606080] mt-1">+ {brainWiki.length-8} more on disk</div>}
+              {brainWiki.length > 8 && <div className="text-[10px] text-text-500 mt-1">+ {brainWiki.length-8} more on disk</div>}
             </div>
           )}
 
           {/* 5. Light persistent guidance — clean, not smushed, points to the wiki education mechanism */}
-          <div className="text-[10px] text-[#64748b] px-1 flex items-center gap-2">
-            <Info size={13}/> Guidance, Shipley, negotiation, training notes, and new ontology ideas live in the vault's <span className="font-mono text-[#a5b4fc]">education/</span> folder + <span className="font-mono text-[#a5b4fc]">schema/capture-llm-wiki.md</span>. Hover titles + open in Obsidian for the full picture. (Clean, reusable pattern.)
+          <div className="text-[10px] text-text-500 px-1 flex items-center gap-2">
+            <Info size={13}/> Guidance, Shipley, negotiation, training notes, and new ontology ideas live in the vault's <span className="font-mono text-accent-purple">education/</span> folder + <span className="font-mono text-accent-purple">schema/capture-llm-wiki.md</span>. Hover titles + open in Obsidian for the full picture. (Clean, reusable pattern.)
           </div>
         </div>
       )
@@ -2177,7 +2245,7 @@ export default function App() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="text-lg font-semibold h1-gradient">MCP Tools</div>
-                <div className="text-xs text-[#a0a0c0]">Battle-tested clients from https://github.com/1102tools/federal-contracting-mcps (we only consume, never implement servers ourselves).</div>
+                <div className="text-xs text-text-400">Battle-tested clients from https://github.com/1102tools/federal-contracting-mcps (we only consume, never implement servers ourselves).</div>
               </div>
               <button
                 onClick={() => loadMcpTools(true)}
@@ -2191,26 +2259,26 @@ export default function App() {
               <div className="text-sm text-slate-400">
                 No tools discovered yet (app will use direct API fallbacks for SAM etc.).
                 <div className="mt-2 text-[11px]">{mcpInfo.how_to_enable || mcpInfo.note || ''}</div>
-                <div className="mt-1 text-[10px] text-[#606080]">The catalog is attempted at startup (warmup). External sam-gov-mcp server enables the richest tool set.</div>
+                <div className="mt-1 text-[10px] text-text-500">The catalog is attempted at startup (warmup). External sam-gov-mcp server enables the richest tool set.</div>
               </div>
             ) : (
               <div className="space-y-2 text-sm">
                 {tools.map((t, idx) => (
-                  <div key={idx} className="border border-[#1f1f2e] rounded p-2 bg-[#0a0e1a]">
-                    <div className="font-medium text-[#00f0ff]">{t.name}</div>
-                    {t.description && <div className="text-xs text-[#a0a0c0] mt-0.5">{t.description}</div>}
+                  <div key={idx} className="border border-edge rounded p-2 bg-ink-900">
+                    <div className="font-medium text-neon-cyan">{t.name}</div>
+                    {t.description && <div className="text-xs text-text-400 mt-0.5">{t.description}</div>}
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="mt-4 text-[11px] text-[#606080]">
+            <div className="mt-4 text-[11px] text-text-500">
               These tools are used automatically by the agent when you click contextual buttons (e.g. "Create SAM monitor (smart)" on an expiring row) or ask the floating co-pilot natural-language questions. The catalog is sent to the chat so suggestions stay grounded in what is actually available.
             </div>
-            {mcpInfo.note && <div className="mt-2 text-[10px] text-[#ff2bd6]">{mcpInfo.note}</div>}
+            {mcpInfo.note && <div className="mt-2 text-[10px] text-neon-magenta">{mcpInfo.note}</div>}
           </div>
 
-          <div className="text-[10px] text-[#606080] px-1">
+          <div className="text-[10px] text-text-500 px-1">
             Status is also visible in /health and the top status line. Warmup happens automatically when the backend starts.
           </div>
         </div>
@@ -2304,22 +2372,23 @@ export default function App() {
 
           <div className="chat-header">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-[#00f0ff]" />
-              <div className="font-semibold text-[#00f0ff]">AI Co-pilot</div>
-              <span className="text-[9px] text-[#606080]">(always on • context-aware)</span>
+              <MessageSquare className="w-4 h-4 text-neon-cyan" />
+              <div className="chat-header-title">AI Co-pilot</div>
+              <span className="chat-header-meta">(always on • context-aware)</span>
             </div>
             <div className="flex items-center gap-1">
               <button
+                type="button"
                 onClick={() => setUseSmartModel(!useSmartModel)}
-                className={`text-[10px] px-2 py-0.5 rounded border ${useSmartModel ? 'bg-[#00f0ff] text-black border-[#00f0ff]' : 'border-[#00f0ff]/30 text-[#606080] hover:text-white hover:border-[#00f0ff]/60'}`}
-                title={useSmartModel ? "Using local LLM (slower but more natural). Click to use fast context path." : "Fast context path (instant, data-grounded + action chips). Click to try local LLM for smarter answers."}
+                className={`chat-model-toggle ${useSmartModel ? 'is-active' : ''}`}
+                title={useSmartModel ? 'Using local LLM. Click for fast context path.' : 'Fast context path. Click to try local LLM.'}
               >
                 {useSmartModel ? 'Smart model' : 'Fast context'}
               </button>
-              <button onClick={maximizeChat} className="p-1 hover:bg-[#16161f] rounded" title="Toggle larger size for long responses">
+              <button type="button" onClick={maximizeChat} className="chat-icon-btn" title="Toggle larger size">
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
-              <button onClick={() => setShowChat(false)} className="p-1 hover:bg-[#16161f] rounded"><X className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={() => setShowChat(false)} className="chat-icon-btn"><X className="w-3.5 h-3.5" /></button>
             </div>
           </div>
 
@@ -2329,7 +2398,7 @@ export default function App() {
                 <div className={`chat-msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
                   {m.content}
                   {m.role === 'assistant' && (m.source || m.model) && (
-                    <div className="text-[9px] text-[#606080] mt-1 opacity-70">
+                    <div className="chat-msg-meta">
                       {m.source}{m.model ? ` • ${m.model}` : ''}
                     </div>
                   )}
@@ -2369,17 +2438,17 @@ export default function App() {
           </div>
 
           <div className="chat-input-row">
-            <input 
-              value={chatInput} 
-              onChange={e => setChatInput(e.target.value)} 
+            <input
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') sendChat() }}
-              placeholder="Tell the co-pilot what to do (e.g. search SAM for my brain items, create monitors, find overlaps... it drives MCPs)"
-              className="flex-1 bg-[#0a0e1a] border border-[#1f1f2e] rounded-lg px-3 py-1.5 text-xs focus:border-[#00f0ff] focus:outline-none"
+              placeholder="Ask the co-pilot — search SAM, create monitors, find overlaps…"
+              className="input-field"
             />
-            <button onClick={sendChat} className="px-4 rounded-lg bg-[#00f0ff] text-black text-xs font-semibold">Send</button>
+            <button type="button" onClick={sendChat} className="chat-send-btn">Send</button>
           </div>
 
-          <div className="px-3 py-1 text-[9px] text-[#606080] border-t border-[#1f1f2e] flex-shrink-0">
+          <div className="chat-context-bar">
             Live context: {contextHeader}
           </div>
         </div>
@@ -2388,8 +2457,9 @@ export default function App() {
       {/* Floating toggle when chat is closed */}
       {!showChat && (
         <button
+          type="button"
           onClick={toggleChat}
-          className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-full bg-[#00f0ff] text-black font-semibold text-sm flex items-center gap-2 shadow-lg hover:bg-[#38ecff] transition"
+          className="chat-fab"
           title="Open the always-available AI co-pilot (sees current tab, filters, pipeline, brain)"
         >
           <MessageSquare className="w-4 h-4" /> AI Co-pilot <span className="text-[10px] opacity-70">(always on)</span>

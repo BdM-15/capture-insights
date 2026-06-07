@@ -427,14 +427,14 @@ body {
   opacity: 1;
 }
 
-/* Resizable chat pane (holistic floating assistant — always available, no separate page) */
+/* Resizable chat pane (holistic floating assistant) */
 .chat-pane {
-  background: rgba(17, 23, 42, 0.96);
+  background: rgba(5, 7, 13, 0.97);
   backdrop-filter: blur(20px);
-  border-left: 1px solid rgba(0, 240, 255, 0.15);
+  border-left: 1px solid rgba(var(--neon-cyan-rgb), 0.18);
   display: flex;
   flex-direction: column;
-  box-shadow: -8px 0 30px rgba(0,0,0,0.6);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.55), 0 0 24px rgba(var(--neon-cyan-rgb), 0.06);
 }
 
 .resize-handle {
@@ -448,14 +448,15 @@ body {
   background: transparent;
   transition: background 0.1s;
 }
+
 .resize-handle:hover,
 .resize-handle.active {
-  background: linear-gradient(to right, transparent, rgba(0,240,255,0.3));
+  background: linear-gradient(to right, transparent, rgba(var(--neon-cyan-rgb), 0.28));
 }
 
 .chat-header {
-  background: #0a0a12;
-  border-bottom: 1px solid #1f1f2e;
+  background: var(--ink-950);
+  border-bottom: 1px solid var(--edge);
   padding: 8px 12px;
   font-size: 12px;
   display: flex;
@@ -464,54 +465,132 @@ body {
   flex-shrink: 0;
 }
 
+.chat-header-title {
+  color: var(--neon-cyan);
+  font-weight: 600;
+}
+
+.chat-header-meta {
+  font-size: 9px;
+  color: var(--text-500);
+}
+
+.chat-icon-btn {
+  @apply p-1 rounded transition;
+  color: var(--text-400);
+}
+
+.chat-icon-btn:hover {
+  background: var(--ink-card);
+  color: var(--text-primary);
+}
+
+.chat-model-toggle {
+  @apply text-[10px] px-2 py-0.5 rounded border transition;
+  border-color: rgba(var(--neon-cyan-rgb), 0.3);
+  color: var(--text-500);
+}
+
+.chat-model-toggle:hover {
+  border-color: rgba(var(--neon-cyan-rgb), 0.55);
+  color: var(--text-primary);
+}
+
+.chat-model-toggle.is-active {
+  background: var(--neon-cyan);
+  color: var(--ink-950);
+  border-color: var(--neon-cyan);
+}
+
 .chat-messages {
   flex: 1;
   overflow: auto;
   padding: 12px;
   font-size: 12px;
-  line-height: 1.4;
-  background: #0c101c;
+  line-height: 1.45;
+  background: var(--ink-900);
 }
 
 .chat-msg {
   max-width: 88%;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 11px;
+  border-radius: 10px;
   margin-bottom: 6px;
   white-space: pre-wrap;
+  text-align: left;
 }
+
 .chat-msg.user {
-  background: #00f0ff;
-  color: #000;
+  background: var(--neon-cyan);
+  color: var(--ink-950);
   margin-left: auto;
+  font-weight: 500;
 }
+
 .chat-msg.assistant {
-  background: #16161f;
-  color: #e0e0ff;
-  border: 1px solid rgba(0,240,255,0.1);
+  background: var(--ink-card);
+  color: var(--text-primary);
+  border: 1px solid var(--edge);
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg, var(--neon-magenta), var(--accent-purple), var(--neon-cyan)) 1;
+}
+
+.chat-msg-meta {
+  font-size: 9px;
+  color: var(--text-500);
+  margin-top: 4px;
+  opacity: 0.75;
 }
 
 .chat-suggest {
   font-size: 10px;
-  padding: 2px 6px;
-  border: 1px solid rgba(255,43,214,0.4);
-  color: #ff2bd6;
+  padding: 2px 8px;
+  border: 1px solid rgba(var(--neon-magenta-rgb), 0.4);
+  color: var(--neon-magenta);
   border-radius: 999px;
   cursor: pointer;
   display: inline-block;
   margin: 2px 3px 2px 0;
+  transition: background 0.15s, border-color 0.15s;
 }
+
 .chat-suggest:hover {
-  background: rgba(255,43,214,0.1);
-  border-color: #ff2bd6;
+  background: rgba(var(--neon-magenta-rgb), 0.1);
+  border-color: var(--neon-magenta);
 }
 
 .chat-input-row {
   padding: 8px 10px;
-  border-top: 1px solid #1f1f2e;
+  border-top: 1px solid var(--edge);
+  background: linear-gradient(180deg, transparent, rgba(var(--neon-cyan-rgb), 0.03));
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.chat-input-row .input-field {
+  @apply text-xs flex-1;
+}
+
+.chat-send-btn {
+  @apply btn btn-primary btn-xs shrink-0;
+}
+
+.chat-context-bar {
+  @apply px-3 py-1 text-[9px] border-t border-edge flex-shrink-0 font-mono truncate;
+  color: var(--text-500);
+  background: var(--ink-950);
+}
+
+.chat-fab {
+  @apply fixed bottom-4 right-4 z-50 px-4 py-2 rounded-full font-semibold text-sm flex items-center gap-2 shadow-lg transition;
+  background: var(--neon-cyan);
+  color: var(--ink-950);
+  box-shadow: 0 0 20px rgba(var(--neon-cyan-rgb), 0.35);
+}
+
+.chat-fab:hover {
+  filter: brightness(1.08);
 }
 
 /* Brain / Wiki accumulator items (contextual "make the knowledge smarter") */

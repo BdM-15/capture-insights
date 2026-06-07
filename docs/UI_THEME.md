@@ -127,6 +127,9 @@ Shell components: `frontend/src/components/shell/`. View metadata: `frontend/src
 | `DataTable` | `components/lists/DataTable.tsx` | Standardized data tables |
 | `EmptyState` | `components/ui/EmptyState.tsx` | Zero-data panels with CTAs |
 | `Toast` | `components/ui/Toast.tsx` | Action confirmations |
+| `AskCoPilotButton` | `components/ui/AskCoPilotButton.tsx` | Data→chat golden threads |
+| `BrainEntryCard` | `components/lists/BrainEntryCard.tsx` | Vault brain entry cards |
+| `CHART` | `constants/chartTheme.ts` | Recharts/Plotly shared colors |
 
 ### Semantic accent rules
 
