@@ -1085,6 +1085,10 @@ body {
   @apply w-full min-w-0 overflow-hidden;
 }
 
+.wiki-viewer-body {
+  @apply bg-ink-950 border border-edge rounded-lg p-3 max-h-[420px] overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-text-300 min-w-0;
+}
+
 .chart-tooltip {
   background: var(--ink-card);
   border: 1px solid var(--edge);

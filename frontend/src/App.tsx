@@ -1952,67 +1952,78 @@ export default function App() {
     }
 
     if (sidebar === 'vault') {
-      // Dedicated Knowledge Vault — standalone Brain / LLM wiki / Karpathy foundation.
-      // Purpose: domain intelligence + your observations + Shipley/negotiation/training + new BD intel.
-      // Compounds as native .md files (Obsidian + Karpathy pattern). App + LLM seed from data with citations.
-      // You enhance in Obsidian desktop. This + the data views = power foundation. Schema: data/knowledge/schema/capture-llm-wiki.md
       return (
-        <div className="space-y-3">
-          {/* 1. Narrative + access island — full width desc + root actions co-located (correct grouping) */}
-          <div className="island vault">
-            <div className="section-head vault">
-              <BookOpen size={15}/> Knowledge Vault <span className="pill">LLM wiki • Karpathy notes</span>
-              <span className="count">{brain.length} brain + {globalFiles.length} global</span>
-            </div>
-            <div className="text-sm text-text-300 leading-snug">
-              Standalone foundation for domain intelligence, personal observations, Shipley/negotiation/training guidance, new BD intel. Compounds as native .md (full Karpathy pattern — see schema/capture-llm-wiki.md). App seeds from data + citations. Enhance in Obsidian desktop (obsidian-skills for agents). Richer seeds from your recent ingest. Data + vault = power foundation.
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-text-500 font-mono">data/knowledge/</span>
-              <button onClick={() => { try { navigator.clipboard.writeText('data/knowledge') } catch {} }} className="action-btn vault" title="Copy the vault root. In Obsidian: Open folder as vault → get graph, backlinks, search, and edit your education/ notes alongside LLM-synthesized entries while keeping all provenance.">
-                <Copy size={13}/> Copy root (for Obsidian)
-              </button>
-              <button onClick={() => { try { navigator.clipboard.writeText('cd C:\\Users\\benma\\capture-insights\n# Open data/knowledge as vault in Obsidian desktop for full wiki + your Shipley notes') } catch {} }} className="action-btn vault" title="Copy the cd + open instructions. Run it, then point Obsidian at data/knowledge/. Unlocks rich editing of the real .md files (frontmatter, sections, education/, [[wikilinks]]) while the app continues seeding from USASpending.">
-                <FolderOpen size={13}/> Open in Obsidian desktop
-              </button>
-              <span className="text-[10px] text-text-500 ml-1">Education &amp; schema live inside the vault folder.</span>
-            </div>
+        <div className="page-sections">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+            <MetricCard label="Brain entries" value={String(brain.length)} accent="purple" tooltip="Data-tied accumulator entries" />
+            <MetricCard label="Global wiki" value={String(globalFiles.length)} accent="purple" tooltip="Evergreen capture knowledge pages" />
+            <MetricCard label="Native .md" value={String(brainWiki.length)} accent="purple" tooltip="Synthesized files on disk in brain/" />
+            <MetricCard label="NAICS slice" value={naics} accent="cyan" tooltip="Current dashboard filter feeding seeds" />
           </div>
 
-          {/* 2. Seed island — separate purpose, contextual to loaded data views, rich titles */}
+          <CollapsibleSection
+            title="Vault Access"
+            subtitle="data/knowledge · Obsidian · schema"
+            icon={BookOpen}
+            accent="purple"
+            defaultOpen
+          >
+            <div className="text-sm text-text-300 leading-snug mb-3">
+              Domain intel, observations, and capture guidance as native .md. App seeds from USASpending with citations — curate in Obsidian for graph, backlinks, and full editing.
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-text-500 font-mono">data/knowledge/</span>
+              <button onClick={() => { try { navigator.clipboard.writeText('data/knowledge') } catch {} }} className="action-btn vault" title="Copy vault root for Obsidian">
+                <Copy size={13}/> Copy root
+              </button>
+              <button onClick={() => { try { navigator.clipboard.writeText('cd C:\\Users\\benma\\capture-insights\n# Open data/knowledge as vault in Obsidian desktop for full wiki + your Shipley notes') } catch {} }} className="action-btn vault" title="Copy open instructions for Obsidian">
+                <FolderOpen size={13}/> Obsidian setup
+              </button>
+            </div>
+            <div className="text-[10px] text-text-500 mt-2 flex items-center gap-1.5">
+              <Info size={12} className="shrink-0" />
+              Shipley, negotiation, and training notes live in <span className="font-mono text-accent-purple">education/</span> — schema in <span className="font-mono text-accent-purple">schema/capture-llm-wiki.md</span>
+            </div>
+          </CollapsibleSection>
+
           {(intensity.length > 0 || expiring.length > 0) && (
-            <div className="island">
-              <div className="section-head">
-                <Plus size={15}/> Seed from current views <span className="text-[10px] text-text-500 normal-case">(live intensity / expiring → vault with citations. Compounds on re-add.)</span>
-              </div>
+            <CollapsibleSection
+              title="Seed from Dashboard"
+              subtitle="Pull hot agencies or expiring rows into vault"
+              icon={Plus}
+              accent="cyan"
+              defaultOpen={false}
+            >
               <div className="action-group">
                 {intensity.length > 0 && (
                   <button onClick={() => {
-                    const top = intensity.slice(0,3)
-                    top.forEach(a => addToBrain({ ...a, notes: `seeded from intensity hot (vol ${a.award_count} oblig ${((a.total_oblig||0)/1e6).toFixed(1)}M)` }, a.agency, 'agency'))
-                  }} className="action-btn vault" title="Take top 3 agencies from the Capture Intensity scatter (the hot quadrant ones). Creates or appends .md entry in brain/agencies/ with quadrant signal + obligation volume + direct citation back to the USASpending rows you just loaded.">
-                    <Plus size={13}/> Ingest top 3 hot agencies
+                    const top = intensity.slice(0, 3)
+                    top.forEach(a => addToBrain({ ...a, notes: `seeded from intensity hot (vol ${a.award_count} oblig ${((a.total_oblig || 0) / 1e6).toFixed(1)}M)` }, a.agency, 'agency'))
+                  }} className="action-btn vault" title="Seed top 3 agencies from intensity with citations">
+                    <Plus size={13}/> Top 3 agencies
                   </button>
                 )}
                 {expiring.length > 0 && (
                   <button onClick={() => {
-                    const vis = expiring.slice(0,3)
-                    vis.forEach(e => addToBrain({ ...e, notes: `seeded from expiring radar (ends ${e.end_date} ${((e.obligation||0)/1e6).toFixed(1)}M)` }, e.recipient || e.agency, 'competitor'))
-                  }} className="action-btn vault" title="Take top 3 expiring awards from the radar. Seeds brain/competitors/ or agencies/ with timing + dollar note + award_key citation. Perfect for early recompete positioning and SAM monitor ideas later.">
-                    <Plus size={13}/> Ingest top 3 expiring
+                    const vis = expiring.slice(0, 3)
+                    vis.forEach(e => addToBrain({ ...e, notes: `seeded from expiring radar (ends ${e.end_date} ${((e.obligation || 0) / 1e6).toFixed(1)}M)` }, e.recipient || e.agency, 'competitor'))
+                  }} className="action-btn vault" title="Seed top 3 expiring awards with citations">
+                    <Plus size={13}/> Top 3 expiring
                   </button>
                 )}
               </div>
-              <div className="text-[10px] text-text-500 mt-1.5">Pulls directly from whatever is loaded in the current NAICS slice. Your recent historical ingest makes these seeds higher signal. LLM later synthesizes full atomic notes per schema.</div>
-            </div>
+              <div className="text-[10px] text-text-500 mt-2">Uses the current NAICS slice. LLM synthesizes full atomic notes per schema on disk.</div>
+            </CollapsibleSection>
           )}
 
-          {/* 3. Entries island — each is a clean .entry card, synthesized note prominent, copy full is obvious action, your overlay clear */}
-          <div className="island">
-            <div className="section-head">
-              <Layers size={15}/> Entries — synthesized + your overlays
-              {brain.length === 0 && <span className="text-[10px] text-text-500 normal-case ml-2">(add via + brain/wiki buttons in Competitive or Agency tabs, or seed above)</span>}
-            </div>
+          <CollapsibleSection
+            title="Brain Entries"
+            subtitle="Synthesized notes + your overlays"
+            icon={Layers}
+            accent="purple"
+            defaultOpen
+            badge={brain.length > 0 ? <span className="pill text-[10px]">{brain.length}</span> : undefined}
+          >
             {brain.length === 0 && (
               <EmptyState
                 icon={BookOpen}
@@ -2056,37 +2067,94 @@ export default function App() {
               )
             })}
             {brain.length > 0 && (
-              <div className="mt-2">
-                <button onClick={async () => {
-                  if (confirm('Clear entire Knowledge Vault? Native .md files stay on disk until you delete them in Obsidian or Explorer. Education/ and schema/ are untouched.')) {
-                    try { await fetch('/user/brain/clear', {method:'DELETE'}) } catch{}
-                    await syncAccumulators()
-                  }
-                }} className="action-btn destructive" title="Wipes the in-app accumulator only. The real vault (.md files in data/knowledge/brain/) and your education notes remain. Use this when you want a clean slate in the UI while keeping the files.">
-                  <Trash2 size={13}/> Clear entire Knowledge Vault (UI only)
+              <button onClick={async () => {
+                if (confirm('Clear entire Knowledge Vault? Native .md files stay on disk until you delete them in Obsidian or Explorer. Education/ and schema/ are untouched.')) {
+                  try { await fetch('/user/brain/clear', { method: 'DELETE' }) } catch {}
+                  await syncAccumulators()
+                }
+              }} className="action-btn destructive mt-2" title="Clears in-app accumulator only — .md files on disk remain">
+                <Trash2 size={13}/> Clear vault (UI only)
+              </button>
+            )}
+          </CollapsibleSection>
+
+          {viewedWiki && (
+            <CollapsibleSection
+              title={viewedWiki.name || 'Wiki page'}
+              subtitle={viewedWiki.path || 'In-app reader'}
+              icon={Eye}
+              accent="purple"
+              defaultOpen
+              badge={
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewedWiki(null) }}
+                  className="text-[10px] px-2 py-0.5 border border-edge rounded hover:bg-ink-card shrink-0"
+                >
+                  Close
+                </button>
+              }
+            >
+              <div className="wiki-viewer-body">
+                {(viewedWiki.content || viewedWiki.excerpt || '(no preview — click Load complete file)')}
+              </div>
+              <div className="action-group mt-2">
+                <button
+                  onClick={() => {
+                    const txt = viewedWiki.content || viewedWiki.excerpt || ''
+                    try { navigator.clipboard.writeText(txt) } catch {}
+                  }}
+                  className="action-btn vault text-[10px]"
+                >
+                  Copy text
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(viewedWiki.path)}`)
+                      const d = await r.json()
+                      if (d.ok && d.content) setViewedWiki({ ...viewedWiki, content: d.content })
+                    } catch {}
+                  }}
+                  className="action-btn vault text-[10px]"
+                >
+                  Load complete file
+                </button>
+                <button onClick={() => { try { navigator.clipboard.writeText(viewedWiki.path || '') } catch {} }} className="action-btn vault text-[10px]">
+                  Copy path
+                </button>
+                <button
+                  onClick={() => {
+                    const help = `cd C:\\Users\\benma\\capture-insights\n# In Obsidian: Open folder as vault → data/knowledge\n# Then quick switcher or file tree to: ${viewedWiki.path}`
+                    try { navigator.clipboard.writeText(help) } catch {}
+                  }}
+                  className="action-btn vault text-[10px]"
+                >
+                  Obsidian jump
                 </button>
               </div>
-            )}
-          </div>
+            </CollapsibleSection>
+          )}
 
-          {/* Global Wiki — foundational evergreen knowledge (browse/read/Obsidian). Cross-seed from dashboard data = future. */}
-          <div className="island">
-            <div className="section-head">
-              <Layers size={15}/> Global Wiki <span className="text-[10px] text-text-500 normal-case">({globalFiles.length} entries)</span>
+          <CollapsibleSection
+            title="Global Wiki"
+            subtitle="Evergreen capture knowledge · ariadne base"
+            icon={BookOpen}
+            accent="purple"
+            defaultOpen={false}
+            badge={globalFiles.length > 0 ? <span className="pill text-[10px]">{globalFiles.length}</span> : undefined}
+          >
+            <div className="text-[10px] text-text-500 mb-2">
+              Shipley, domain intel, and process guides at data/knowledge/global/. Separate from brain/ (data-tied entries).
             </div>
-            <div className="text-[10px] text-text-500 mb-1">
-              Evergreen capture knowledge (Shipley, domain intel, process guides) from the ariadne base. Browse and read here or in Obsidian at data/knowledge/global/. Separate from brain/ (data-tied entries) and from USASpending dashboard numbers.
-            </div>
-            <div className="action-group">
-              <button onClick={async () => { await loadUserAccumulators() }} className="action-btn vault">
-                Refresh Global List
-              </button>
-            </div>
+            <button onClick={async () => { await loadUserAccumulators() }} className="action-btn vault text-xs mb-2">
+              Refresh list
+            </button>
             {globalFiles.length === 0 && (
-              <div className="text-xs text-text-500 mt-1">No global files in UI state yet — click Refresh Global List (or restart app). Backend has 155+ from ariadne global_wiki + domain_intel.</div>
+              <div className="text-xs text-text-500">No global files in UI — click Refresh (backend has 155+ from ariadne).</div>
             )}
             {globalFiles.length > 0 && (
-              <div className="mt-2 text-xs">
+              <div className="text-xs min-w-0">
                 {globalFiles.slice(0, 12).map((g, i) => (
                   <EntryRow
                     key={i}
@@ -2097,109 +2165,64 @@ export default function App() {
                     onClick={() => setViewedWiki(g)}
                     actions={
                       <>
-                        <button
-                          onClick={() => setViewedWiki(g)}
-                          className="action-btn vault text-[10px]"
-                          title="Read the full content of this wiki page right here in the app"
-                        >
+                        <button onClick={() => setViewedWiki(g)} className="action-btn vault text-[10px]">
                           <Eye size={11}/> View
                         </button>
-                        <button onClick={() => { try { navigator.clipboard.writeText(g.path || '') } catch {} }} className="action-btn vault text-[10px]" title="Copy path for Obsidian">
+                        <button onClick={() => { try { navigator.clipboard.writeText(g.path || '') } catch {} }} className="action-btn vault text-[10px]">
                           <Copy size={11}/> path
                         </button>
                       </>
                     }
                   />
                 ))}
-                {globalFiles.length > 12 && <div className="text-text-500 text-[10px]">+ {globalFiles.length - 12} more — open data/knowledge/global/ in Obsidian for full graph/search. Use View on any row to read the actual text in-app.</div>}
+                {globalFiles.length > 12 && (
+                  <div className="text-text-500 text-[10px] mt-1">+ {globalFiles.length - 12} more in Obsidian at data/knowledge/global/</div>
+                )}
               </div>
             )}
-            <div className="text-[9px] text-text-500 mt-1">Ariadne knowledge under global/global_wiki + domain_intel. Edit in Obsidian; use brain/ for USASpending-seeded entries. Cross-seed from dashboard → global pages is a future feature.</div>
+          </CollapsibleSection>
 
-            {/* In-app Wiki Viewer: the main way to actually *read* the content without only copying paths.
-                Click View on any global row (or native .md row below) → this appears with the real text (synthesized Key Signals, Citations & Sources, Personal Observations, full ariadne pages, etc.).
-                "Load complete file" pulls the entire .md via the backend reader (list only ships a preview slice).
-                This is the UI/UX bridge: app = fast discovery + data seeding + quick reads while you work; Obsidian = the full IDE for editing, graph, bases, wikilinks, plugins.
-            */}
-            {viewedWiki && (
-              <div className="mt-3 island border border-[#a78bfa]/50">
-                <div className="section-head flex items-center justify-between">
-                  <div>
-                    <Eye size={15}/> Viewing wiki page: <span className="text-text-300">{viewedWiki.name}</span>
-                    <span className="text-text-500 ml-1">({viewedWiki.type || 'wiki'})</span>
-                  </div>
-                  <button onClick={() => setViewedWiki(null)} className="text-xs px-2 py-0.5 border border-edge rounded hover:bg-ink-card">Close viewer</button>
-                </div>
-                <div className="text-[10px] font-mono text-text-500 mb-1">{viewedWiki.path}</div>
+          {brainWiki.length > 0 && (
+            <CollapsibleSection
+              title="Native .md on Disk"
+              subtitle="brain/ source of truth"
+              icon={FolderOpen}
+              accent="purple"
+              defaultOpen={false}
+              badge={<span className="pill text-[10px]">{brainWiki.length}</span>}
+            >
+              <div className="text-[10px] text-text-500 mb-2">Synthesized files in data/knowledge/brain/. App + LLM append; you curate in Obsidian.</div>
+              {brainWiki.slice(0, 8).map((w, i) => (
+                <EntryRow
+                  key={i}
+                  title={w.name}
+                  type={w.type}
+                  excerpt={(w.excerpt || w.content || '').slice(0, 160)}
+                  path={w.path}
+                  onClick={() => setViewedWiki(w)}
+                  actions={
+                    <>
+                      <button onClick={() => setViewedWiki(w)} className="action-btn vault text-[10px]">
+                        <Eye size={11}/> View
+                      </button>
+                      <button onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }} className="action-btn vault text-[10px]">
+                        <Copy size={12}/> path
+                      </button>
+                    </>
+                  }
+                />
+              ))}
+              {brainWiki.length > 8 && <div className="text-[10px] text-text-500 mt-1">+ {brainWiki.length - 8} more on disk</div>}
+            </CollapsibleSection>
+          )}
 
-                <div className="bg-ink-950 border border-edge rounded p-3 max-h-[420px] overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-text-300">
-                  {(viewedWiki.content || viewedWiki.excerpt || '(no preview loaded — click Load complete file)')}
-                </div>
-
-                <div className="action-group mt-2">
-                  <button 
-                    onClick={() => { 
-                      const txt = viewedWiki.content || viewedWiki.excerpt || ''; 
-                      try { navigator.clipboard.writeText(txt) } catch {} 
-                    }} 
-                    className="action-btn vault text-[10px]"
-                  >
-                    Copy visible text
-                  </button>
-                  <button 
-                    onClick={async () => {
-                      try {
-                        const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(viewedWiki.path)}`);
-                        const d = await r.json();
-                        if (d.ok && d.content) setViewedWiki({ ...viewedWiki, content: d.content });
-                      } catch {}
-                    }} 
-                    className="action-btn vault text-[10px]"
-                  >
-                    Load complete file
-                  </button>
-                  <button 
-                    onClick={() => { try { navigator.clipboard.writeText(viewedWiki.path || '') } catch {} }} 
-                    className="action-btn vault text-[10px]"
-                  >
-                    Copy path
-                  </button>
-                  <button 
-                    onClick={() => {
-                      const help = `cd C:\\Users\\benma\\capture-insights\n# In Obsidian: Open folder as vault → data/knowledge\n# Then quick switcher or file tree to: ${viewedWiki.path}`;
-                      try { navigator.clipboard.writeText(help) } catch {}
-                    }} 
-                    className="action-btn vault text-[10px]"
-                    title="Copies a ready command + path hint so you can jump straight into full editing + graph in Obsidian"
-                  >
-                    Obsidian jump (copy)
-                  </button>
-                </div>
-                <div className="text-[9px] text-text-500 mt-1">
-                  Reading here is for speed while you stay on the data + chat flow. For serious curation, [[wikilinks]], backlinks, canvas, daily notes on the wiki: use Obsidian pointed at the data/knowledge folder.
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Training data section (unsloth / future intelligent LLM curation) */}
-          <div className="island">
-            <div className="section-head">
-              <BookOpen size={15}/> Training data (unsloth fine-tunes)
-            </div>
-            <div className="text-[10px] text-text-500">
-              High-signal datasets for local specialized agents live in <span className="font-mono">data/knowledge/training/datasets/</span> (JSONL convos ready for unsloth), examples/, prompts/.
-              Schema defines the workflow: LLM proposes only valuable gaps (e.g. hot quadrant signals with no matching ariadne intel), you review/approve before append (human-in-loop, full provenance).
-              No raw dump — only high-value. Buttons for "Suggest Valuable Training Examples" coming next (will use current global + brain + intensity data).
-            </div>
-            <div className="text-[9px] text-text-500 mt-1">This saves frontier calls + gives focused capture agents. See schema/capture-llm-wiki.md "Training Data Collection".</div>
-          </div>
-
-          {/* Phase 3 maintenance island — button-driven vault chores (lint + index) so LLM/agent handles the schema work */}
-          <div className="island">
-            <div className="section-head">
-              <Wrench size={15}/> Vault Maintenance (LLM/agent tasks)
-            </div>
+          <CollapsibleSection
+            title="Vault Maintenance"
+            subtitle="Lint · index · LLM schema fixes"
+            icon={Wrench}
+            accent="purple"
+            defaultOpen={false}
+          >
             <div className="text-[10px] text-text-500 mb-1">
               Stats: {brainWiki.length} native .md files on disk | {brain.length} brain entries. 
               These run the exact lint + catalog tasks defined in the schema. You click once — the system/LLM does the work (no terminal, no --lint flags). 
@@ -2253,48 +2276,22 @@ export default function App() {
             {indexStatus && (
               <div className="mt-1 text-xs text-neon-cyan">Index catalog rebuilt ({indexStatus.bytes} bytes). Open data/knowledge/index.md in Obsidian to see the fresh list.</div>
             )}
-            <div className="text-[9px] text-text-500 mt-1">Run these before handing off to external agents or after big data seeds. Script in scripts/vault_maintain.py does the same for Obsidian-skills agents.</div>
-          </div>
+            <div className="text-[9px] text-text-500 mt-1">Run before agent handoff or after big data seeds.</div>
+          </CollapsibleSection>
 
-          {/* 4. Native on-disk island — source of truth, easy copy path for Obsidian */}
-          {brainWiki.length > 0 && (
-            <div className="island">
-              <div className="section-head">
-                <FolderOpen size={15}/> Native .md on disk — the real source of truth
-              </div>
-              <div className="text-[10px] text-text-500 mb-2">These files live in data/knowledge/brain/. Point Obsidian at data/knowledge/ for graph, backlinks, full editing of your education/ notes + the synthesized sections. App + LLM only append; you curate.</div>
-              {brainWiki.slice(0,8).map((w, i) => (
-                <EntryRow
-                  key={i}
-                  title={w.name}
-                  type={w.type}
-                  excerpt={(w.excerpt || w.content || '').slice(0, 160)}
-                  path={w.path}
-                  onClick={() => setViewedWiki(w)}
-                  actions={
-                    <>
-                      <button
-                        onClick={() => setViewedWiki(w)}
-                        className="action-btn vault text-[10px]"
-                        title="Read the full synthesized note + your overlays right in the UI"
-                      >
-                        <Eye size={11}/> View
-                      </button>
-                      <button onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }} className="action-btn vault" title="Copy exact relative path to this .md">
-                        <Copy size={12}/> copy path
-                      </button>
-                    </>
-                  }
-                />
-              ))}
-              {brainWiki.length > 8 && <div className="text-[10px] text-text-500 mt-1">+ {brainWiki.length-8} more on disk</div>}
+          <CollapsibleSection
+            title="Training Data"
+            subtitle="unsloth fine-tunes · future curation"
+            icon={BookOpen}
+            accent="none"
+            defaultOpen={false}
+          >
+            <div className="text-[10px] text-text-500">
+              High-signal datasets in <span className="font-mono">data/knowledge/training/datasets/</span> (JSONL for unsloth), examples/, prompts/.
+              LLM proposes valuable gaps — you review before append (human-in-loop).
             </div>
-          )}
-
-          {/* 5. Light persistent guidance — clean, not smushed, points to the wiki education mechanism */}
-          <div className="text-[10px] text-text-500 px-1 flex items-center gap-2">
-            <Info size={13}/> Guidance, Shipley, negotiation, training notes, and new ontology ideas live in the vault's <span className="font-mono text-accent-purple">education/</span> folder + <span className="font-mono text-accent-purple">schema/capture-llm-wiki.md</span>. Hover titles + open in Obsidian for the full picture. (Clean, reusable pattern.)
-          </div>
+            <div className="text-[9px] text-text-500 mt-1">See schema/capture-llm-wiki.md — Training Data Collection.</div>
+          </CollapsibleSection>
         </div>
       )
     }
