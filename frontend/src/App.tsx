@@ -10,6 +10,10 @@ import { AppShell } from './components/shell/AppShell'
 import type { HealthState } from './components/shell/Topbar'
 import { MetricCard } from './components/ui/MetricCard'
 import { TabBar } from './components/ui/TabBar'
+import { Button } from './components/ui/Button'
+import { EmptyState } from './components/ui/EmptyState'
+import { Toast, type ToastState, type ToastTone } from './components/ui/Toast'
+import { DataTable } from './components/lists/DataTable'
 import { EntryRow } from './components/lists/EntryRow'
 import {
   NAV_GROUPS,
@@ -128,6 +132,11 @@ export default function App() {
   const [lintReport, setLintReport] = useState<any>(null)
   const [indexStatus, setIndexStatus] = useState<any>(null)
   const [vaultMaintLoading, setVaultMaintLoading] = useState(false)
+  const [toast, setToast] = useState<ToastState | null>(null)
+
+  const showToast = (message: string, tone: ToastTone = 'info') => {
+    setToast({ message, tone })
+  }
 
   // Real on-disk persistence via backend (data/user_accumulators.json).
   // This replaces the earlier pure localStorage slice. Adds/deletes/notes now go through the server
@@ -167,6 +176,12 @@ export default function App() {
   }
 
   useEffect(() => { loadUserAccumulators() }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3200)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   // Fetch MCP tool catalog (populated by app warmup in lifespan).
   // Used both for the dedicated "MCP Tools" sidebar (visibility/education) and passed to /chat so the co-pilot knows what agentic actions (buttons + chat) can drive.
@@ -346,8 +361,9 @@ export default function App() {
       })
     } catch {}
     await syncAccumulators()
-    // Helpful feedback in the always-on chat
-    setChatHistory(h => [...h, { role: 'assistant', content: `Added to pipeline: ${item.recipient || item.agency || item.label || type}. Saved to data/user_accumulators.json on disk.` }])
+    const label = item.recipient || item.agency || item.label || type
+    showToast(`Added to pipeline: ${label}`, 'success')
+    setChatHistory(h => [...h, { role: 'assistant', content: `Added to pipeline: ${label}. Saved to data/user_accumulators.json on disk.` }])
   }
 
   async function addToBrain(item: any, competitorKey: string, type: string = 'competitor') {
@@ -372,6 +388,7 @@ export default function App() {
       })
     } catch {}
     await syncAccumulators()
+    showToast(`Brain updated: ${name}`, 'success')
     setChatHistory(h => [...h, { role: 'assistant', content: `Added/updated "${name}" in Brain / Wiki. Saved to data/user_accumulators.json. The entry compounds when you re-add the same name.` }])
   }
 
@@ -384,6 +401,7 @@ export default function App() {
       })
     } catch {}
     await syncAccumulators()
+    showToast('Removed from pipeline', 'info')
   }
 
   async function removeFromBrain(id: string) {
@@ -395,6 +413,7 @@ export default function App() {
       })
     } catch {}
     await syncAccumulators()
+    showToast('Removed from brain', 'info')
   }
 
   async function updateBrainNote(id: string, newNotes: string) {
@@ -406,6 +425,7 @@ export default function App() {
       })
     } catch {}
     await syncAccumulators()
+    showToast('Note saved to vault', 'success')
   }
 
   // === Holistic chat with rich live context + suggested actions that can mutate state ===
@@ -742,9 +762,9 @@ export default function App() {
 
               {/* Row 1: Historical spend (left) | Future trajectory (right) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="glass p-5 rounded-3xl market-chart-panel">
-                  <div className="text-sm font-semibold mb-1 text-[#00f0ff]">Historical Spend &amp; Actions</div>
-                  <div className="text-[10px] text-[#64748b] mb-2">FY obligation totals and action volume from loaded USASpending bulk history.</div>
+                <div className="chart-panel surface-accent-cyan">
+                  <div className="chart-panel-title cyan">Historical Spend &amp; Actions</div>
+                  <div className="chart-panel-sub">FY obligation totals and action volume from loaded USASpending bulk history.</div>
                   {trendData.length > 0 ? (
                     <div style={{ width: '100%', height: 240 }}>
                       <ResponsiveContainer>
@@ -763,9 +783,9 @@ export default function App() {
                   ) : <div className="text-sm text-slate-400 h-[240px] flex items-center justify-center">Need FY history in bulk data.</div>}
                 </div>
 
-                <div className="glass p-5 rounded-3xl market-chart-panel border border-[#ff2bd6]/15">
-                  <div className="text-sm font-semibold mb-1 text-[#ff2bd6]">Future Trajectory (Recurring Recompete)</div>
-                  <div className="text-[10px] text-[#64748b] mb-2">Assumes requirements recur — obligated $ on contracts ending each year = addressable future funding pool.</div>
+                <div className="chart-panel surface-accent-magenta">
+                  <div className="chart-panel-title magenta">Future Trajectory (Recurring Recompete)</div>
+                  <div className="chart-panel-sub">Assumes requirements recur — obligated $ on contracts ending each year = addressable future funding pool.</div>
                   {futureTrendData.length > 0 ? (
                     <div style={{ width: '100%', height: 240 }}>
                       <ResponsiveContainer>
@@ -788,9 +808,9 @@ export default function App() {
 
               {/* Row 2: Capture intensity scatter (left) | High-intensity agency table (right) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="glass p-5 rounded-3xl market-chart-panel">
-                  <div className="text-sm font-semibold mb-1 text-[#ff2bd6]">Capture Intensity</div>
-                  <div className="text-[10px] text-[#64748b] mb-2">Agencies by volume vs. value — upper-right (pink) = high-intensity BD targets.</div>
+                <div className="chart-panel surface-accent-lime">
+                  <div className="chart-panel-title magenta">Capture Intensity</div>
+                  <div className="chart-panel-sub">Agencies by volume vs. value — upper-right (pink) = high-intensity BD targets.</div>
                   {intensity.length ? (
                     <div style={{ width: '100%', height: 280 }}>
                       <ResponsiveContainer>
@@ -805,7 +825,7 @@ export default function App() {
                             if (!payload?.length) return null
                             const d = payload[0].payload
                             return (
-                              <div style={{ background: '#16161f', border: '1px solid #1f1f2e', padding: '6px 8px', fontSize: 11 }}>
+                              <div className="chart-tooltip">
                                 <div style={{ fontWeight: 600 }}>{d.name}</div>
                                 <div>Actions: {d.x.toLocaleString()}</div>
                                 <div>Obligations: ${(d.y / 1e6).toFixed(1)}M</div>
@@ -826,45 +846,57 @@ export default function App() {
                   ) : <div className="text-sm text-slate-400 h-[280px] flex items-center justify-center">Need agency data.</div>}
                 </div>
 
-                <div className="glass p-4 rounded-3xl market-chart-panel border border-[#ff2bd6]/15 flex flex-col">
-                  <div className="text-sm font-semibold mb-1 text-[#ff2bd6] flex items-center justify-between">
+                <div className="chart-panel surface-accent-magenta min-h-[320px]">
+                  <div className="chart-panel-title magenta">
                     <span className="flex items-center gap-2"><Target size={14} /> Top Agencies (Intensity Score)</span>
-                    <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">Agency Intel →</button>
+                    <button onClick={() => setDashTab('agency')} className="text-[10px] text-neon-cyan hover:underline">Agency Intel →</button>
                   </div>
-                  <div className="text-[10px] text-[#64748b] mb-2">Ranked by capture intensity — hot (★) agencies first, then by obligations.</div>
-                  {intensityRanked.length > 0 ? (
-                    <div className="flex-1 overflow-auto rounded-xl border border-[#1f2a44] min-h-[280px] max-h-[320px]">
-                      <table className="w-full text-xs intensity-table">
-                        <thead className="sticky top-0 bg-[#11172a] z-10">
-                          <tr className="text-[#64748b] text-left border-b border-[#1f2a44]">
-                            <th className="p-2 font-medium">Agency</th>
-                            <th className="p-2 font-medium tabular-nums">Act.</th>
-                            <th className="p-2 font-medium tabular-nums">$M</th>
-                            <th className="p-2 font-medium">★</th>
-                            <th className="p-2 text-right"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {intensityRanked.map((a, idx) => {
-                            const hot = isHotAgency(a)
-                            return (
-                              <tr key={idx} className={`border-b border-[#1f2a44]/60 hover:bg-[#0f1422]/80 ${hot ? 'intensity-row-hot' : ''}`}>
-                                <td className="p-2 text-[#e6ecff] max-w-[140px] truncate" title={a.agency}>{a.agency}</td>
-                                <td className="p-2 tabular-nums text-[#94a3b8]">{a.award_count?.toLocaleString()}</td>
-                                <td className="p-2 tabular-nums text-[#00f0ff]">{((a.total_oblig || 0) / 1e6).toFixed(1)}</td>
-                                <td className="p-2">{hot ? <span className="text-[#ff2bd6]">★</span> : <span className="text-[#64748b]">—</span>}</td>
-                                <td className="p-2 text-right">
-                                  <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-[9px] px-1">+brain</button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-slate-400 flex-1 flex items-center justify-center min-h-[280px]">No agency intensity data.</div>
-                  )}
+                  <div className="chart-panel-sub">Ranked by capture intensity — hot (★) agencies first, then by obligations.</div>
+                  <DataTable
+                    className="flex-1 max-h-[320px]"
+                    minHeight="280px"
+                    emptyMessage="No agency intensity data."
+                    data={intensityRanked}
+                    rowKey={(a) => a.agency}
+                    rowClassName={(a) => isHotAgency(a) ? 'intensity-row-hot' : ''}
+                    columns={[
+                      {
+                        key: 'agency',
+                        header: 'Agency',
+                        render: (a) => (
+                          <span className="text-text-primary max-w-[140px] truncate block" title={a.agency}>{a.agency}</span>
+                        ),
+                      },
+                      {
+                        key: 'actions',
+                        header: 'Act.',
+                        cellClassName: 'tabular-nums text-text-400',
+                        render: (a) => a.award_count?.toLocaleString(),
+                      },
+                      {
+                        key: 'oblig',
+                        header: '$M',
+                        cellClassName: 'tabular-nums text-neon-cyan',
+                        render: (a) => ((a.total_oblig || 0) / 1e6).toFixed(1),
+                      },
+                      {
+                        key: 'hot',
+                        header: '★',
+                        align: 'center',
+                        render: (a) => isHotAgency(a)
+                          ? <span className="text-neon-magenta">★</span>
+                          : <span className="text-text-500">—</span>,
+                      },
+                      {
+                        key: 'cta',
+                        header: '',
+                        align: 'right',
+                        render: (a) => (
+                          <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-[9px] px-1">+brain</button>
+                        ),
+                      },
+                    ]}
+                  />
                   {hotAgencyList.length > 0 && (
                     <button onClick={() => hotAgencyList.forEach((a) => addToBrain(a, a.agency, 'agency'))} className="action-btn brain text-[10px] mt-2 self-start">+brain all ★ hot agencies</button>
                   )}
@@ -1595,17 +1627,43 @@ export default function App() {
     }
 
     if (sidebar === 'pipeline') {
-      // Dedicated Pipeline view — opportunities & pursuits only.
-      // This is the tracker for things worth bidding/tracking. Future: primary connection point
-      // to the full Ariadne Thread vision (milestone living packets for opportunities).
       return (
         <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <MetricCard label="Pipeline" value={String(pipeline.length)} accent="magenta" tooltip="Active pursuits you chose to track" />
+            <MetricCard label="Expiring (loaded)" value={String(expiring.length)} accent="magenta" tooltip="From current NAICS slice on dashboard" />
+            <MetricCard label="Brain entries" value={String(brain.length)} accent="purple" />
+            <MetricCard
+              label="Market size"
+              value={kpis ? `$${kpis.total_obligations_m}M` : '—'}
+              accent="amber"
+              tooltip="Total obligations in current NAICS filter"
+            />
+          </div>
+
           <div className="island">
             <div className="section-head">
               <Briefcase size={15}/> Pipeline — Opportunities &amp; Pursuits <span className="count">{pipeline.length}</span>
             </div>
-            <div className="text-xs text-[#64748b] mb-2">Living list of things you decided are worth tracking or bidding. Becomes the bridge to Ariadne Thread (milestone living packets). Distinct from the Knowledge Vault.</div>
-            {pipeline.length === 0 && <div className="text-sm text-[#64748b]">Use the + pipeline buttons inside Future Opportunities and the Combo insight. Items persist on disk via the backend accumulator.</div>}
+            <div className="text-xs text-text-500 mb-2">Living list of things you decided are worth tracking or bidding. Distinct from the Knowledge Vault.</div>
+            {pipeline.length === 0 && (
+              <EmptyState
+                icon={Briefcase}
+                title="No pursuits tracked yet"
+                description="Use + pipeline on Future Opportunities, expiring contracts, or SAM results. Items persist to disk automatically."
+                accent="magenta"
+                actions={
+                  <>
+                    <Button variant="pipeline" onClick={() => { setSidebar('dashboard'); setDashTab('opportunities') }}>
+                      <Clock className="w-3.5 h-3.5" /> Future Opportunities
+                    </Button>
+                    <Button variant="soft" onClick={() => { setSidebar('dashboard'); setDashTab('combo') }}>
+                      Combo Insights
+                    </Button>
+                  </>
+                }
+              />
+            )}
             {pipeline.map((p, i) => {
               const pid = p.id || p.ts
               return (
@@ -1691,7 +1749,24 @@ export default function App() {
               <Layers size={15}/> Entries — synthesized + your overlays
               {brain.length === 0 && <span className="text-[10px] text-[#606080] normal-case ml-2">(add via + brain/wiki buttons in Competitive or Agency tabs, or seed above)</span>}
             </div>
-            {brain.length === 0 && <div className="text-xs text-[#64748b]">Nothing in the vault yet. The +brain buttons and seed actions above feed this. Re-adding the same name+type compounds citations and appends a fresh dated section.</div>}
+            {brain.length === 0 && (
+              <EmptyState
+                icon={BookOpen}
+                title="Vault is empty"
+                description="Add competitors and agencies via +brain on Competitive or Agency tabs, or seed from hot agencies / expiring contracts above."
+                accent="purple"
+                actions={
+                  <>
+                    <Button variant="vault" onClick={() => { setSidebar('dashboard'); setDashTab('competitive') }}>
+                      Competitive Analysis
+                    </Button>
+                    <Button variant="vault" onClick={() => { setSidebar('dashboard'); setDashTab('agency') }}>
+                      Agency Intelligence
+                    </Button>
+                  </>
+                }
+              />
+            )}
             {brain.map((b, i) => {
               const bid = b.id || b.addedAt
               const wiki = brainWiki.find((w: any) => {
@@ -2102,6 +2177,8 @@ export default function App() {
       >
         {renderMain()}
       </AppShell>
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
 
       {/* FLOATING / RESIZABLE CHAT PANE — the holistic always-on co-pilot.
           No separate chat page in sidebar. Drag the left handle or use maximize to make it large and useful for real responses.

@@ -806,13 +806,126 @@ body {
   min-height: 0;
 }
 
+/* Toast notifications */
+.toast {
+  @apply fixed top-[4.25rem] right-4 z-[70] flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-medium border shadow-lg;
+  background: rgba(17, 23, 42, 0.96);
+  backdrop-filter: blur(12px);
+  border-color: rgba(var(--neon-cyan-rgb), 0.35);
+  color: var(--text-primary);
+  box-shadow: 0 0 20px rgba(var(--neon-cyan-rgb), 0.15);
+  animation: toast-in 0.2s ease;
+}
+
+.toast-success {
+  border-color: rgba(var(--neon-lime-rgb), 0.4);
+  box-shadow: 0 0 20px rgba(var(--neon-lime-rgb), 0.12);
+}
+
+.toast-error {
+  border-color: rgba(var(--neon-red-rgb), 0.4);
+  color: #fda4af;
+}
+
+.toast-info {
+  border-color: rgba(var(--neon-cyan-rgb), 0.35);
+}
+
+.toast-dismiss {
+  @apply p-0.5 rounded opacity-60 hover:opacity-100 transition;
+  color: var(--text-400);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Empty state */
+.empty-state {
+  @apply surface rounded-2xl p-6 text-center;
+}
+
+.empty-state-icon {
+  @apply mx-auto mb-3;
+}
+
+.empty-state-title {
+  @apply text-sm font-semibold text-text-primary mb-1;
+}
+
+.empty-state-desc {
+  @apply text-xs text-text-400 leading-relaxed max-w-md mx-auto;
+}
+
+.empty-state-actions {
+  @apply flex flex-wrap justify-center gap-2 mt-4;
+}
+
+/* Data tables */
+.data-table-wrap {
+  @apply overflow-auto rounded-xl border border-edge;
+}
+
+.data-table {
+  @apply w-full text-xs;
+}
+
+.data-table-head-sticky {
+  @apply sticky top-0 z-10;
+  background: rgba(17, 23, 42, 0.95);
+}
+
+.data-table-th {
+  @apply p-2 font-mono uppercase tracking-[0.14em] text-[10px] text-text-500 border-b border-edge;
+}
+
+.data-table-td {
+  @apply p-2 border-b border-edge/40;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(var(--neon-cyan-rgb), 0.04);
+}
+
+.data-table-empty {
+  @apply flex items-center justify-center text-sm text-text-400 rounded-xl border border-edge;
+}
+
+/* Chart panels — shared chrome for Recharts/Plotly */
+.chart-panel {
+  @apply surface rounded-2xl p-4 flex flex-col;
+}
+
+.chart-panel-title {
+  @apply text-sm font-semibold mb-1 flex items-center justify-between gap-2;
+}
+
+.chart-panel-title.cyan { color: var(--neon-cyan); }
+.chart-panel-title.magenta { color: var(--neon-magenta); }
+.chart-panel-title.lime { color: var(--neon-lime); }
+.chart-panel-title.amber { color: var(--neon-amber); }
+
+.chart-panel-sub {
+  @apply text-[10px] text-text-500 mb-2;
+}
+
+.chart-tooltip {
+  background: var(--ink-card);
+  border: 1px solid var(--edge);
+  padding: 6px 8px;
+  font-size: 11px;
+  border-radius: 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .topbar-vibrant::after,
   .sidebar-vibrant::after,
   .brand-tile,
   .surface-hover:hover,
   .card:hover,
-  .island:hover {
+  .island:hover,
+  .toast {
     animation: none;
     transform: none;
     transition: none;
