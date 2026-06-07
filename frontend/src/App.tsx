@@ -4,7 +4,7 @@ import {
   RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
   GitBranch, PieChart, Crosshair, Lightbulb, Zap, Search, Radar, Users, MapPin,
-  Settings, Sparkles,
+  Settings, Sparkles, ClipboardList, UserCheck,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
@@ -29,6 +29,15 @@ import { CHART } from './constants/chartTheme'
 import { CollapsibleSection } from './components/ui/CollapsibleSection'
 import { SetAsideBarChart } from './components/charts/SetAsideBarChart'
 import { normalizeSetAsideRows } from './utils/chartLabels'
+import {
+  CUSTOMER_POSITION_META,
+  getAgencyQuadrant,
+  getCustomerPosition,
+  getQualGate,
+  QUAL_GATE_META,
+  QUADRANT_META,
+  summarizeAgencyFlows,
+} from './utils/agencyIntel'
 
 // capture-insights React Frontend
 // Per latest feedback:
@@ -122,6 +131,7 @@ export default function App() {
   const [topRecipients, setTopRecipients] = useState<any[]>([])
   const [marketPotential, setMarketPotential] = useState<MarketPotentialData | null>(null)
   const [oppSearch, setOppSearch] = useState('')
+  const [agencySearch, setAgencySearch] = useState('')
   const [samKeywords, setSamKeywords] = useState('')
   const [samNoticeTypes, setSamNoticeTypes] = useState('RFI,Sources Sought,Special Notice,Presolicitation')
   const [samResults, setSamResults] = useState<any[]>([])
@@ -270,7 +280,7 @@ export default function App() {
     const endpoints: { key: string; path: string; required?: boolean }[] = [
       { key: 'kpis', path: `/data/kpis${q}`, required: true },
       { key: 'flows', path: `/data/flows${q}&limit=6` },
-      { key: 'intensity', path: `/data/agency-intensity${q}&limit=12` },
+      { key: 'intensity', path: `/data/agency-intensity${q}&limit=20` },
       { key: 'expiring', path: `/data/expiring${q}&months=36&limit=10` },
       { key: 'vehicles', path: `/data/vehicles${q}` },
       { key: 'geo', path: `/data/geo${q}&limit=8` },
@@ -1496,48 +1506,187 @@ export default function App() {
       }
 
       case 'agency': {
-        const agencyRows = intensity.slice(0, 12)
+        const agencyMedians = { actions: medIntensityActions, oblig: medIntensityOblig }
+        const totalAgencyOblig = intensity.reduce((s, a) => s + (a.total_oblig || 0), 0) || 1
+        const agencyFlowByAgency = summarizeAgencyFlows(flows)
+        const brainAgencyNames = new Set(
+          brain.filter((b: any) => b.type === 'agency').map((b: any) => (b.name || '').toLowerCase()),
+        )
+        const isAgencyInBrain = (name: string) => {
+          const n = name.toLowerCase()
+          return brainAgencyNames.has(n) || brain.some((b: any) => {
+            const bn = (b.name || '').toLowerCase()
+            return bn && (bn.includes(n.slice(0, 18)) || n.includes(bn.slice(0, 18)))
+          })
+        }
+        const recompetesByAgency = new Map<string, { count: number; millions: number }>()
+        expiring.forEach((e: any) => {
+          const ag = e.agency || ''
+          if (!ag) return
+          const cur = recompetesByAgency.get(ag) || { count: 0, millions: 0 }
+          cur.count += 1
+          cur.millions += (e.obligation || 0) / 1e6
+          recompetesByAgency.set(ag, cur)
+        })
+        const agencyIntelRows = intensity.map((a) => {
+          const quadrant = getAgencyQuadrant(a.award_count || 0, a.total_oblig || 0, agencyMedians)
+          const inBrain = isAgencyInBrain(a.agency)
+          const recomp = recompetesByAgency.get(a.agency) || { count: 0, millions: 0 }
+          const flow = agencyFlowByAgency.get(a.agency)
+          const sharePct = Math.round(((a.total_oblig || 0) / totalAgencyOblig) * 100)
+          const qualGate = getQualGate({
+            isHot: quadrant === 'hot',
+            inBrain,
+            recompeteCount: recomp.count,
+            sharePct,
+          })
+          const position = getCustomerPosition(inBrain, recomp.count, quadrant === 'hot')
+          return { ...a, quadrant, inBrain, recomp, flow, sharePct, qualGate, position }
+        })
+        const filteredAgencyRows = agencyIntelRows.filter((a) =>
+          !agencySearch || a.agency.toLowerCase().includes(agencySearch.toLowerCase()),
+        )
+        const trackedCount = agencyIntelRows.filter((a) => a.inBrain).length
+        const agencyScatterData = intensity.map((a) => ({
+          x: a.award_count || 0,
+          y: a.total_oblig || 0,
+          z: Math.max(35, Math.min(220, (a.avg_award || 0) / 15000)),
+          name: a.agency,
+          isHot: isHotAgency(a),
+        }))
+        const topAgencyShare = agencyIntelRows[0]?.sharePct ?? 0
+
         return (
           <div className="page-sections">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+              <MetricCard label="Hot agencies" value={String(hotAgencyList.length)} accent="magenta" tooltip="Above median actions AND obligations — original Data Insights quadrant" />
+              <MetricCard label="In vault" value={String(trackedCount)} accent="purple" tooltip="Agency brain entries — Shipley unknown → known" />
+              <MetricCard label="Hot recompetes" value={String(comboExpiring.length)} accent="lime" tooltip="Expiring work at hot agencies — advance candidates" />
+              <MetricCard label="Top agency share" value={`${topAgencyShare}%`} accent="cyan" tooltip="Largest buyer concentration in NAICS slice" />
+            </div>
+
+            <CollapsibleSection
+              title="Capture Intensity"
+              subtitle="Volume vs value · median quadrants"
+              icon={Crosshair}
+              accent="cyan"
+              defaultOpen
+            >
+              <div className="insight mb-3">
+                Original Data Insights scatter: agencies above <strong className="text-text-primary">both</strong> median action count and median obligations = dedicated BD targets. Pink dots = hot quadrant.
+              </div>
+              <div className="chart-panel surface-accent-lime border-0 shadow-none p-0 bg-transparent min-w-0">
+                {intensity.length ? (
+                  <div className="chart-module" style={{ height: 300 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ScatterChart margin={{ top: 8, right: 12, bottom: 8, left: 4 }}>
+                        <CartesianGrid stroke={CHART.gridStroke} />
+                        <XAxis type="number" dataKey="x" name="Actions" stroke={CHART.axisStroke} tick={CHART.axisTickSm}
+                          tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} />
+                        <YAxis type="number" dataKey="y" name="Obligations" stroke={CHART.axisStroke} tick={CHART.axisTickSm} width={48}
+                          tickFormatter={(v) => v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(0)}M` : `$${v}`} />
+                        <ZAxis type="number" dataKey="z" range={[40, 200]} />
+                        <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ payload }) => {
+                          if (!payload?.length) return null
+                          const d = payload[0].payload
+                          return (
+                            <div className="chart-tooltip">
+                              <div style={{ fontWeight: 600 }}>{d.name}</div>
+                              <div>Actions: {d.x.toLocaleString()}</div>
+                              <div>Obligations: ${(d.y / 1e6).toFixed(1)}M</div>
+                              {d.isHot && <div className="text-neon-magenta">★ Hot</div>}
+                            </div>
+                          )
+                        }} />
+                        <ReferenceLine x={medIntensityActions} stroke={CHART.colors.magenta} strokeDasharray="3 3" />
+                        <ReferenceLine y={medIntensityOblig} stroke={CHART.colors.cyan} strokeDasharray="3 3" />
+                        <Scatter data={agencyScatterData}>
+                          {agencyScatterData.map((entry, index) => (
+                            <Cell key={`agency-scatter-${index}`} fill={entry.isHot ? CHART.colors.magenta : CHART.colors.cyan} />
+                          ))}
+                        </Scatter>
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="chart-module-empty">Need agency data in current NAICS slice.</div>
+                )}
+                <div className="text-[10px] text-text-500 mt-2">Magenta/cyan reference lines = medians. Bubble size ≈ avg award.</div>
+              </div>
+            </CollapsibleSection>
+
             <CollapsibleSection
               title="Agency Rankings"
-              subtitle={`${agencyRows.length} agencies · NAICS ${naics}`}
+              subtitle={`${filteredAgencyRows.length} agencies · qualify & engage`}
               icon={Users}
               accent="cyan"
               defaultOpen
               badge={hotAgencyList.length > 0 ? <span className="pill text-[10px]">{hotAgencyList.length} hot</span> : undefined}
             >
-              <div className="insight mb-3">
-                Full list behind the Market Overview intensity chart. +brain agencies worth watching — notes compound in Knowledge Vault for chat and skills.
-              </div>
+              <input
+                value={agencySearch}
+                onChange={(e) => setAgencySearch(e.target.value)}
+                placeholder="Filter agencies…"
+                className="input-field mb-2 w-full max-w-md"
+              />
               <DataTable
-                data={agencyRows}
+                data={filteredAgencyRows}
                 rowKey={(a) => a.agency}
-                rowClassName={(a) => isHotAgency(a) ? 'intensity-row-hot' : ''}
-                emptyMessage="No agency data in current NAICS slice."
+                rowClassName={(a) => a.quadrant === 'hot' ? 'intensity-row-hot' : ''}
+                emptyMessage="No agencies match filter."
                 columns={[
                   {
                     key: 'agency',
                     header: 'Agency',
-                    cellClassName: 'max-w-[200px]',
+                    cellClassName: 'max-w-[160px]',
                     render: (a) => (
                       <span className="truncate block" title={a.agency}>
                         {a.agency}
-                        {isHotAgency(a) && <span className="text-neon-magenta text-[10px] ml-1">★</span>}
+                        {a.inBrain && <span className="text-neon-lime text-[9px] ml-1">🧠</span>}
                       </span>
                     ),
                   },
                   {
-                    key: 'actions',
-                    header: 'Act.',
-                    cellClassName: 'tabular-nums text-text-400 whitespace-nowrap',
-                    render: (a) => a.award_count?.toLocaleString(),
+                    key: 'quadrant',
+                    header: 'Quad',
+                    cellClassName: 'whitespace-nowrap text-[10px]',
+                    render: (a) => (
+                      <span className={QUADRANT_META[a.quadrant].tone} title={QUADRANT_META[a.quadrant].label}>
+                        {QUADRANT_META[a.quadrant].short}{a.quadrant === 'hot' ? ' ★' : ''}
+                      </span>
+                    ),
                   },
                   {
-                    key: 'oblig',
-                    header: '$M',
-                    cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap',
-                    render: (a) => `$${((a.total_oblig || 0) / 1e6).toFixed(1)}M`,
+                    key: 'gate',
+                    header: 'Gate',
+                    cellClassName: 'whitespace-nowrap text-[10px]',
+                    render: (a) => (
+                      <span className={QUAL_GATE_META[a.qualGate].tone} title="Shipley-style qualify: advance / monitor / defer">
+                        {QUAL_GATE_META[a.qualGate].label}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'stats',
+                    header: 'Vol',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (a) => `${a.award_count?.toLocaleString()} · $${((a.total_oblig || 0) / 1e6).toFixed(1)}M`,
+                  },
+                  {
+                    key: 'recomp',
+                    header: 'Recomp',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (a) => a.recomp.count > 0
+                      ? <span className="text-neon-magenta">{a.recomp.count}</span>
+                      : <span className="text-text-500">—</span>,
+                  },
+                  {
+                    key: 'incumbent',
+                    header: 'Top winner',
+                    cellClassName: 'max-w-[120px] truncate text-[10px] text-text-400',
+                    render: (a) => a.flow
+                      ? <span title={a.flow.topRecipient}>{a.flow.topRecipient.slice(0, 16)}</span>
+                      : '—',
                   },
                   {
                     key: 'cta',
@@ -1547,7 +1696,8 @@ export default function App() {
                       <div className="row-actions">
                         <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-xs">+ brain</button>
                         <AskCoPilotButton
-                          prompt={`What capture approach should I take for ${a.agency}? They have ${a.award_count} actions and $${((a.total_oblig || 0) / 1e6).toFixed(1)}M in my NAICS slice.`}
+                          prompt={`Shipley-style capture plan for ${a.agency}: ${a.award_count} actions, $${((a.total_oblig || 0) / 1e6).toFixed(1)}M in NAICS ${naics}. ${a.recomp.count} recompetes. Top incumbent: ${a.flow?.topRecipient || 'unknown'}. Customer position: ${CUSTOMER_POSITION_META[a.position].label}. What customer interface moves and win strategy themes should I pursue in the next 30 days?`}
+                          label="Plan"
                           onAsk={askCoPilot}
                         />
                       </div>
@@ -1563,6 +1713,152 @@ export default function App() {
                   +brain all ★ hot agencies
                 </button>
               )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Customer Engagement"
+              subtitle="Shipley · unknown → favored"
+              icon={UserCheck}
+              accent="purple"
+              defaultOpen={hotAgencyList.length > 0}
+            >
+              <div className="insight vault mb-3">
+                <strong className="text-text-primary">Shipley principle:</strong> influence the customer early — progress from unknown to favored using customer assessment, competitive intel, and data (not gut feel). Qualify early &amp; often at decision gates.
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                {(Object.keys(CUSTOMER_POSITION_META) as Array<keyof typeof CUSTOMER_POSITION_META>).map((key) => {
+                  const count = agencyIntelRows.filter((a) => a.position === key).length
+                  return (
+                    <div key={key} className="market-stat-chip">
+                      <div className="label">{CUSTOMER_POSITION_META[key].label}</div>
+                      <div className="value text-base">{count}</div>
+                      <div className="text-[9px] text-text-500 mt-0.5 leading-snug">{CUSTOMER_POSITION_META[key].shipley}</div>
+                    </div>
+                  )
+                })}
+              </div>
+              {hotAgencyList.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-text-500">Hot agency next steps</div>
+                  {hotAgencyList.slice(0, 4).map((a) => {
+                    const row = agencyIntelRows.find((r) => r.agency === a.agency)
+                    const q = row ? QUADRANT_META[row.quadrant] : QUADRANT_META.hot
+                    return (
+                      <div key={a.agency} className="tool-card">
+                        <div className="tool-card-name truncate" title={a.agency}>{a.agency}</div>
+                        <div className="tool-card-desc">{q.shipleyHint}</div>
+                        {row && row.recomp.count > 0 && (
+                          <div className="text-[10px] text-neon-magenta mt-1">{row.recomp.count} recompetes · ${row.recomp.millions.toFixed(1)}M at risk</div>
+                        )}
+                        <div className="flex flex-wrap gap-2 mt-1.5">
+                          {!row?.inBrain && (
+                            <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-[10px]">+brain (move to known)</button>
+                          )}
+                          <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-neon-cyan hover:underline">Recompete radar →</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-text-500">No hot-quadrant agencies in this slice yet. Ingest more bulk data or widen NAICS.</div>
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Hot Agency Recompetes"
+              subtitle="Combo signal · expiring at hot buyers"
+              icon={Clock}
+              accent="magenta"
+              defaultOpen={comboExpiring.length > 0}
+              badge={comboExpiring.length > 0 ? <span className="pill text-[10px]">{comboExpiring.length}</span> : undefined}
+            >
+              <div className="insight magenta mb-3">
+                Highest-leverage timing: recompetes where the buyer already spends heavily in your NAICS. Shipley: qualify on customer assessment + competitive intel before advancing.
+              </div>
+              {comboExpiring.length ? (
+                <DataTable
+                  data={comboExpiring.slice(0, 8)}
+                  rowKey={(e, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
+                  rowClassName={() => 'intensity-row-hot'}
+                  columns={[
+                    { key: 'agency', header: 'Agency', cellClassName: 'text-neon-cyan text-xs max-w-[140px] truncate', render: (e) => <span title={e.agency}>{e.agency}</span> },
+                    { key: 'recipient', header: 'Incumbent', cellClassName: 'max-w-[140px] truncate', render: (e) => <span title={e.recipient}>{e.recipient || '—'}</span> },
+                    { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs whitespace-nowrap', render: (e) => e.end_date?.slice(0, 10) },
+                    { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (e) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M` },
+                    {
+                      key: 'actions',
+                      header: '',
+                      align: 'right',
+                      render: (e) => (
+                        <div className="row-actions">
+                          <button onClick={() => addToPipeline(e, 'agency-recompete')} className="action-btn pipeline text-xs">+ pipeline</button>
+                          <button onClick={() => addToBrain({ recipient: e.recipient, agency: e.agency }, e.recipient, 'competitor')} className="action-btn brain text-xs">+ brain</button>
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState
+                  icon={Clock}
+                  title="No hot-agency recompetes"
+                  description="Combo matches expiring contracts at high-intensity agencies. Check Future Opportunities for full radar."
+                  accent="magenta"
+                  actions={<Button variant="soft" onClick={() => setDashTab('opportunities')}>Future Opportunities</Button>}
+                />
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Who Wins Here"
+              subtitle="Top incumbents by agency · flow view"
+              icon={ClipboardList}
+              accent="cyan"
+              defaultOpen={false}
+            >
+              <div className="chart-panel-sub mb-2">
+                Follow-the-money at agency level — who dominates spend with each buyer (pairs with Competitive Analysis Sankey).
+              </div>
+              <DataTable
+                data={hotAgencyList.length ? hotAgencyList : agencyIntelRows.slice(0, 6)}
+                rowKey={(a) => a.agency}
+                emptyMessage="No flow data."
+                columns={[
+                  { key: 'agency', header: 'Agency', cellClassName: 'max-w-[160px] truncate', render: (a) => <span title={a.agency}>{a.agency}</span> },
+                  {
+                    key: 'winner',
+                    header: 'Top recipient',
+                    render: (a) => {
+                      const f = agencyFlowByAgency.get(a.agency)
+                      return f ? <span className="truncate block max-w-[160px]" title={f.topRecipient}>{f.topRecipient}</span> : '—'
+                    },
+                  },
+                  {
+                    key: 'flowm',
+                    header: '$M flow',
+                    cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap',
+                    render: (a) => {
+                      const f = agencyFlowByAgency.get(a.agency)
+                      return f ? `$${f.topMillions}M` : '—'
+                    },
+                  },
+                  {
+                    key: 'primes',
+                    header: 'Primes',
+                    cellClassName: 'tabular-nums text-text-400',
+                    render: (a) => agencyFlowByAgency.get(a.agency)?.flowCount ?? '—',
+                  },
+                  {
+                    key: 'cta',
+                    header: '',
+                    align: 'right',
+                    render: () => (
+                      <button onClick={() => setDashTab('competitive')} className="text-[10px] text-neon-cyan hover:underline">Flows →</button>
+                    ),
+                  },
+                ]}
+              />
             </CollapsibleSection>
           </div>
         )
