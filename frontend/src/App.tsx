@@ -24,10 +24,22 @@ interface KpiData {
   total_obligations_m: number
   total_actions: number
   avg_award_value_k: number
+  unique_awards?: number
   active_contracts_approx: number
   expiring_24m: number
   suitability_pct: number
   synergy_pct: number
+  note?: string
+}
+
+interface MarketPotentialData {
+  total_millions: number
+  total_actions: number
+  unique_competitors: number
+  trend: string
+  top_agencies: { agency: string | null; millions: number; actions: number }[]
+  top_recipients: { name: string; millions: number }[]
+  note?: string
 }
 
 interface FlowData {
@@ -99,6 +111,7 @@ export default function App() {
   const [fyTrends, setFyTrends] = useState<any[]>([])
   const [setAside, setSetAside] = useState<any[]>([])
   const [topRecipients, setTopRecipients] = useState<any[]>([])
+  const [marketPotential, setMarketPotential] = useState<MarketPotentialData | null>(null)
   const [oppSearch, setOppSearch] = useState('')
   const [samKeywords, setSamKeywords] = useState('')
   const [samNoticeTypes, setSamNoticeTypes] = useState('RFI,Sources Sought,Special Notice,Presolicitation')
@@ -229,7 +242,7 @@ export default function App() {
     setStatus('Fetching real bulk data from backend...')
     try {
       const q = `?naics=${naics}`
-      const [k, f, i, e, v, g, tr, sa, trp] = await Promise.all([
+      const [k, f, i, e, v, g, tr, sa, trp, mp] = await Promise.all([
         fetch(`/data/kpis${q}`).then(r => r.json()),
         fetch(`/data/flows${q}&limit=6`).then(r => r.json()),
         fetch(`/data/agency-intensity${q}&limit=10`).then(r => r.json()),
@@ -239,8 +252,10 @@ export default function App() {
         fetch(`/data/fy-trends${q}`).then(r => r.json()),
         fetch(`/data/set-aside${q}`).then(r => r.json()),
         fetch(`/data/top-recipients${q}&limit=8`).then(r => r.json()),
+        fetch(`/data/market_potential${q}`).then(r => r.json()),
       ])
       setKpis(k)
+      setMarketPotential(mp)
       setFlows(f || [])
       setIntensity(i || [])
       setExpiring(e || [])
@@ -454,8 +469,12 @@ export default function App() {
     }
   }
 
-  // Combo logic (expiring + intensity) — one of the meaningful non-obvious combos
-  const hotAgencies = new Set(intensity.filter(x => (x.total_oblig || 0) > 5e6).map(x => x.agency))
+  // Combo logic (expiring + intensity) — expiring work in high-intensity agencies
+  const medIntensityActions = intensity.length ? intensity.reduce((s, x) => s + (x.award_count || 0), 0) / intensity.length : 0
+  const medIntensityOblig = intensity.length ? intensity.reduce((s, x) => s + (x.total_oblig || 0), 0) / intensity.length : 0
+  const isHotAgency = (a: IntensityData) => (a.total_oblig || 0) > medIntensityOblig && (a.award_count || 0) > medIntensityActions
+  const hotAgencyList = intensity.filter(isHotAgency)
+  const hotAgencies = new Set(hotAgencyList.map(x => x.agency))
   const comboExpiring = expiring.filter(e => hotAgencies.has(e.agency || ''))
 
   // Pulse stats used across overview cards + some action teasers in market/vehicles
@@ -467,18 +486,18 @@ export default function App() {
 
     switch (dashTab) {
       case 'market': {
-        // Market Overview as the "Command & Control / Pulse" at a glance.
-        // Now with inline stats (concentration, hot recompetes) + direct +brain actions on the key visuals.
-        // Still deliberately lightweight so you can scan fast and decide where to dive or what to accumulate to Brain.
+        // Market Overview — Command & Control pulse for capture managers.
+        // Scan TAM → momentum → focus agencies → money flows → concentration → next actions.
 
         const trendData = fyTrends.map((t: any) => ({
           fy: 'FY' + t.fy,
           obligationsM: t.millions || 0,
           actions: t.actions || 0,
         }))
+        const fySpan = trendData.length >= 2
+          ? `${trendData[0].fy}–${trendData[trendData.length - 1].fy}`
+          : trendData.length === 1 ? trendData[0].fy : 'limited history'
 
-        // Sankey for overview "Follow the Money" — now 3-level: Recipient (competitor) → Agency → Office
-        // This gives much tighter focus than stopping at Agency (original Data_Insights style multi-level flows).
         const sankeyNodes: any[] = []
         const sankeyNodeMap = new Map<string, number>()
         const sankeyLinks: any[] = []
@@ -486,14 +505,12 @@ export default function App() {
           const r = f.recipient || 'Unknown Recipient'
           const a = f.agency || 'Unknown Agency'
           const o = f.office || 'Unspecified Office'
-          // Distinct keys prevent name collisions across hierarchy levels (e.g. same word used as recipient vs office)
           const rk = `R:${r}`
           const ak = `A:${a}`
           const ok = `O:${o}`
           if (!sankeyNodeMap.has(rk)) { sankeyNodeMap.set(rk, sankeyNodes.length); sankeyNodes.push({ label: r }) }
           if (!sankeyNodeMap.has(ak)) { sankeyNodeMap.set(ak, sankeyNodes.length); sankeyNodes.push({ label: a }) }
           if (!sankeyNodeMap.has(ok)) { sankeyNodeMap.set(ok, sankeyNodes.length); sankeyNodes.push({ label: o }) }
-          // Chain the flow: competitor money goes through agency down to specific office
           sankeyLinks.push({ source: sankeyNodeMap.get(rk)!, target: sankeyNodeMap.get(ak)!, value: f.millions || 0 })
           sankeyLinks.push({ source: sankeyNodeMap.get(ak)!, target: sankeyNodeMap.get(ok)!, value: f.millions || 0 })
         })
@@ -504,25 +521,23 @@ export default function App() {
           link: { source: sankeyLinks.map(l => l.source), target: sankeyLinks.map(l => l.target), value: sankeyLinks.map(l => l.value), color: 'rgba(0,240,255,0.28)' },
         }] : []
 
-        // Intensity quadrant on overview (as user said — this is an overview chart for pulse + prioritization)
-        const medActions = intensity.length ? intensity.reduce((s, x) => s + (x.award_count || 0), 0) / intensity.length : 0
-        const medOblig = intensity.length ? intensity.reduce((s, x) => s + (x.total_oblig || 0), 0) / intensity.length : 0
-        const intensityScatterData = intensity.map((a) => {
-          const isHot = (a.total_oblig || 0) > medOblig && (a.award_count || 0) > medActions
-          return {
-            x: a.award_count || 0,
-            y: a.total_oblig || 0,
-            z: Math.max(35, Math.min(220, (a.avg_award || 0) / 15000)), // vary dot size by avg award (tuned for visual range)
-            name: a.agency,
-            isHot,
-          }
-        })
+        const medActions = medIntensityActions
+        const medOblig = medIntensityOblig
+        const intensityScatterData = intensity.map((a) => ({
+          x: a.award_count || 0,
+          y: a.total_oblig || 0,
+          z: Math.max(35, Math.min(220, (a.avg_award || 0) / 15000)),
+          name: a.agency,
+          isHot: isHotAgency(a),
+        }))
 
         const totalM = kpis.total_obligations_m || 1
         const top3M = topRecipients.slice(0, 3).reduce((s: number, r: any) => s + (r.millions || 0), 0)
         const top3Pct = Math.round((top3M / totalM) * 100)
+        const topAgencies = (marketPotential?.top_agencies || [])
+          .filter((a) => a.agency)
+          .slice(0, 5)
 
-        // Separate aggregates for two pie charts: Pricing and Contract Vehicles (IDV types etc.)
         const pricingAgg: Record<string, number> = {}
         const vehicleAgg: Record<string, number> = {}
         vehicles.forEach((v: any) => {
@@ -535,9 +550,13 @@ export default function App() {
         const pricingValues = Object.values(pricingAgg)
         const vehicleLabels = Object.keys(vehicleAgg)
         const vehicleValues = Object.values(vehicleAgg)
+        const setAsidePulse = setAside.slice(0, 4).map((s: any) => ({
+          name: (s.set_aside || 'Unknown').replace(' SET ASIDE', '').slice(0, 22),
+          millions: s.millions || 0,
+        }))
 
-        const MetricCard = ({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) => (
-          <div className="glass p-3 rounded-2xl border-b border-[#00f0ff]/50">
+        const MetricCard = ({ label, value, tooltip, accent }: { label: string; value: string; tooltip?: string; accent?: string }) => (
+          <div className={`glass p-3 rounded-2xl border-b ${accent || 'border-[#00f0ff]/50'}`}>
             <div className="text-[9px] uppercase tracking-[1px] text-slate-400 flex items-center gap-1">
               {label} {tooltip && <span className="text-[#00f0ff] cursor-help" title={tooltip}>?</span>}
             </div>
@@ -551,16 +570,98 @@ export default function App() {
 
         return (
           <div className="space-y-4">
-            {/* Quick totals row — modeled on the original Data Insights KPI cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-              <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} />
-              <MetricCard label="Total Award Actions" value={fmtNum(kpis.total_actions)} />
-              <MetricCard label="Average Award Value" value={fmtAvg(kpis.avg_award_value_k)} />
-              <MetricCard label="Active Contracts" value={fmtNum(kpis.active_contracts_approx)} />
-              <MetricCard label="Expiring Contracts" value={fmtNum(kpis.expiring_24m || 0)} tooltip="Contracts ending in next 24 months — your primary recompete radar. Start positioning early." />
-              <MetricCard label="Suitability" value={`${kpis.suitability_pct}%`} tooltip="How well current expiring opportunities match your capabilities & past performance (future: real matching)." />
-              <MetricCard label="Synergy" value={`${kpis.synergy_pct}%`} tooltip="Cross-NAICS or teaming leverage against expiring work (future: real calc)." />
+            {/* Pulse hero — 60-second market read for capture managers */}
+            <div className="market-pulse-hero">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold text-[#e6ecff] flex items-center gap-2">
+                    <BarChart3 size={18} className="text-[#00f0ff]" />
+                    Market Pulse <span className="pill">NAICS {naics}</span>
+                  </div>
+                  <div className="text-xs text-[#94a3b8] mt-1 max-w-2xl">
+                    Your command view: total market size, momentum, where money flows, who dominates, and where to focus BD effort. Use the action cards below — then dive into Agency Intelligence for lead engagement.
+                  </div>
+                </div>
+                <div className="text-right text-[10px] text-[#64748b] font-mono">
+                  <div>FY span: {fySpan}</div>
+                  <div>{kpis.total_actions?.toLocaleString()} actions in slice</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                <div className="market-stat-chip">
+                  <div className="label">Total Market (TAM)</div>
+                  <div className="value">{fmtObl(kpis.total_obligations_m)}</div>
+                </div>
+                <div className="market-stat-chip">
+                  <div className="label">Competitive Field</div>
+                  <div className="value">{(marketPotential?.unique_competitors || 0).toLocaleString()} primes</div>
+                </div>
+                <div className="market-stat-chip">
+                  <div className="label">Momentum</div>
+                  <div className="value text-[#ff2bd6] text-base">{marketPotential?.trend || '—'}</div>
+                </div>
+                <div className="market-stat-chip">
+                  <div className="label">Recompete Radar (24m)</div>
+                  <div className="value">{fmtNum(kpis.expiring_24m || 0)} ending</div>
+                </div>
+              </div>
             </div>
+
+            {/* KPI row — real numbers only; stubs demoted */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip="Sum of federal_action_obligation for your NAICS slice in loaded bulk history." />
+              <MetricCard label="Award Actions" value={fmtNum(kpis.total_actions)} tooltip="Individual obligation rows — volume signal for how active the market is." />
+              <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size — helps size pursuit teams and bid/no-bid thresholds." />
+              <MetricCard label="Unique Awards" value={fmtNum(kpis.unique_awards || 0)} tooltip="Distinct contract_award_unique_key count — breadth of work packages." />
+              <MetricCard label="Active Contracts" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with PoP end in future or unset — rough active footprint." accent="border-[#ff2bd6]/50" />
+            </div>
+
+            {/* Capture workflow — what to do from this tab */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="market-action-card">
+                <div className="title">1. Prioritize customers</div>
+                <div className="body">{hotAgencyList.length} hot agencies (high volume + high value). These are your best BD engagement targets.</div>
+                <div className="actions">
+                  <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">Agency Intelligence →</button>
+                  <button onClick={() => hotAgencyList.slice(0, 3).forEach((a) => addToBrain(a, a.agency, 'agency'))} className="action-btn brain text-[10px]">+brain top 3</button>
+                </div>
+              </div>
+              <div className="market-action-card">
+                <div className="title">2. Track recompetes</div>
+                <div className="body">{hotRecompeteCount} expiring awards in hot agencies (${hotRecompeteM.toFixed(1)}M). Start positioning before SAM notices drop.</div>
+                <div className="actions">
+                  <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-[#00f0ff] hover:underline">Future Opportunities →</button>
+                  {hotRecompeteCount > 0 && <button onClick={() => comboExpiring.slice(0, 2).forEach((e) => addToPipeline(e, 'expiring'))} className="action-btn pipeline text-[10px]">+pipeline top 2</button>}
+                </div>
+              </div>
+              <div className="market-action-card">
+                <div className="title">3. Map the competitive field</div>
+                <div className="body">Top 3 primes hold {top3Pct}% of spend. Know who to team with, ghost, or displace.</div>
+                <div className="actions">
+                  <button onClick={() => setDashTab('competitive')} className="text-[10px] text-[#00f0ff] hover:underline">Competitive Analysis →</button>
+                  <button onClick={() => topRecipients.slice(0, 3).forEach((r: any) => addToBrain({ recipient: r.recipient }, r.recipient, 'competitor'))} className="action-btn brain text-[10px]">+brain top 3</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Top agencies quick list — bridge to Agency Intelligence tab */}
+            {topAgencies.length > 0 && (
+              <div className="glass p-4 rounded-3xl">
+                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
+                  Top Agencies by Spend
+                  <button onClick={() => setDashTab('agency')} className="text-xs text-[#00f0ff] hover:underline">Full agency intel →</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                  {topAgencies.map((a, idx) => (
+                    <div key={idx} className="market-priority-row">
+                      <div className="font-medium text-[#c0c0d8] text-xs truncate" title={a.agency || ''}>{a.agency}</div>
+                      <div className="text-[10px] text-[#00f0ff] tabular-nums">${a.millions?.toFixed(0)}M</div>
+                      <button onClick={() => addToBrain({ agency: a.agency, millions: a.millions }, a.agency || 'Agency', 'agency')} className="text-[9px] text-[#ff2bd6] hover:underline mt-0.5">+brain</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Pulse visuals: Momentum + Focus (Intensity) + Flows (Sankey) — at a glance for C2 decisions */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -638,19 +739,19 @@ export default function App() {
                     </ResponsiveContainer>
                   </div>
                 ) : <div className="text-sm text-slate-400">Need more agency data.</div>}
-                <div className="text-[10px] text-[#606080] mt-1">Upper-right (pink) = high volume + high value. Dot size = avg award size. Medians as crosshairs. Classic capture pulse for prioritizing BD focus.</div>
-                <div className="mt-1">
-                  <button 
-                    onClick={() => {
-                      intensity.filter((a: any) => (a.total_oblig || 0) > medOblig && (a.award_count || 0) > medActions)
-                        .slice(0,3)
-                        .forEach((a: any) => addToBrain(a, a.agency, 'agency'))
-                    }} 
-                    className="text-[10px] action-btn brain px-2 py-0.5"
-                  >
-                    +brain top hot agencies from this view
-                  </button>
-                </div>
+                <div className="text-[10px] text-[#606080] mt-1">Pink dots = hot quadrant (above median actions AND obligations). Size = avg award. Crosshairs = market median.</div>
+                {hotAgencyList.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {hotAgencyList.slice(0, 4).map((a, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-[10px] py-0.5">
+                        <span className="text-[#ff2bd6] truncate">{a.agency}</span>
+                        <span className="text-[#64748b] shrink-0 ml-2">{a.award_count?.toLocaleString()} actions • ${((a.total_oblig || 0) / 1e6).toFixed(0)}M</span>
+                        <button onClick={() => addToBrain(a, a.agency, 'agency')} className="text-[9px] text-[#00f0ff] hover:underline ml-2 shrink-0">+brain</button>
+                      </div>
+                    ))}
+                    <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">All agencies in Agency Intelligence →</button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -775,18 +876,64 @@ export default function App() {
                 </div>
               </div>
               <div className="text-[10px] text-[#606080] mt-2">
-                See the Vehicles tab for the full set-aside mix, detailed table, and strategy implications. Pies show dollar share for quick pulse.
+                See the Vehicles tab for full set-aside mix and detailed vehicle table.
               </div>
-              {hotRecompeteCount > 0 && (
-                <div className="mt-2 text-[10px]">
-                  <span className="text-[#ff2bd6]">Hot recompetes:</span> ${hotRecompeteM.toFixed(1)}M in high-intensity agencies.
-                  <button onClick={() => setDashTab('opportunities')} className="ml-1 text-[#00f0ff] hover:underline">View +pipeline →</button>
-                </div>
-              )}
+            </div>
+
+            {/* Set-aside pulse + hot recompetes spotlight */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="glass p-4 rounded-3xl">
+                <div className="text-sm font-semibold mb-2">Competition Mix (Set-Asides)</div>
+                {setAsidePulse.length ? (
+                  <div style={{ width: '100%', height: 160 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={setAsidePulse} layout="vertical" margin={{ left: 4, right: 8 }}>
+                        <XAxis type="number" stroke="#606080" tickFormatter={(v) => `$${v}M`} />
+                        <YAxis dataKey="name" type="category" width={120} stroke="#606080" tick={{ fontSize: 9 }} />
+                        <Tooltip contentStyle={{ background: '#16161f', border: '1px solid #1f1f2e', fontSize: 11 }} />
+                        <Bar dataKey="millions" fill="#00f0ff" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : <div className="text-sm text-slate-400">Set-aside data loads with ingest.</div>}
+                <button onClick={() => setDashTab('vehicles')} className="text-[10px] text-[#00f0ff] hover:underline mt-1">Full vehicle analysis →</button>
+              </div>
+
+              <div className="glass p-4 rounded-3xl border border-[#ff2bd6]/20">
+                <div className="text-sm font-semibold mb-2 text-[#ff2bd6]">Hot Recompetes in Focus Agencies</div>
+                {comboExpiring.length ? (
+                  <div className="space-y-1.5">
+                    {comboExpiring.slice(0, 4).map((e, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 text-[11px] py-1 border-b border-[#1f2a44]/60">
+                        <div className="min-w-0 truncate">
+                          <span className="text-[#e6ecff]">{e.recipient}</span>
+                          <span className="text-[#64748b]"> @ {e.agency}</span>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                          <span className="text-[#00f0ff] tabular-nums">${((e.obligation || 0) / 1e6).toFixed(1)}M</span>
+                          <button onClick={() => setDashTab('opportunities')} className="text-[9px] text-[#64748b] hover:text-[#00f0ff]">{e.end_date?.slice(0, 7)}</button>
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={() => setDashTab('opportunities')} className="action-btn pipeline text-[10px] mt-2">View all + create SAM monitors →</button>
+                  </div>
+                ) : (
+                  <div className="text-xs text-[#64748b]">No expiring awards in hot agencies in current slice. Add brain entries or check Future Opportunities for full radar.</div>
+                )}
+              </div>
             </div>
 
             <div className="insight">
-              Market Overview = quick pulse check (TAM + momentum trend + Capture Intensity + Follow the Money 3-level flows + concentration treemap + vehicle pulse + hot recompetes). Concentration % and top flow +brain buttons give instant actions. Intensity tells you "where to pay attention", Follow the Money (down to specific Office) tells you "who wins and where". Use the +brain chips and tab links to accumulate what matters.
+              <strong className="text-[#e6ecff]">What this tab tells you:</strong> Total market size, whether spend is growing or shrinking, which agencies and competitors matter, and how work is bought. This is your 60-second capture pulse before customer calls or pipeline reviews.
+            </div>
+            <div className="insight magenta">
+              <strong className="text-[#e6ecff]">Act today:</strong> +brain hot agencies and top competitors from this view. They compound in Knowledge Vault and feed your co-pilot. Use Future Opportunities for expiring work and SAM monitors.
+            </div>
+            <div className="insight lime">
+              <strong className="text-[#e6ecff]">Go deeper next:</strong> Agency Intelligence tab — full hot list, engagement notes, and lead development on the customers surfaced here. (That tab is our next polish target.)
+            </div>
+            <div className="text-[10px] text-[#606080] px-1">
+              Suitability &amp; synergy scores return when your capability profile / past performance is loaded — placeholders hidden until real.
             </div>
           </div>
         )
