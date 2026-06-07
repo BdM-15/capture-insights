@@ -31,6 +31,10 @@
   --neon-magenta-rgb: 255, 43, 214;
   --neon-lime-rgb: 0, 255, 156;
   --neon-amber-rgb: 255, 176, 32;
+  --neon-red-rgb: 255, 59, 107;
+
+  --accent-purple: #c4b5fd;
+  --accent-purple-rgb: 196, 181, 253;
 }
 
 /* Base dark styles */
@@ -39,11 +43,173 @@ body {
   color: var(--text-primary);
 }
 
-/* Glass / card patterns from Theseus + Ariadne */
+/* ============================================
+   APP SHELL — three-tier layout (Theseus-inspired, ~30% intensity)
+   ============================================ */
+.app-shell {
+  background: var(--ink-950);
+  color: var(--text-primary);
+}
+
+.app-body {
+  padding-top: 3.5rem;
+  height: calc(100vh - 3.5rem);
+  overflow: hidden;
+}
+
+.main-panel {
+  height: 100%;
+  min-height: 0;
+}
+
+.topbar-vibrant {
+  background: rgba(5, 7, 13, 0.92);
+  backdrop-filter: blur(16px);
+  position: relative;
+}
+
+.topbar-vibrant::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--neon-cyan-rgb), 0.35),
+    rgba(var(--neon-magenta-rgb), 0.25),
+    transparent
+  );
+  opacity: 0.6;
+}
+
+.brand-tile {
+  box-shadow: 0 0 12px rgba(var(--neon-cyan-rgb), 0.25);
+}
+
+.sidebar-vibrant {
+  border-right: 1px solid var(--edge);
+  position: relative;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.sidebar-vibrant::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(var(--neon-cyan-rgb), 0.2),
+    rgba(var(--accent-purple-rgb), 0.15),
+    rgba(var(--neon-magenta-rgb), 0.1)
+  );
+  pointer-events: none;
+}
+
+.glass-section-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3rem;
+  padding: 0.5rem 0;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--edge);
+  flex-shrink: 0;
+}
+
+.h1-gradient {
+  background: linear-gradient(90deg, var(--neon-cyan), var(--text-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.section-subtitle {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--text-500);
+  margin-top: 2px;
+}
+
+.nav-group-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-500);
+  padding: 0 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.panel-canvas {
+  padding: 0.25rem 0 1.5rem;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(var(--neon-cyan-rgb), 0.04), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(var(--neon-magenta-rgb), 0.03), transparent);
+}
+
+/* ============================================
+   SURFACE SYSTEM — unified card/island/glass
+   ============================================ */
+.surface {
+  background: linear-gradient(145deg, rgba(17, 23, 42, 0.95) 0%, rgba(10, 14, 26, 0.98) 100%);
+  border: 1px solid var(--edge);
+  border-radius: 1rem;
+  padding: 1rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.surface-hover:hover,
+.surface:hover.surface-hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 0 16px rgba(var(--neon-cyan-rgb), 0.06);
+  border-color: var(--edge-strong);
+}
+
+.surface-accent-cyan::before,
+.surface-accent-magenta::before,
+.surface-accent-lime::before,
+.surface-accent-amber::before,
+.surface-accent-purple::before {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 1rem 0 0 1rem;
+}
+
+.surface-accent-cyan,
+.surface-accent-magenta,
+.surface-accent-lime,
+.surface-accent-amber,
+.surface-accent-purple {
+  position: relative;
+  padding-left: calc(1rem + 4px);
+  overflow: hidden;
+}
+
+.surface-accent-cyan::before { background: var(--neon-cyan); }
+.surface-accent-magenta::before { background: var(--neon-magenta); }
+.surface-accent-lime::before { background: var(--neon-lime); }
+.surface-accent-amber::before { background: var(--neon-amber); }
+.surface-accent-purple::before { background: var(--accent-purple); }
+
+/* Legacy aliases — migrate callers to .surface */
 .glass {
   background: rgba(17, 23, 42, 0.88);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(var(--neon-cyan-rgb), 0.08);
 }
 
 .card {
@@ -56,7 +222,7 @@ body {
 
 .card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.12);
+  box-shadow: 0 0 20px rgba(var(--neon-cyan-rgb), 0.12);
 }
 
 .card-accent {
@@ -87,7 +253,20 @@ body {
   background: linear-gradient(90deg, var(--neon-cyan), #00b8d9);
   color: var(--ink-950);
   border: 1px solid var(--neon-cyan);
+  box-shadow: 0 0 12px rgba(var(--neon-cyan-rgb), 0.2);
 }
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 18px rgba(var(--neon-cyan-rgb), 0.35);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-sm { @apply text-xs px-3 py-1.5; }
+.btn-xs { @apply text-[10px] px-2 py-1; }
 
 .btn-ghost {
   background: transparent;
@@ -100,25 +279,126 @@ body {
   color: var(--neon-cyan);
 }
 
+.btn-soft {
+  background: rgba(var(--neon-cyan-rgb), 0.08);
+  border: 1px solid rgba(var(--neon-cyan-rgb), 0.25);
+  color: var(--neon-cyan);
+}
+
+.btn-soft:hover:not(:disabled) {
+  background: rgba(var(--neon-cyan-rgb), 0.14);
+  box-shadow: 0 0 12px rgba(var(--neon-cyan-rgb), 0.15);
+}
+
 .pill {
   @apply px-2.5 py-0.5 text-xs font-mono rounded-full border;
 }
 
-.icon-tile {
-  @apply w-9 h-9 rounded-md flex items-center justify-center;
-  background: rgba(0, 240, 255, 0.08);
-  border: 1px solid rgba(0, 240, 255, 0.2);
+.icon-tile,
+.nav-icon-tile {
+  @apply w-8 h-8 rounded-lg flex items-center justify-center shrink-0;
+  background: rgba(var(--neon-cyan-rgb), 0.08);
+  border: 1px solid rgba(var(--neon-cyan-rgb), 0.2);
 }
+
+.tile-cyan { background: rgba(var(--neon-cyan-rgb), 0.1); border-color: rgba(var(--neon-cyan-rgb), 0.25); color: var(--neon-cyan); }
+.tile-magenta { background: rgba(var(--neon-magenta-rgb), 0.1); border-color: rgba(var(--neon-magenta-rgb), 0.25); color: var(--neon-magenta); }
+.tile-purple { background: rgba(var(--accent-purple-rgb), 0.1); border-color: rgba(var(--accent-purple-rgb), 0.25); color: var(--accent-purple); }
+.tile-lime { background: rgba(var(--neon-lime-rgb), 0.1); border-color: rgba(var(--neon-lime-rgb), 0.25); color: var(--neon-lime); }
+.tile-amber { background: rgba(var(--neon-amber-rgb), 0.1); border-color: rgba(var(--neon-amber-rgb), 0.25); color: var(--neon-amber); }
 
 /* Nav */
 .nav-item {
-  @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition;
+  @apply flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm cursor-pointer transition text-left;
+  color: var(--text-300);
+  border: 1px solid transparent;
+}
+
+.nav-item:hover {
+  background: rgba(var(--neon-cyan-rgb), 0.05);
+  color: var(--text-primary);
 }
 
 .nav-item-active {
-  background: rgba(0, 240, 255, 0.1);
+  background: rgba(var(--neon-cyan-rgb), 0.1);
   color: var(--neon-cyan);
+  border-color: rgba(var(--neon-cyan-rgb), 0.2);
   border-left: 3px solid var(--neon-cyan);
+}
+
+/* Status pills */
+.status-pill {
+  @apply inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-mono rounded-full border;
+  border-color: var(--edge);
+  color: var(--text-400);
+  background: rgba(var(--neon-cyan-rgb), 0.04);
+}
+
+.status-pill.is-live {
+  border-color: rgba(var(--neon-lime-rgb), 0.4);
+  color: var(--neon-lime);
+  background: rgba(var(--neon-lime-rgb), 0.08);
+}
+
+.status-pill.is-processing {
+  border-color: rgba(var(--neon-cyan-rgb), 0.4);
+  color: var(--neon-cyan);
+}
+
+.status-pill.is-pending {
+  border-color: rgba(var(--neon-amber-rgb), 0.4);
+  color: var(--neon-amber);
+}
+
+.status-pill.is-failed {
+  border-color: rgba(var(--neon-red-rgb), 0.4);
+  color: var(--neon-red);
+}
+
+/* Tab / filter pills */
+.tab-bar {
+  @apply flex flex-wrap gap-1.5 mb-4 pb-2 border-b border-edge;
+}
+
+.filter-pill {
+  @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition;
+  color: var(--text-400);
+  border: 1px solid transparent;
+}
+
+.filter-pill:hover {
+  color: var(--text-primary);
+  background: rgba(var(--neon-cyan-rgb), 0.05);
+}
+
+.filter-pill-active {
+  color: var(--neon-cyan);
+  background: rgba(var(--neon-cyan-rgb), 0.1);
+  border-color: rgba(var(--neon-cyan-rgb), 0.25);
+}
+
+/* Metric cards */
+.metric-card {
+  background: rgba(5, 7, 13, 0.5);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+}
+
+.metric-card-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-500);
+  display: flex;
+  align-items: center;
+}
+
+.metric-card-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
 }
 
 /* Status / data indicators */
@@ -301,9 +581,8 @@ body {
 @layer components {
   /* The fundamental separated container — clean, not smushed, not random */
   .island {
-    @apply glass rounded-2xl p-4 border border-[#1f2a44];
+    @apply surface surface-hover rounded-2xl;
     margin-bottom: 12px;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .island:last-child { margin-bottom: 0; }
   .island:hover {
@@ -355,6 +634,37 @@ body {
     @apply flex items-center gap-2 mt-2;
   }
 
+  /* Unified list row (global wiki, native .md, simple indexes) */
+  .entry-row {
+    @apply flex items-start justify-between gap-2 rounded-xl border border-edge p-2.5 mb-1.5 last:mb-0;
+    background: rgba(5, 7, 13, 0.45);
+    transition: border-color 0.15s ease;
+  }
+
+  .entry-row:hover {
+    border-color: rgba(var(--accent-purple-rgb), 0.45);
+  }
+
+  .entry-row-main {
+    @apply min-w-0 flex-1;
+  }
+
+  .entry-row-title {
+    @apply font-medium text-text-primary text-xs;
+  }
+
+  .entry-row-excerpt {
+    @apply text-text-400 truncate text-[11px] mt-0.5;
+  }
+
+  .entry-row-path {
+    @apply font-mono text-[9px] text-text-500 mt-0.5;
+  }
+
+  .entry-row-actions {
+    @apply flex items-center gap-1 shrink-0;
+  }
+
   /* Legacy brain-item kept for minimal diff but now delegates to .entry */
   .brain-item { @apply entry; }
 
@@ -394,12 +704,6 @@ body {
 .insight.magenta { border-color: #ff2bd6; }
 .insight.lime { border-color: #00ff9c; }
 .insight.vault { border-color: #c4b5fd; }
-
-/* Small polish for command feel */
-.pill {
-  @apply px-2 py-px text-[10px] font-mono rounded-full border border-[#1f2a44] text-[#64748b];
-}
-.action-group { @apply flex flex-wrap gap-2 items-center; }
 
 /* Market Overview — pulse hero + workflow cards */
 .market-pulse-hero {
@@ -500,4 +804,17 @@ body {
 
 .market-chart-grid .market-chart-panel {
   min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-vibrant::after,
+  .sidebar-vibrant::after,
+  .brand-tile,
+  .surface-hover:hover,
+  .card:hover,
+  .island:hover {
+    animation: none;
+    transform: none;
+    transition: none;
+  }
 }

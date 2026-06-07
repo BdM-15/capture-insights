@@ -94,26 +94,57 @@ We will **not** invest heavy effort into complex interactivity or new UI pattern
 - Richer education system (persistent, contextual, maybe integrated with the AI agent).
 - Full sections matching the powerful old Data_Insights structure but modernized and actually usable for daily capture work.
 
+## React Design System (implemented)
+
+**Single source of truth:** `frontend/src/index.css` (tokens + components) + `frontend/tailwind.config.js` (utility aliases).
+
+### App shell (three tiers)
+
+1. **Topbar** — brand, NAICS search, API health pill, pipeline/brain badges, Refresh, Chat toggle
+2. **Sidebar** — grouped nav: INTELLIGENCE / WORKFLOW / TOOLS / SYSTEM
+3. **Section bar** — gradient title + mono subtitle + per-view status + Refresh
+4. **Panel canvas** — scrollable content area with subtle aurora (balanced ~30% Theseus intensity)
+
+Shell components: `frontend/src/components/shell/`. View metadata: `frontend/src/constants/viewMeta.ts`.
+
+### Surface system (unified card/island/glass)
+
+- `.surface` — base panel (gradient fill, edge border)
+- `.surface-accent-{cyan|magenta|lime|amber|purple}` — left neon stripe
+- `.surface-hover` — lift + glow on hover
+- Legacy `.glass` / `.island` still work; `.island` now delegates to `.surface`
+
+### Reusable components
+
+| Component | Path | Use |
+|-----------|------|-----|
+| `Surface` | `components/ui/Surface.tsx` | Panels everywhere |
+| `Button` | `components/ui/Button.tsx` | primary / soft / ghost + pipeline/brain/vault |
+| `MetricCard` | `components/ui/MetricCard.tsx` | KPI strips |
+| `StatusPill` | `components/ui/StatusPill.tsx` | API health, stages |
+| `TabBar` | `components/ui/TabBar.tsx` | Dashboard secondary nav |
+| `EntryRow` | `components/data/EntryRow.tsx` | Vault/wiki list rows |
+
+### Semantic accent rules
+
+- **Cyan** — data, intelligence, primary actions
+- **Magenta** — opportunities, intensity, workflow tools
+- **Purple** — Knowledge Vault, brain, wiki
+- **Lime** — success, live status, system
+- **Amber** — attention, vision stubs
+
+### Coding rules
+
+- **No hardcoded hex in TSX** — use Tailwind `ink-*`, `neon-*`, `edge`, `text-*` or CSS vars
+- Mono uppercase labels for operational text (`text-[10px] tracking-[0.18em] font-mono`)
+- Tabular nums on all metrics and tables
+- Motion on chrome and feedback only — not data tables (`prefers-reduced-motion` respected)
+
 ## Current Implementation Notes
 
-- Thin version lives entirely in `backend/app/main.py` (the `simple_dashboard()` HTML string + supporting queries in `queries.py`).
-- Uses Tailwind CDN + Chart.js + Font Awesome + Mermaid (for flow proxy) — zero build.
-- Theme tokens are duplicated inline for the prototype (will be extracted to shared CSS/TS when React starts).
-
-When we start the React work, we will:
-1. Create `frontend/` with Vite + React + TS.
-2. Extract theme into `frontend/src/styles/theme.css` (or tokens.ts) matching Theseus exactly.
-3. Port the current dashboard as the first rich page/component.
-4. Add routing for the 6 conceptual sections (Market Overview, Intensity/Competitive, Vehicles, Geo, Opportunities, Flows).
-5. Wire the same `/data/*` endpoints.
-
-## Next Steps (as of this doc)
-
-See the conversation for current priority. The thin dashboard is "good enough" for exploration + education while data grows. Major new features are parked for React.
-
-If you want to kick off the React scaffold now (even a minimal Vite shell + theme tokens + one ported dashboard view), just say the word.
-
-Consistency across your tools (capture-insights + Theseus + Ariadne concepts) is a nice side benefit of this approach.
+- **Primary UI:** React SPA in `frontend/` (Vite + Tailwind + Recharts/Plotly), served at `http://127.0.0.1:8000` when built.
+- **Thin fallback:** `backend/app/main.py` `simple_dashboard()` — legacy; tokens not synced (low priority).
+- **Monolith:** `App.tsx` still holds page logic; shell + shared components extracted incrementally.
 
 ---
 Maintained as the single source of truth for visual direction. Update this file when tokens or patterns change.

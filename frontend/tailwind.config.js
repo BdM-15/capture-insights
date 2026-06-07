@@ -18,6 +18,7 @@ export default {
           800: '#141a2b',
           700: '#1c2338',
           600: '#283151',
+          card: '#11172a',
         },
         neon: {
           cyan: '#00f0ff',
@@ -27,6 +28,15 @@ export default {
           red: '#ff3b6b',
         },
         edge: { DEFAULT: '#1f2a44', strong: '#2c3a5e' },
+        text: {
+          primary: '#e6ecff',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',
+        },
+        accent: {
+          purple: '#c4b5fd',
+        },
       },
       boxShadow: {
         glow: '0 0 18px rgba(0,240,255,0.25), 0 0 2px rgba(0,240,255,0.5) inset',

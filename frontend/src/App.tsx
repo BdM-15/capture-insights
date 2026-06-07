@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react'
 import { 
-  BarChart3, Target, Users, Truck, MapPin, Clock, 
-  TrendingUp, RefreshCw, Search, Plus, Layers, MessageSquare, Settings, Wrench, Briefcase, BookOpen, X, Maximize2,
-  Copy, FolderOpen, Trash2, Info, Eye
+  BarChart3, Target, Clock, 
+  RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
+  Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
+import { AppShell } from './components/shell/AppShell'
+import type { HealthState } from './components/shell/Topbar'
+import { MetricCard } from './components/ui/MetricCard'
+import { TabBar } from './components/ui/TabBar'
+import { EntryRow } from './components/data/EntryRow'
+import {
+  NAV_GROUPS,
+  DASHBOARD_TABS,
+  VIEW_META,
+  type SidebarId,
+} from './constants/viewMeta'
 
 // capture-insights React Frontend
 // Per latest feedback:
@@ -82,28 +93,10 @@ interface ExpiringData {
   agency: string
 }
 
-const SIDEBAR_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3, desc: 'Core data views & insights' },
-  { id: 'pipeline', label: 'Pipeline', icon: Briefcase, desc: 'Opportunities & pursuits tracker — future Ariadne Thread connection (milestone living packets)' },
-  { id: 'vault', label: 'Knowledge Vault', icon: BookOpen, desc: 'LLM wiki / Karpathy notes — domain intel, personal observations, training, ontologies' },
-  { id: 'tools', label: 'MCP Tools', icon: Wrench, desc: 'Using 1102tools/federal-contracting-mcps (sam-gov-mcp etc.) + direct fallbacks' },
-  { id: 'skills', label: 'Skills', icon: Layers, desc: 'Capture skills & automations (future)' },
-  { id: 'settings', label: 'Settings', icon: Settings, desc: 'NAICS defaults, theme, etc.' },
-]
-
-const DASHBOARD_TABS = [
-  { id: 'market', label: 'Market Overview', icon: BarChart3 },
-  { id: 'opportunities', label: 'Future Opportunities', icon: Clock },
-  { id: 'agency', label: 'Agency Intelligence', icon: Users },
-  { id: 'competitive', label: 'Competitive Analysis', icon: Target },
-  { id: 'vehicles', label: 'Contract Vehicle Analysis', icon: Truck },
-  { id: 'geo', label: 'Geographic Analysis', icon: MapPin },
-  { id: 'combo', label: 'Combo Insights', icon: TrendingUp },
-]
-
 export default function App() {
   const [naics, setNaics] = useState('561210')
-  const [sidebar, setSidebar] = useState<'dashboard' | 'pipeline' | 'vault' | 'tools' | 'skills' | 'settings'>('dashboard')
+  const [sidebar, setSidebar] = useState<SidebarId>('dashboard')
+  const [health, setHealth] = useState<HealthState>('checking')
   const [dashTab, setDashTab] = useState('market')
   const [kpis, setKpis] = useState<KpiData | null>(null)
   const [flows, setFlows] = useState<FlowData[]>([])
@@ -301,6 +294,24 @@ export default function App() {
   }
 
   useEffect(() => { loadData() }, [naics])
+
+  useEffect(() => {
+    let cancelled = false
+    async function checkHealth() {
+      try {
+        const r = await fetch('/health')
+        if (!cancelled) setHealth(r.ok ? 'live' : 'degraded')
+      } catch {
+        if (!cancelled) setHealth('down')
+      }
+    }
+    checkHealth()
+    const interval = setInterval(checkHealth, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   const handleRefresh = () => loadData()
   const handleNaicsKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter') loadData() }
@@ -591,16 +602,6 @@ export default function App() {
           millions: s.millions || 0,
         }))
 
-        const MetricCard = ({ label, value, tooltip, accent, stub, valueClass }: { label: string; value: string; tooltip?: string; accent?: string; stub?: boolean; valueClass?: string }) => (
-          <div className={`glass p-3 rounded-2xl border-b ${accent || 'border-[#00f0ff]/50'}`}>
-            <div className="text-[9px] uppercase tracking-[1px] text-slate-400 flex items-center gap-1">
-              {label} {stub && <span className="metric-stub">vision</span>}
-              {tooltip && <span className="text-[#00f0ff] cursor-help" title={tooltip}>?</span>}
-            </div>
-            <div className={`mt-1 text-2xl md:text-3xl font-semibold tabular-nums tracking-tighter leading-none ${valueClass || 'text-[#00f0ff]'}`}>{value}</div>
-          </div>
-        )
-
         const fmtObl = (m: number) => m >= 1000 ? `$${(m / 1000).toFixed(2)}B` : `$${m.toFixed(0)}M`
         const fmtNum = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toLocaleString()
         const fmtAvg = (k: number) => `$${(k / 1000).toFixed(2)}M`
@@ -648,25 +649,23 @@ export default function App() {
             <div>
               <div className="text-[9px] uppercase tracking-[1.5px] text-[#64748b] mb-1.5 px-0.5">Executive Summary — Glanceable for Capture Managers</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip="TAM in your NAICS slice — size pipeline and executive briefs." valueClass="text-[#ffb020]" accent="border-[#ffb020]/50" />
-                <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume — high count = active or fragmented market." />
-                <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size for bid/no-bid and team sizing." valueClass="text-[#00ff9c]" accent="border-[#00ff9c]/40" />
-                <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with PoP still open — incumbent landscape signal." />
-                <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} tooltip="Recompete count in next 24 months — primary radar." valueClass="text-[#ff2bd6]" accent="border-[#ff2bd6]/50" />
+                <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip="TAM in your NAICS slice — size pipeline and executive briefs." accent="amber" />
+                <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume — high count = active or fragmented market." accent="cyan" />
+                <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size for bid/no-bid and team sizing." accent="lime" />
+                <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with PoP still open — incumbent landscape signal." accent="cyan" />
+                <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} tooltip="Recompete count in next 24 months — primary radar." accent="magenta" />
                 <MetricCard
                   label="Suitability"
                   value={`${kpis.suitability_pct}%`}
                   stub
-                  valueClass="text-[#ffb020]"
-                  accent="border-[#ffb020]/50"
+                  accent="amber"
                   tooltip="Vision stub: % of expiring work matching YOUR business unit capabilities. Will compare contract/agency requirements (from research + web profile building) against global wiki domain intel + company capabilities. Drives go/no-go."
                 />
                 <MetricCard
                   label="Synergy"
                   value={`${kpis.synergy_pct}%`}
                   stub
-                  valueClass="text-[#ff2bd6]"
-                  accent="border-[#ff2bd6]/50"
+                  accent="magenta"
                   tooltip="Vision stub: % where OTHER business units' capabilities create a teaming/synergy play. Uses global wiki multi-BU capability map vs opportunity requirements."
                 />
               </div>
@@ -1583,21 +1582,12 @@ export default function App() {
     if (sidebar === 'dashboard') {
       return (
         <div>
-          {/* Internal tabs for the data sections — this is the "Dashboard Page" with tabs. Features are contextual per tab. */}
-          <div className="flex flex-wrap gap-1 mb-4 border-b border-[#1f1f2e] pb-2">
-            {DASHBOARD_TABS.map(t => {
-              const Icon = t.icon
-              const active = dashTab === t.id
-              return (
-                <button key={t.id} onClick={() => setDashTab(t.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-t-2xl text-sm transition ${active ? 'bg-[#00f0ff]/10 text-[#00f0ff] border-b-2 border-[#00f0ff]' : 'text-[#a0a0c0] hover:text-white hover:bg-[#16161f]'}`}>
-                  <Icon className="w-4 h-4" /> {t.label}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="glass p-4 rounded-3xl border border-[#1f1f2e]">
+          <TabBar
+            tabs={DASHBOARD_TABS}
+            activeId={dashTab}
+            onChange={(id) => setDashTab(id)}
+          />
+          <div className="surface surface-hover rounded-2xl">
             {renderDashboardContent()}
           </div>
         </div>
@@ -1780,31 +1770,30 @@ export default function App() {
               <div className="text-xs text-[#64748b] mt-1">No global files in UI state yet — click Refresh Global List (or restart app). Backend has 155+ from ariadne global_wiki + domain_intel.</div>
             )}
             {globalFiles.length > 0 && (
-              <div className="mt-2 space-y-1 text-xs">
+              <div className="mt-2 text-xs">
                 {globalFiles.slice(0, 12).map((g, i) => (
-                  <div key={i} className="py-1 px-2 border border-[#1f2a44] rounded bg-[#05070d]/50 flex items-start justify-between gap-2 hover:border-[#a78bfa]/60 transition-colors">
-                    <div 
-                      className="min-w-0 flex-1 cursor-pointer" 
-                      onClick={() => setViewedWiki(g)}
-                      title="Click to read the actual wiki content (synthesized sections, citations, observations) in the viewer below"
-                    >
-                      <div className="font-medium text-[#c0c0d8]">{g.name} <span className="text-[#606080]">({g.type || 'global'})</span></div>
-                      <div className="text-[#a0a0c0] truncate">{(g.excerpt || '').slice(0, 160)}</div>
-                      <div className="font-mono text-[9px] text-[#606080]">{g.path}</div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button 
-                        onClick={() => setViewedWiki(g)} 
-                        className="action-btn vault text-[10px]" 
-                        title="Read the full content of this wiki page right here in the app (no need to switch to Obsidian for quick lookup)"
-                      >
-                        <Eye size={11}/> View
-                      </button>
-                      <button onClick={() => { try { navigator.clipboard.writeText(g.path || '') } catch {} }} className="action-btn vault text-[10px]" title="Copy path for Obsidian">
-                        <Copy size={11}/> path
-                      </button>
-                    </div>
-                  </div>
+                  <EntryRow
+                    key={i}
+                    title={g.name}
+                    type={g.type || 'global'}
+                    excerpt={(g.excerpt || '').slice(0, 160)}
+                    path={g.path}
+                    onClick={() => setViewedWiki(g)}
+                    actions={
+                      <>
+                        <button
+                          onClick={() => setViewedWiki(g)}
+                          className="action-btn vault text-[10px]"
+                          title="Read the full content of this wiki page right here in the app"
+                        >
+                          <Eye size={11}/> View
+                        </button>
+                        <button onClick={() => { try { navigator.clipboard.writeText(g.path || '') } catch {} }} className="action-btn vault text-[10px]" title="Copy path for Obsidian">
+                          <Copy size={11}/> path
+                        </button>
+                      </>
+                    }
+                  />
                 ))}
                 {globalFiles.length > 12 && <div className="text-[#606080] text-[10px]">+ {globalFiles.length - 12} more — open data/knowledge/global/ in Obsidian for full graph/search. Use View on any row to read the actual text in-app.</div>}
               </div>
@@ -1959,29 +1948,28 @@ export default function App() {
               </div>
               <div className="text-[10px] text-[#64748b] mb-2">These files live in data/knowledge/brain/. Point Obsidian at data/knowledge/ for graph, backlinks, full editing of your education/ notes + the synthesized sections. App + LLM only append; you curate.</div>
               {brainWiki.slice(0,8).map((w, i) => (
-                <div key={i} className="text-[11px] py-1 border-b border-[#1f2a44] last:border-none flex items-center justify-between gap-2 hover:border-[#a78bfa]/40">
-                  <div 
-                    className="min-w-0 flex-1 cursor-pointer" 
-                    onClick={() => setViewedWiki(w)}
-                    title="Click to read the actual wiki content in the in-app viewer"
-                  >
-                    <span className="font-medium">{w.name}</span> <span className="text-[#64748b]">({w.type})</span>
-                    <div className="text-[#a0a0c0] truncate text-[10px]">{w.excerpt || w.content}</div>
-                    <div className="font-mono text-[9px] text-[#606080]">{w.path}</div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button 
-                      onClick={() => setViewedWiki(w)} 
-                      className="action-btn vault text-[10px]" 
-                      title="Read the full synthesized note + your overlays right in the UI"
-                    >
-                      <Eye size={11}/> View
-                    </button>
-                    <button onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }} className="action-btn vault" title="Copy exact relative path to this .md. In Obsidian quick switcher or file open you can paste it to jump straight to the full synthesized note + your overlays.">
-                      <Copy size={12}/> copy path
-                    </button>
-                  </div>
-                </div>
+                <EntryRow
+                  key={i}
+                  title={w.name}
+                  type={w.type}
+                  excerpt={(w.excerpt || w.content || '').slice(0, 160)}
+                  path={w.path}
+                  onClick={() => setViewedWiki(w)}
+                  actions={
+                    <>
+                      <button
+                        onClick={() => setViewedWiki(w)}
+                        className="action-btn vault text-[10px]"
+                        title="Read the full synthesized note + your overlays right in the UI"
+                      >
+                        <Eye size={11}/> View
+                      </button>
+                      <button onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }} className="action-btn vault" title="Copy exact relative path to this .md">
+                        <Copy size={12}/> copy path
+                      </button>
+                    </>
+                  }
+                />
               ))}
               {brainWiki.length > 8 && <div className="text-[10px] text-[#606080] mt-1">+ {brainWiki.length-8} more on disk</div>}
             </div>
@@ -2003,10 +1991,10 @@ export default function App() {
       const tools = mcpInfo.tools || []
       return (
         <div className="space-y-4">
-          <div className="glass p-5 rounded-3xl">
+          <div className="surface surface-hover rounded-2xl">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="text-lg font-semibold">MCP Tools</div>
+                <div className="text-lg font-semibold h1-gradient">MCP Tools</div>
                 <div className="text-xs text-[#a0a0c0]">Battle-tested clients from https://github.com/1102tools/federal-contracting-mcps (we only consume, never implement servers ourselves).</div>
               </div>
               <button
@@ -2049,8 +2037,8 @@ export default function App() {
 
     // Stubs for other future sidebars (skills, settings) — clean and honest
     return (
-      <div className="glass p-8 rounded-3xl text-center">
-        <div className="text-2xl mb-2">{SIDEBAR_ITEMS.find(s => s.id === sidebar)?.label}</div>
+      <div className="surface surface-hover rounded-2xl p-8 text-center">
+        <div className="text-2xl mb-2 h1-gradient">{VIEW_META[sidebar].title}</div>
         <div className="text-sm text-slate-400">Placeholder for later (full grounded chat/agent with citations over the DuckDB, skills like huashu-design for artifacts, profile settings, etc.).<br/>Right now the priority is the data foundation + contextual Dashboard tabs + the two distinct accumulators (Pipeline for pursuits; Knowledge Vault as the standalone LLM wiki/Karpathy foundation) + the always-available resizable chat + button-driven agentic actions. Exactly as discussed.</div>
       </div>
     )
@@ -2083,112 +2071,39 @@ export default function App() {
 
   const contextHeader = `NAICS ${naics} | ${dashTab} | ${kpis ? kpis.total_obligations_m + 'M' : ''} | exp:${expiring.length} int:${intensity.length} fl:${flows.length} | pipe:${pipeline.length} brain:${brain.length}`
 
+  const viewContext = {
+    naics,
+    dashTab,
+    obligationsM: kpis?.total_obligations_m,
+    pipelineCount: pipeline.length,
+    brainCount: brain.length,
+    expiringCount: expiring.length,
+  }
+
   return (
-    <div className="min-h-screen bg-[#0a0a12] text-[#e0e0ff] font-sans">
-      {/* Top command bar (Ariadne/Theseus inspired) */}
-      <header className="h-14 border-b border-[#1f1f2e] bg-[#0a0a12]/95 backdrop-blur-xl fixed w-full z-50">
-        <div className="w-full px-6 h-full flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00f0ff] to-[#ff2bd6] flex items-center justify-center">
-              <span className="text-black text-xl font-bold">CI</span>
-            </div>
-            <div>
-              <span className="text-2xl font-bold tracking-tighter text-[#00f0ff]">CAPTURE</span>
-              <span className="text-2xl font-bold tracking-tighter text-white/70">INSIGHTS</span>
-            </div>
-            <span className="ml-2 px-2.5 py-0.5 text-[10px] font-mono border border-[#00f0ff]/30 text-[#00f0ff] rounded-full">REACT • CONTEXTUAL TABS + RESIZABLE CHAT</span>
-          </div>
+    <>
+      <AppShell
+        naics={naics}
+        onNaicsChange={setNaics}
+        onNaicsKeyDown={handleNaicsKey}
+        onRefresh={handleRefresh}
+        loading={loading}
+        showChat={showChat}
+        onToggleChat={toggleChat}
+        health={health}
+        pipelineCount={pipeline.length}
+        brainCount={brain.length}
+        sidebar={sidebar}
+        onSidebarChange={setSidebar}
+        navGroups={NAV_GROUPS}
+        viewMeta={VIEW_META[sidebar]}
+        viewContext={viewContext}
+        status={status}
+      >
+        {renderMain()}
+      </AppShell>
 
-          <div className="flex-1 max-w-md mx-6">
-            <div className="relative">
-              <input 
-                type="text" 
-                value={naics} 
-                onChange={e => setNaics(e.target.value)} 
-                onKeyDown={handleNaicsKey}
-                className="w-full bg-[#16161f] border border-[#1f1f2e] focus:border-[#00f0ff] text-sm placeholder-[#606080] pl-9 py-2 rounded-2xl focus:outline-none font-mono" 
-                placeholder="NAICS (comma-separated OK)" 
-              />
-              <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-[#606080]" />
-            </div>
-            <div className="text-[9px] text-[#606080] mt-0.5 font-mono">
-              Ingest more (full raw, dedup-only-new): uv run python scripts/ingest_historical.py --dir data/raw/10year_bulk/prime   (prime only). For subawards: --dir data/raw/10year_bulk/sub --sub
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={handleRefresh} 
-              disabled={loading}
-              className="px-4 py-1.5 rounded-2xl bg-white text-black font-semibold text-sm flex items-center gap-2 hover:bg-[#e0e0ff] transition"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-            </button>
-            <button onClick={toggleChat} className="px-3 py-1.5 rounded-2xl border border-[#00f0ff]/40 text-xs flex items-center gap-1 hover:bg-[#16161f]">
-              <MessageSquare className="w-3.5 h-3.5" /> {showChat ? 'Hide' : 'Show'} Chat
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="w-full px-6 pt-16 pb-6 flex gap-5">
-        {/* LEFT SIDEBAR — high-level navigation (NO chat page — chat is the floating/resizable pane) */}
-        <aside className="w-60 shrink-0">
-          <div className="sticky top-16">
-            <div className="text-xs uppercase tracking-[1.5px] text-[#606080] mb-2 px-3">NAVIGATION</div>
-            <div className="space-y-1">
-              {SIDEBAR_ITEMS.map(item => {
-                const Icon = item.icon
-                const isActive = sidebar === item.id
-                return (
-                  <button 
-                    key={item.id} 
-                    onClick={() => setSidebar(item.id as any)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left text-sm transition ${isActive ? 'bg-[#00f0ff]/10 text-[#00f0ff] border-l-3 border-[#00f0ff]' : 'hover:bg-[#16161f] text-[#c0c0d8]'}`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <div className="leading-tight">
-                      <div>{item.label}</div>
-                      <div className="text-[10px] text-[#606080]">{item.desc}</div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="mt-5 px-3 text-[10px] leading-snug text-[#606080]">
-              Pipeline = opportunities you chose to track.<br />
-              Brain = competitors &amp; agencies you are accumulating intel on (makes the wiki smarter).<br />
-              Both are now saved to data/user_accumulators.json on disk (real persistence, survives everything).
-            </div>
-            <div className="mt-4 px-3">
-              <button onClick={toggleChat} className="text-xs px-3 py-1 rounded border border-[#00f0ff]/30 hover:bg-[#16161f] w-full">Toggle floating chat (always available)</button>
-            </div>
-          </div>
-        </aside>
-
-        {/* MAIN CONTENT */}
-        <main className="flex-1 min-w-0">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-widest text-[#606080]">{SIDEBAR_ITEMS.find(s => s.id === sidebar)?.label}</div>
-              <div className="text-2xl font-semibold tracking-tight">
-                {sidebar === 'dashboard' ? 'Real Bulk Data Explorer — Contextual Actions' : SIDEBAR_ITEMS.find(s => s.id === sidebar)?.label}
-              </div>
-              {sidebar === 'vault' && <div className="text-[10px] text-[#a78bfa] mt-0.5">The foundational knowledge vault (separate from Pipeline). Native .md files in data/knowledge/ are the source of truth.</div>}
-            </div>
-            <div className="text-xs text-[#606080]">{contextHeader}</div>
-          </div>
-
-          <div className="mb-4">
-            <span className="px-3 py-1 rounded-full text-xs bg-[#16161f] text-[#00f0ff] border border-[#00f0ff]/30">{status}</span>
-          </div>
-
-          {renderMain()}
-        </main>
-      </div>
-
-      {/* FLOATING / RESIZABLE CHAT PANE — the holistic always-on co-pilot. 
+      {/* FLOATING / RESIZABLE CHAT PANE — the holistic always-on co-pilot.
           No separate chat page in sidebar. Drag the left handle or use maximize to make it large and useful for real responses.
           Injects live context from whatever tab + accumulators you are looking at. */}
       {showChat && (
@@ -2296,6 +2211,6 @@ export default function App() {
           <MessageSquare className="w-4 h-4" /> AI Co-pilot <span className="text-[10px] opacity-70">(always on)</span>
         </button>
       )}
-    </div>
+    </>
   )
 }
