@@ -37,6 +37,9 @@ capture-insights = "capture_insights.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["backend/capture_insights"]
+
 [dependency-groups]
 dev = [
     "ruff",

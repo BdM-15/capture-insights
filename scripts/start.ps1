@@ -21,4 +21,4 @@ if ($needsBuild) {
 }
 
 Write-Host "Starting capture-insights on http://127.0.0.1:8000"
-uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+uv run capture-insights serve --no-reload --port 8000

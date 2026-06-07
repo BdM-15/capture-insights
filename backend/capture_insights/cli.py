@@ -50,5 +50,9 @@ def profile(award_id: str, output: str = "capture-profile.docx"):
     typer.echo("TODO: assemble data + stance + LLM sections + python-docx export.")
 
 
-if __name__ == "__main__":
+def main() -> None:
     app()
+
+
+if __name__ == "__main__":
+    main()
