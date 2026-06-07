@@ -10,7 +10,7 @@ import { AppShell } from './components/shell/AppShell'
 import type { HealthState } from './components/shell/Topbar'
 import { MetricCard } from './components/ui/MetricCard'
 import { TabBar } from './components/ui/TabBar'
-import { EntryRow } from './components/data/EntryRow'
+import { EntryRow } from './components/lists/EntryRow'
 import {
   NAV_GROUPS,
   DASHBOARD_TABS,
