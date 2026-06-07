@@ -32,6 +32,8 @@ uv run python scripts/ingest_sample.py
 
 See `docs/GETTING_STARTED.md` (to be added) and architecture notes.
 
+**Current phase**: Phase 3 — Knowledge Vault lint/index helpers + Obsidian + external LLM/agent handoff (see data/knowledge/HANDOFF_OBSIDIAN_EXTERNAL_LLM.md + schema/ + scripts/vault_maintain.py). The vault UI was signed off as "much better... on the right track. Good enough for now" at end of phase 2.
+
 ## What It Will Deliver (End State Vision, Prioritized)
 
 The original intent (refined):
