@@ -123,7 +123,10 @@ Shell components: `frontend/src/components/shell/`. View metadata: `frontend/src
 | `MetricCard` | `components/ui/MetricCard.tsx` | KPI strips |
 | `StatusPill` | `components/ui/StatusPill.tsx` | API health, stages |
 | `TabBar` | `components/ui/TabBar.tsx` | Dashboard secondary nav |
-| `EntryRow` | `components/data/EntryRow.tsx` | Vault/wiki list rows |
+| `EntryRow` | `components/lists/EntryRow.tsx` | Vault/wiki list rows |
+| `DataTable` | `components/lists/DataTable.tsx` | Standardized data tables |
+| `EmptyState` | `components/ui/EmptyState.tsx` | Zero-data panels with CTAs |
+| `Toast` | `components/ui/Toast.tsx` | Action confirmations |
 
 ### Semantic accent rules
 
