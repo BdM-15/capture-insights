@@ -27,6 +27,9 @@ interface KpiData {
   unique_awards?: number
   active_contracts_approx: number
   expiring_24m: number
+  expiring_36m?: number
+  future_funding_potential_24m_m?: number
+  future_funding_potential_36m_m?: number
   suitability_pct: number
   synergy_pct: number
   note?: string
@@ -245,7 +248,7 @@ export default function App() {
       const [k, f, i, e, v, g, tr, sa, trp, mp] = await Promise.all([
         fetch(`/data/kpis${q}`).then(r => r.json()),
         fetch(`/data/flows${q}&limit=6`).then(r => r.json()),
-        fetch(`/data/agency-intensity${q}&limit=10`).then(r => r.json()),
+        fetch(`/data/agency-intensity${q}&limit=12`).then(r => r.json()),
         fetch(`/data/expiring${q}&months=36&limit=10`).then(r => r.json()),
         fetch(`/data/vehicles${q}`).then(r => r.json()),
         fetch(`/data/geo${q}&limit=8`).then(r => r.json()),
@@ -534,9 +537,12 @@ export default function App() {
         const totalM = kpis.total_obligations_m || 1
         const top3M = topRecipients.slice(0, 3).reduce((s: number, r: any) => s + (r.millions || 0), 0)
         const top3Pct = Math.round((top3M / totalM) * 100)
-        const topAgencies = (marketPotential?.top_agencies || [])
-          .filter((a) => a.agency)
-          .slice(0, 5)
+        const intensityRanked = [...intensity].sort((a, b) => {
+          const aHot = isHotAgency(a) ? 1 : 0
+          const bHot = isHotAgency(b) ? 1 : 0
+          if (bHot !== aHot) return bHot - aHot
+          return (b.total_oblig || 0) - (a.total_oblig || 0)
+        })
 
         const pricingAgg: Record<string, number> = {}
         const vehicleAgg: Record<string, number> = {}
@@ -555,12 +561,13 @@ export default function App() {
           millions: s.millions || 0,
         }))
 
-        const MetricCard = ({ label, value, tooltip, accent }: { label: string; value: string; tooltip?: string; accent?: string }) => (
+        const MetricCard = ({ label, value, tooltip, accent, stub, valueClass }: { label: string; value: string; tooltip?: string; accent?: string; stub?: boolean; valueClass?: string }) => (
           <div className={`glass p-3 rounded-2xl border-b ${accent || 'border-[#00f0ff]/50'}`}>
             <div className="text-[9px] uppercase tracking-[1px] text-slate-400 flex items-center gap-1">
-              {label} {tooltip && <span className="text-[#00f0ff] cursor-help" title={tooltip}>?</span>}
+              {label} {stub && <span className="metric-stub">vision</span>}
+              {tooltip && <span className="text-[#00f0ff] cursor-help" title={tooltip}>?</span>}
             </div>
-            <div className="mt-1 text-2xl md:text-3xl font-semibold text-[#00f0ff] tabular-nums tracking-tighter leading-none">{value}</div>
+            <div className={`mt-1 text-2xl md:text-3xl font-semibold tabular-nums tracking-tighter leading-none ${valueClass || 'text-[#00f0ff]'}`}>{value}</div>
           </div>
         )
 
@@ -607,13 +614,69 @@ export default function App() {
               </div>
             </div>
 
-            {/* KPI row — real numbers only; stubs demoted */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip="Sum of federal_action_obligation for your NAICS slice in loaded bulk history." />
-              <MetricCard label="Award Actions" value={fmtNum(kpis.total_actions)} tooltip="Individual obligation rows — volume signal for how active the market is." />
-              <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size — helps size pursuit teams and bid/no-bid thresholds." />
-              <MetricCard label="Unique Awards" value={fmtNum(kpis.unique_awards || 0)} tooltip="Distinct contract_award_unique_key count — breadth of work packages." />
-              <MetricCard label="Active Contracts" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with PoP end in future or unset — rough active footprint." accent="border-[#ff2bd6]/50" />
+            {/* Executive KPI row — original Data_Insights 7-card glance + vision stubs for global wiki matching */}
+            <div>
+              <div className="text-[9px] uppercase tracking-[1.5px] text-[#64748b] mb-1.5 px-0.5">Executive Summary — Glanceable for Capture Managers</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip="TAM in your NAICS slice — size pipeline and executive briefs." valueClass="text-[#ffb020]" accent="border-[#ffb020]/50" />
+                <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume — high count = active or fragmented market." />
+                <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size for bid/no-bid and team sizing." valueClass="text-[#00ff9c]" accent="border-[#00ff9c]/40" />
+                <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with PoP still open — incumbent landscape signal." />
+                <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} tooltip="Recompete count in next 24 months — primary radar." valueClass="text-[#ff2bd6]" accent="border-[#ff2bd6]/50" />
+                <MetricCard
+                  label="Suitability"
+                  value={`${kpis.suitability_pct}%`}
+                  stub
+                  valueClass="text-[#ffb020]"
+                  accent="border-[#ffb020]/50"
+                  tooltip="Vision stub: % of expiring work matching YOUR business unit capabilities. Will compare contract/agency requirements (from research + web profile building) against global wiki domain intel + company capabilities. Drives go/no-go."
+                />
+                <MetricCard
+                  label="Synergy"
+                  value={`${kpis.synergy_pct}%`}
+                  stub
+                  valueClass="text-[#ff2bd6]"
+                  accent="border-[#ff2bd6]/50"
+                  tooltip="Vision stub: % where OTHER business units' capabilities create a teaming/synergy play. Uses global wiki multi-BU capability map vs opportunity requirements."
+                />
+              </div>
+            </div>
+
+            {/* Future Funding Potential — recompete dollars at stake (original pulse metric) */}
+            <div className="glass p-4 rounded-3xl border border-[#ff2bd6]/25 market-funding-panel">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-[#ff2bd6] flex items-center gap-2">
+                    <Clock size={15} /> Future Funding Potential
+                  </div>
+                  <div className="text-[10px] text-[#94a3b8] mt-1 max-w-xl">
+                    Total obligated dollars on contracts ending soon — your addressable recompete pool. Chase these via Future Opportunities + SAM monitors before RFPs drop.
+                  </div>
+                </div>
+                <button onClick={() => setDashTab('opportunities')} className="action-btn pipeline text-[10px]">Full recompete radar →</button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                <div className="market-stat-chip">
+                  <div className="label">24-Month Funding at Risk</div>
+                  <div className="value text-[#ff2bd6]">{fmtObl(kpis.future_funding_potential_24m_m || 0)}</div>
+                  <div className="text-[9px] text-[#64748b] mt-0.5">{fmtNum(kpis.expiring_24m || 0)} contracts</div>
+                </div>
+                <div className="market-stat-chip">
+                  <div className="label">36-Month Funding at Risk</div>
+                  <div className="value text-[#ff2bd6]">{fmtObl(kpis.future_funding_potential_36m_m || 0)}</div>
+                  <div className="text-[9px] text-[#64748b] mt-0.5">{fmtNum(kpis.expiring_36m || 0)} contracts</div>
+                </div>
+                <div className="market-stat-chip">
+                  <div className="label">Hot-Agency Recompetes</div>
+                  <div className="value">{fmtObl(hotRecompeteM)}</div>
+                  <div className="text-[9px] text-[#64748b] mt-0.5">{hotRecompeteCount} in focus agencies</div>
+                </div>
+                <div className="market-stat-chip">
+                  <div className="label">Match Lens (Future)</div>
+                  <div className="value text-base text-[#ffb020]">{kpis.suitability_pct}% / {kpis.synergy_pct}%</div>
+                  <div className="text-[9px] text-[#64748b] mt-0.5">suitability • synergy when wiki live</div>
+                </div>
+              </div>
             </div>
 
             {/* Capture workflow — what to do from this tab */}
@@ -644,21 +707,48 @@ export default function App() {
               </div>
             </div>
 
-            {/* Top agencies quick list — bridge to Agency Intelligence tab */}
-            {topAgencies.length > 0 && (
-              <div className="glass p-4 rounded-3xl">
-                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
-                  Top Agencies by Spend
-                  <button onClick={() => setDashTab('agency')} className="text-xs text-[#00f0ff] hover:underline">Full agency intel →</button>
+            {/* High-Intensity Agencies — original Data_Insights capture intensity table */}
+            {intensityRanked.length > 0 && (
+              <div className="glass p-4 rounded-3xl border border-[#ff2bd6]/20">
+                <div className="text-sm font-semibold mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-2"><Target size={15} className="text-[#ff2bd6]" /> High-Intensity Agencies (Capture Intensity)</span>
+                  <button onClick={() => setDashTab('agency')} className="text-xs text-[#00f0ff] hover:underline">Agency Intelligence — engage leads →</button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                  {topAgencies.map((a, idx) => (
-                    <div key={idx} className="market-priority-row">
-                      <div className="font-medium text-[#c0c0d8] text-xs truncate" title={a.agency || ''}>{a.agency}</div>
-                      <div className="text-[10px] text-[#00f0ff] tabular-nums">${a.millions?.toFixed(0)}M</div>
-                      <button onClick={() => addToBrain({ agency: a.agency, millions: a.millions }, a.agency || 'Agency', 'agency')} className="text-[9px] text-[#ff2bd6] hover:underline mt-0.5">+brain</button>
-                    </div>
-                  ))}
+                <div className="text-[10px] text-[#64748b] mb-2">
+                  Agencies above median on both actions and obligations (pink ★) — prime BD engagement targets from the original Data_Insights pulse. +brain to accumulate; dive deeper in Agency Intelligence.
+                </div>
+                <div className="overflow-auto rounded-xl border border-[#1f2a44]">
+                  <table className="w-full text-xs intensity-table">
+                    <thead>
+                      <tr className="text-[#64748b] text-left border-b border-[#1f2a44]">
+                        <th className="p-2 font-medium">Agency</th>
+                        <th className="p-2 font-medium tabular-nums">Actions</th>
+                        <th className="p-2 font-medium tabular-nums">Obligations</th>
+                        <th className="p-2 font-medium">Intensity</th>
+                        <th className="p-2 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {intensityRanked.map((a, idx) => {
+                        const hot = isHotAgency(a)
+                        return (
+                          <tr key={idx} className={`border-b border-[#1f2a44]/60 hover:bg-[#0f1422]/80 ${hot ? 'intensity-row-hot' : ''}`}>
+                            <td className="p-2 text-[#e6ecff] max-w-[200px] truncate" title={a.agency}>{a.agency}</td>
+                            <td className="p-2 tabular-nums">{a.award_count?.toLocaleString()}</td>
+                            <td className="p-2 tabular-nums text-[#00f0ff]">${((a.total_oblig || 0) / 1e6).toFixed(1)}M</td>
+                            <td className="p-2">{hot ? <span className="text-[#ff2bd6] font-medium">★ Hot</span> : <span className="text-[#64748b]">—</span>}</td>
+                            <td className="p-2 text-right">
+                              <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-[10px]">+brain</button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button onClick={() => hotAgencyList.slice(0, 5).forEach((a) => addToBrain(a, a.agency, 'agency'))} className="action-btn brain text-[10px]">+brain all hot agencies</button>
+                  <button onClick={() => setDashTab('agency')} className="text-[10px] text-[#00f0ff] hover:underline">Open Agency Intelligence for engagement notes →</button>
                 </div>
               </div>
             )}
@@ -930,10 +1020,10 @@ export default function App() {
               <strong className="text-[#e6ecff]">Act today:</strong> +brain hot agencies and top competitors from this view. They compound in Knowledge Vault and feed your co-pilot. Use Future Opportunities for expiring work and SAM monitors.
             </div>
             <div className="insight lime">
-              <strong className="text-[#e6ecff]">Go deeper next:</strong> Agency Intelligence tab — full hot list, engagement notes, and lead development on the customers surfaced here. (That tab is our next polish target.)
+              <strong className="text-[#e6ecff]">Go deeper next:</strong> Agency Intelligence tab — engagement notes and lead development on the high-intensity customers surfaced above. (Next polish target.)
             </div>
-            <div className="text-[10px] text-[#606080] px-1">
-              Suitability &amp; synergy scores return when your capability profile / past performance is loaded — placeholders hidden until real.
+            <div className="insight vault">
+              <strong className="text-[#e6ecff]">Suitability &amp; Synergy (vision stubs):</strong> These KPIs will activate when global wiki domain intel + company capabilities are built. Suitability = does this contract/agency fit <em>your</em> BU? Synergy = can <em>other</em> BUs strengthen the pursuit? Future research/web-scraping profile building feeds the match.
             </div>
           </div>
         )

@@ -473,3 +473,27 @@ body {
   border-radius: 8px;
   padding: 0.5rem 0.65rem;
 }
+
+.metric-stub {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  color: #ffb020;
+  background: rgba(255, 176, 32, 0.08);
+}
+
+.market-funding-panel {
+  background: linear-gradient(135deg, rgba(255, 43, 214, 0.04) 0%, rgba(17, 23, 42, 0.95) 40%);
+}
+
+.intensity-table th,
+.intensity-table td {
+  font-size: 11px;
+}
+
+.intensity-row-hot {
+  background: rgba(255, 43, 214, 0.04);
+}
