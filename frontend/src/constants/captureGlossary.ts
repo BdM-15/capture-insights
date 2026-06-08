@@ -36,6 +36,10 @@ export type GlossaryId =
   | 'pursuit_lens'
   | 'combo_tier'
   | 'combo_signal'
+  | 'market_tam'
+  | 'future_funding'
+  | 'follow_the_money'
+  | 'sam_live_discovery'
 
 export interface GlossaryEntry {
   label: string
@@ -257,6 +261,30 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
     tip: 'Individual intersection that contributed to the combo score — e.g. hot agency, top incumbent, near-term end, anchor place of performance. More signals = higher confidence to invest capture resources.',
     vaultPath: GLOSSARY_VAULT_PATH,
     vaultAnchor: 'combo-signals',
+  },
+  market_tam: {
+    label: 'Total market (TAM)',
+    tip: 'Sum of obligated dollars in your NAICS filter — the addressable historical market size for sizing pipeline, executive briefs, and share calculations.',
+    vaultPath: GLOSSARY_VAULT_PATH,
+    vaultAnchor: 'market-tam',
+  },
+  future_funding: {
+    label: 'Future funding potential',
+    tip: 'Obligated dollars on contracts whose performance period ends in the next 24–36 months — the recompete pool you can shape before follow-on competitions.',
+    vaultPath: GLOSSARY_VAULT_PATH,
+    vaultAnchor: 'future-funding',
+  },
+  follow_the_money: {
+    label: 'Follow the money',
+    tip: 'Recipient → agency → office dollar flows from USASpending. Shows who wins work, which buyers fund it, and which contracting offices execute — tighter focus than agency totals alone.',
+    vaultPath: GLOSSARY_VAULT_PATH,
+    vaultAnchor: 'follow-the-money',
+  },
+  sam_live_discovery: {
+    label: 'Live SAM discovery',
+    tip: 'Search SAM.gov for RFIs, Sources Sought, presolicitations, and open reqs — the live signal on top of USASpending history. Pair with expiring contracts to catch known cycles early.',
+    vaultPath: GLOSSARY_VAULT_PATH,
+    vaultAnchor: 'sam-live-discovery',
   },
 }
 

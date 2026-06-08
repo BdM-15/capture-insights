@@ -33,6 +33,7 @@ import {
 } from './constants/captureGlossary'
 import { CHART } from './constants/chartTheme'
 import { CollapsibleSection } from './components/ui/CollapsibleSection'
+import { FieldTip } from './components/ui/FieldTip'
 import { SetAsideBarChart } from './components/charts/SetAsideBarChart'
 import { RelationshipHeatmap } from './components/charts/RelationshipHeatmap'
 import { AgencyNoteInline } from './components/lists/AgencyNoteInline'
@@ -931,7 +932,15 @@ export default function App() {
 
         return (
           <div className="page-sections">
-            <CollapsibleSection title="Market Pulse" subtitle={`NAICS ${naics} · ${fySpan}`} icon={BarChart3} accent="cyan" defaultOpen>
+            <CollapsibleSection
+              title="Market Pulse"
+              subtitle={`NAICS ${naics} · ${fySpan}`}
+              icon={BarChart3}
+              accent="cyan"
+              defaultOpen
+              titleGlossaryId="market_tam"
+              onGlossaryLearn={openGlossaryInVault}
+            >
             <div className="market-pulse-hero border-0 bg-transparent p-0 shadow-none">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -949,11 +958,11 @@ export default function App() {
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                <div className="market-stat-chip">
+                <div className="market-stat-chip" title={getGlossaryTip('market_tam')}>
                   <div className="label">Total Market (TAM)</div>
                   <div className="value">{fmtObl(kpis.total_obligations_m)}</div>
                 </div>
-                <div className="market-stat-chip">
+                <div className="market-stat-chip" title={getGlossaryTip('market_concentration')}>
                   <div className="label">Competitive Field</div>
                   <div className="value">{(marketPotential?.unique_competitors || 0).toLocaleString()} primes</div>
                 </div>
@@ -961,7 +970,7 @@ export default function App() {
                   <div className="label">Momentum</div>
                   <div className="value text-neon-magenta text-base">{marketPotential?.trend || '—'}</div>
                 </div>
-                <div className="market-stat-chip">
+                <div className="market-stat-chip" title={getGlossaryTip('recompete_radar')}>
                   <div className="label">Recompete Radar (24m)</div>
                   <div className="value">{fmtNum(kpis.expiring_24m || 0)} ending</div>
                 </div>
@@ -972,10 +981,10 @@ export default function App() {
             <div>
               <div className="text-[9px] uppercase tracking-[1.5px] text-text-500 mb-1.5 px-0.5">Executive Summary — Glanceable for Capture Managers</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip="TAM in your NAICS slice — size pipeline and executive briefs." accent="amber" />
-                <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume — high count = active or fragmented market." accent="cyan" />
-                <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size for bid/no-bid and team sizing." accent="lime" />
-                <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with PoP still open — incumbent landscape signal." accent="cyan" />
+                <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip={getGlossaryTip('market_tam')} accent="amber" />
+                <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume in slice — high count often means active or fragmented buying." accent="cyan" />
+                <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size for bid/no-bid thresholds and team sizing." accent="lime" />
+                <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with performance period still open — incumbent landscape signal." accent="cyan" />
                 <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} tooltip={getGlossaryTip('recompete_radar')} accent="magenta" />
                 <MetricCard
                   label="Suitability"
@@ -999,7 +1008,8 @@ export default function App() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-neon-magenta flex items-center gap-2">
-                    <Clock size={15} /> Future Funding Potential
+                    <Clock size={15} />
+                    <FieldTip termId="future_funding" label="Future Funding Potential" onLearnMore={openGlossaryInVault} />
                   </div>
                   <div className="text-[10px] text-text-400 mt-1 max-w-xl">
                     Total obligated dollars on contracts ending soon — your addressable recompete pool. Chase these via Future Opportunities + SAM monitors before RFPs drop.
@@ -1008,22 +1018,22 @@ export default function App() {
                 <button onClick={() => setDashTab('opportunities')} className="action-btn pipeline text-[10px]">Full recompete radar →</button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <div className="market-stat-chip">
+                <div className="market-stat-chip" title={getGlossaryTip('future_funding')}>
                   <div className="label">24-Month Funding at Risk</div>
                   <div className="value text-neon-magenta">{fmtObl(kpis.future_funding_potential_24m_m || 0)}</div>
                   <div className="text-[9px] text-text-500 mt-0.5">{fmtNum(kpis.expiring_24m || 0)} contracts</div>
                 </div>
-                <div className="market-stat-chip">
+                <div className="market-stat-chip" title={getGlossaryTip('future_funding')}>
                   <div className="label">36-Month Funding at Risk</div>
                   <div className="value text-neon-magenta">{fmtObl(kpis.future_funding_potential_36m_m || 0)}</div>
                   <div className="text-[9px] text-text-500 mt-0.5">{fmtNum(kpis.expiring_36m || 0)} contracts</div>
                 </div>
-                <div className="market-stat-chip">
+                <div className="market-stat-chip" title={`${getGlossaryTip('hot_agency')} ${getGlossaryTip('recompete_radar')}`}>
                   <div className="label">Hot-Agency Recompetes</div>
                   <div className="value">{fmtObl(hotRecompeteM)}</div>
                   <div className="text-[9px] text-text-500 mt-0.5">{hotRecompeteCount} in focus agencies</div>
                 </div>
-                <div className="market-stat-chip">
+                <div className="market-stat-chip" title={`${getGlossaryTip('suitability_stub')} ${getGlossaryTip('synergy_stub')}`}>
                   <div className="label">Match Lens (Future)</div>
                   <div className="value text-base text-neon-amber">{kpis.suitability_pct}% / {kpis.synergy_pct}%</div>
                   <div className="text-[9px] text-text-500 mt-0.5">suitability • synergy when wiki live</div>
@@ -1061,7 +1071,15 @@ export default function App() {
             </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Trends & Capture Focus" subtitle="Spend history · recompete trajectory · intensity" icon={TrendingUp} accent="cyan" defaultOpen>
+            <CollapsibleSection
+              title="Trends & Capture Focus"
+              subtitle="Spend history · recompete trajectory · intensity"
+              icon={TrendingUp}
+              accent="cyan"
+              defaultOpen
+              titleGlossaryId="capture_intensity"
+              onGlossaryLearn={openGlossaryInVault}
+            >
             <div className="market-chart-grid space-y-4">
               <div className="text-[9px] uppercase tracking-[1.5px] text-text-500 px-0.5">Market Trends &amp; Capture Focus</div>
 
@@ -1089,7 +1107,9 @@ export default function App() {
                 </div>
 
                 <div className="chart-panel surface-accent-magenta">
-                  <div className="chart-panel-title magenta">Future Trajectory (Recurring Recompete)</div>
+                  <div className="chart-panel-title magenta">
+                    <FieldTip termId="future_funding" label="Future Trajectory (Recurring Recompete)" onLearnMore={openGlossaryInVault} />
+                  </div>
                   <div className="chart-panel-sub">Assumes requirements recur — obligated $ on contracts ending each year = addressable future funding pool.</div>
                   {futureTrendData.length > 0 ? (
                     <div className="chart-module" style={{ height: 240 }}>
@@ -1114,7 +1134,9 @@ export default function App() {
               {/* Row 2: Capture intensity scatter (left) | High-intensity agency table (right) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="chart-panel surface-accent-lime">
-                  <div className="chart-panel-title magenta">Capture Intensity</div>
+                  <div className="chart-panel-title magenta">
+                    <FieldTip termId="capture_intensity" label="Capture Intensity" onLearnMore={openGlossaryInVault} />
+                  </div>
                   <div className="chart-panel-sub">Agencies by volume vs. value — upper-right (pink) = high-intensity BD targets.</div>
                   {intensity.length ? (
                     <div style={{ width: '100%', height: 280 }}>
@@ -1164,6 +1186,7 @@ export default function App() {
                     data={intensityRanked}
                     rowKey={(a) => a.agency}
                     rowClassName={(a) => isHotAgency(a) ? 'intensity-row-hot' : ''}
+                    onGlossaryLearn={openGlossaryInVault}
                     columns={[
                       {
                         key: 'agency',
@@ -1187,6 +1210,7 @@ export default function App() {
                       {
                         key: 'hot',
                         header: '★',
+                        headerTip: 'hot_agency',
                         align: 'center',
                         render: (a) => isHotAgency(a)
                           ? <span className="text-neon-magenta">★</span>
@@ -1210,11 +1234,19 @@ export default function App() {
             </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Money Flows & Share" subtitle="Sankey · competitor concentration" icon={GitBranch} accent="magenta" defaultOpen={false}>
+            <CollapsibleSection
+              title="Money Flows & Share"
+              subtitle="Sankey · competitor concentration"
+              icon={GitBranch}
+              accent="magenta"
+              defaultOpen={false}
+              titleGlossaryId="follow_the_money"
+              onGlossaryLearn={openGlossaryInVault}
+            >
             <div className="space-y-4">
             <div className="chart-panel surface-accent-cyan">
               <div className="chart-panel-title cyan">
-                <span>Follow the Money (Recipient → Agency → Office)</span>
+                <FieldTip termId="follow_the_money" label="Follow the Money (Recipient → Agency → Office)" onLearnMore={openGlossaryInVault} />
                 <button onClick={() => setDashTab('competitive')} className="text-[10px] font-normal text-neon-cyan hover:underline">Full table →</button>
               </div>
               {sankeyData.length ? (
@@ -1237,7 +1269,7 @@ export default function App() {
 
             <div className="chart-panel surface-accent-magenta">
               <div className="chart-panel-title magenta">
-                <span>Top Competitors by Market Share</span>
+                <FieldTip termId="market_concentration" label="Top Competitors by Market Share" onLearnMore={openGlossaryInVault} />
                 <span className="text-[10px] font-mono tabular-nums font-normal">{top3Pct}% in top 3</span>
               </div>
               {topRecipients.length ? (
@@ -1278,12 +1310,22 @@ export default function App() {
             </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="How Work is Bought" subtitle="Pricing types · contract vehicles" icon={PieChart} accent="lime" defaultOpen={false}>
+            <CollapsibleSection
+              title="How Work is Bought"
+              subtitle="Pricing types · contract vehicles"
+              icon={PieChart}
+              accent="lime"
+              defaultOpen={false}
+              titleGlossaryId="buying_posture"
+              onGlossaryLearn={openGlossaryInVault}
+            >
             <div className="chart-panel surface-accent-lime border-0 shadow-none p-0 bg-transparent">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Pricing pie */}
                 <div>
-                  <div className="text-xs font-medium text-text-500 mb-1">Pricing Types (by $M)</div>
+                  <div className="text-xs font-medium text-text-500 mb-1">
+                    <FieldTip termId="pricing_bucket" label="Pricing Types (by $M)" showLearnLink={false} />
+                  </div>
                   {pricingValues.length ? (
                     <div className="chart-panel-plot" style={{ height: 220 }}>
                       <Plot
@@ -1315,7 +1357,9 @@ export default function App() {
 
                 {/* Vehicles pie */}
                 <div>
-                  <div className="text-xs font-medium text-text-500 mb-1">Contract Vehicles / IDV (by $M)</div>
+                  <div className="text-xs font-medium text-text-500 mb-1">
+                    <FieldTip termId="idiq_task_order" label="Contract Vehicles / IDV (by $M)" showLearnLink={false} />
+                  </div>
                   {vehicleValues.length ? (
                     <div className="chart-panel-plot" style={{ height: 220 }}>
                       <Plot
@@ -1351,17 +1395,29 @@ export default function App() {
             </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Competition & Recompetes" subtitle="Set-aside mix · hot agency expirations" icon={Crosshair} accent="magenta" defaultOpen>
+            <CollapsibleSection
+              title="Competition & Recompetes"
+              subtitle="Set-aside mix · hot agency expirations"
+              icon={Crosshair}
+              accent="magenta"
+              defaultOpen
+              titleGlossaryId="set_aside_mix"
+              onGlossaryLearn={openGlossaryInVault}
+            >
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="chart-panel surface-accent-cyan min-w-0">
-                <div className="chart-panel-title cyan">Competition Mix (Set-Asides)</div>
+                <div className="chart-panel-title cyan">
+                  <FieldTip termId="set_aside_mix" label="Competition Mix (Set-Asides)" onLearnMore={openGlossaryInVault} />
+                </div>
                 <div className="chart-panel-sub">Top set-aside categories by obligated dollars — compact labels, hover for full text.</div>
                 <SetAsideBarChart data={setAsidePulse} compact />
                 <button onClick={() => setDashTab('vehicles')} className="text-[10px] text-neon-cyan hover:underline mt-2">Full vehicle analysis →</button>
               </div>
 
               <div className="chart-panel surface-accent-magenta min-w-0">
-                <div className="chart-panel-title magenta">Hot Recompetes in Focus Agencies</div>
+                <div className="chart-panel-title magenta">
+                  <FieldTip termId="recompete_radar" label="Hot Recompetes in Focus Agencies" onLearnMore={openGlossaryInVault} />
+                </div>
                 <div className="chart-panel-sub">Expiring awards in high-intensity customer agencies.</div>
                 {comboExpiring.length ? (
                   <div className="space-y-1.5">
@@ -1423,6 +1479,8 @@ export default function App() {
               icon={Radar}
               accent="magenta"
               defaultOpen
+              titleGlossaryId="recompete_radar"
+              onGlossaryLearn={openGlossaryInVault}
               badge={
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToPipeline({ label: 'expiring batch' }, 'expiring') }}
@@ -1463,6 +1521,7 @@ export default function App() {
                 rowKey={(e: any, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
                 rowClassName={(e: any) => hotAgencies.has(e.agency || '') ? 'intensity-row-hot' : ''}
                 emptyMessage="No expiring awards in current slice."
+                onGlossaryLearn={openGlossaryInVault}
                 columns={[
                   {
                     key: 'end',
@@ -1495,13 +1554,14 @@ export default function App() {
                   {
                     key: 'flags',
                     header: 'Flags',
+                    headerTip: 'hot_agency',
                     render: (e: any) => {
                       const isHot = hotAgencies.has(e.agency || '')
                       const inBrain = brain.some((b: any) => (b.name || '').toLowerCase().includes((e.recipient || '').toLowerCase().slice(0, 15)))
                       return (
                         <span className="text-xs">
-                          {isHot && <span className="text-neon-magenta mr-1">★ Hot</span>}
-                          {inBrain && <span className="text-neon-lime mr-1">🧠 Brain</span>}
+                          {isHot && <span className="text-neon-magenta mr-1" title={getGlossaryTip('hot_agency')}>★ Hot</span>}
+                          {inBrain && <span className="text-neon-lime mr-1" title={getGlossaryTip('customer_position')}>🧠 Brain</span>}
                         </span>
                       )
                     },
@@ -1565,7 +1625,15 @@ export default function App() {
               <div className="text-[10px] text-text-500 mt-2">+pipeline adds to the Pipeline sidebar. Search SAM prefills live lookup for that cycle.</div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Live SAM Discovery" subtitle="RFIs · Sources Sought · emerging work" icon={Search} accent="cyan" defaultOpen>
+            <CollapsibleSection
+              title="Live SAM Discovery"
+              subtitle="RFIs · Sources Sought · emerging work"
+              icon={Search}
+              accent="cyan"
+              defaultOpen
+              titleGlossaryId="sam_live_discovery"
+              onGlossaryLearn={openGlossaryInVault}
+            >
               <div className="mb-2 flex flex-wrap gap-1 text-[10px]">
                 <span className="text-text-500 mr-1 self-center">Example prompts for the co-pilot (drives MCP for you):</span>
                 <button type="button" onClick={() => askCoPilot('Search SAM for live RFI/Sources Sought/Special Notice matching the agencies and recipients in my Brain and the expiring contracts. Then propose 2-3 to create monitors for and add to pipeline.', true)} className="filter-pill">Search SAM for my Brain + expiring</button>
@@ -1872,9 +1940,9 @@ export default function App() {
           <div className="page-sections">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
               <MetricCard label="Hot agencies" value={String(hotAgencyList.length)} accent="magenta" tooltip={getGlossaryTip('hot_agency')} />
-              <MetricCard label="In vault" value={String(trackedCount)} accent="purple" tooltip="Agency brain entries — Shipley unknown → known" />
-              <MetricCard label="Hot recompetes" value={String(comboExpiring.length)} accent="lime" tooltip="Expiring work at hot agencies — advance candidates" />
-              <MetricCard label="Top agency share" value={`${topAgencyShare}%`} accent="cyan" tooltip="Largest buyer concentration in NAICS slice" />
+              <MetricCard label="In vault" value={String(trackedCount)} accent="purple" tooltip={getGlossaryTip('customer_position')} />
+              <MetricCard label="Hot recompetes" value={String(comboExpiring.length)} accent="lime" tooltip={getGlossaryTip('recompete_radar')} />
+              <MetricCard label="Top agency share" value={`${topAgencyShare}%`} accent="cyan" tooltip={getGlossaryTip('market_concentration')} />
             </div>
 
             <CollapsibleSection
@@ -1963,6 +2031,8 @@ export default function App() {
               icon={Users}
               accent="cyan"
               defaultOpen
+              titleGlossaryId="qual_gate"
+              onGlossaryLearn={openGlossaryInVault}
               badge={hotAgencyList.length > 0 ? <span className="pill text-[10px]">{hotAgencyList.length} hot</span> : undefined}
             >
               <input
@@ -2094,6 +2164,8 @@ export default function App() {
               icon={UserCheck}
               accent="purple"
               defaultOpen={hotAgencyList.length > 0}
+              titleGlossaryId="customer_position"
+              onGlossaryLearn={openGlossaryInVault}
             >
               <div className="insight vault mb-3">
                 <strong className="text-text-primary">Shipley principle:</strong> influence the customer early — progress from unknown to favored using customer assessment, competitive intel, and data (not gut feel). Qualify early &amp; often at decision gates.
@@ -2144,6 +2216,8 @@ export default function App() {
               icon={Clock}
               accent="magenta"
               defaultOpen={comboExpiring.length > 0}
+              titleGlossaryId="recompete_radar"
+              onGlossaryLearn={openGlossaryInVault}
               badge={comboExpiring.length > 0 ? <span className="pill text-[10px]">{comboExpiring.length}</span> : undefined}
             >
               <div className="insight magenta mb-3">
@@ -2292,6 +2366,8 @@ export default function App() {
               icon={ClipboardList}
               accent="cyan"
               defaultOpen={false}
+              titleGlossaryId="follow_the_money"
+              onGlossaryLearn={openGlossaryInVault}
             >
               <div className="chart-panel-sub mb-2">
                 Follow-the-money at agency level — who dominates spend with each buyer (pairs with Competitive Analysis Sankey).
@@ -2490,9 +2566,9 @@ export default function App() {
           <div className="page-sections">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
               <MetricCard label="Top 3 share" value={`${top3Pct}%`} accent="magenta" tooltip={getGlossaryTip('market_concentration')} />
-              <MetricCard label="In vault" value={String(trackedCompetitors)} accent="purple" tooltip="Competitor brain entries — compounds across opportunities" />
-              <MetricCard label="Primes in slice" value={String(topRecipients.length)} accent="cyan" tooltip="Distinct recipients winning work in NAICS" />
-              <MetricCard label="Incumbent recompetes" value={String(incumbentRecompetes.length)} accent="lime" tooltip="Expiring contracts held by top-market primes" />
+              <MetricCard label="In vault" value={String(trackedCompetitors)} accent="purple" tooltip={getGlossaryTip('customer_position')} />
+              <MetricCard label="Primes in slice" value={String(topRecipients.length)} accent="cyan" tooltip="Distinct recipients with obligated awards in this NAICS filter." />
+              <MetricCard label="Incumbent recompetes" value={String(incumbentRecompetes.length)} accent="lime" tooltip={getGlossaryTip('recompete_radar')} />
             </div>
 
             <CollapsibleSection
@@ -2501,6 +2577,8 @@ export default function App() {
               icon={Trophy}
               accent="magenta"
               defaultOpen
+              titleGlossaryId="market_concentration"
+              onGlossaryLearn={openGlossaryInVault}
             >
               <div className={`insight mb-3 ${concentration === 'high' ? 'magenta' : ''}`}>
                 <span className={CONCENTRATION_META[concentration].tone}>{CONCENTRATION_META[concentration].label}</span>
@@ -2549,6 +2627,8 @@ export default function App() {
               icon={Target}
               accent="magenta"
               defaultOpen
+              titleGlossaryId="competitor_posture"
+              onGlossaryLearn={openGlossaryInVault}
               badge={top3Pct >= 30 ? <span className="pill text-[10px]">{top3Pct}% top 3</span> : undefined}
             >
               <input
@@ -3006,6 +3086,8 @@ export default function App() {
               icon={GitBranch}
               accent="cyan"
               defaultOpen={flows.length > 0}
+              titleGlossaryId="follow_the_money"
+              onGlossaryLearn={openGlossaryInVault}
             >
               <div className="insight magenta mb-3">
                 Original Data Insights “Follow the Money” — trace who gets paid, through which agency and contracting office. Office-level = KO/PCO concentration.
@@ -4236,6 +4318,8 @@ export default function App() {
                 icon={Crosshair}
                 accent="magenta"
                 defaultOpen
+                titleGlossaryId="pursuit_lens"
+                onGlossaryLearn={openGlossaryInVault}
               >
                 <div className="insight magenta mb-3">
                   {anchorStates.slice(0, 3).map((s) => (
