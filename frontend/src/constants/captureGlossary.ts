@@ -43,6 +43,8 @@ export type GlossaryId =
   | 'sam_live_discovery'
   | 'hot_agency_recompete'
   | 'match_lens'
+  | 'incumbent_holder'
+  | 'priority_score'
 
 export interface GlossaryEntry {
   label: string
@@ -316,6 +318,18 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
     tip: 'Vision pair: suitability (% of expiring work matching your BU capabilities) and synergy (% where another BU enables teaming). Activates when capability profiles live in vault.',
     vaultPath: conceptVaultPath('match-lens'),
     vaultAnchor: 'match-lens',
+  },
+  incumbent_holder: {
+    label: 'Incumbent (current holder)',
+    tip: 'The company that currently holds this contract — your most likely competitor on the follow-on, or a teammate if you are subbing today. USASpending recipient name on the expiring award.',
+    vaultPath: conceptVaultPath('top-incumbent'),
+    vaultAnchor: 'top-incumbent',
+  },
+  priority_score: {
+    label: 'Priority score',
+    tip: 'A 0–100+ ranking from stacked signals (hot buyer, top incumbent, timing, value, vault overlap). Higher = more reasons to invest capture time now. Tier (Prime/Advance/Monitor) is the plain-English bucket.',
+    vaultPath: conceptVaultPath('combo-tier'),
+    vaultAnchor: 'combo-tier',
   },
 }
 

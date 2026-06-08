@@ -1084,11 +1084,43 @@ body {
   white-space: nowrap;
 }
 
-.recompete-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.recompete-radar-table {
   width: 100%;
+  min-width: 0;
+}
+
+.recompete-radar-intro p {
+  margin: 0;
+}
+
+.recompete-radar-grid {
+  table-layout: auto;
+}
+
+.recompete-col-action {
+  width: 5.5rem;
+}
+
+.recompete-row-expanded {
+  background: rgba(255, 0, 170, 0.04);
+}
+
+.recompete-detail-row .data-table-td {
+  padding-top: 0;
+  border-bottom: 1px solid var(--edge);
+}
+
+.recompete-detail-panel {
+  padding: 0.5rem 0.25rem 0.65rem;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+}
+
+.recompete-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
 }
 
 .recompete-row-card {

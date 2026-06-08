@@ -17,8 +17,8 @@ import { Button } from './components/ui/Button'
 import { EmptyState } from './components/ui/EmptyState'
 import { Toast, type ToastState, type ToastTone } from './components/ui/Toast'
 import { DataTable } from './components/lists/DataTable'
-import { RecompeteRowCard } from './components/lists/RecompeteRowCard'
 import { ReadinessStrip } from './components/opportunities/ReadinessStrip'
+import { RecompeteRadarTable } from './components/opportunities/RecompeteRadarTable'
 import { EntryRow } from './components/lists/EntryRow'
 import { BrainEntryCard } from './components/lists/BrainEntryCard'
 import { AskCoPilotButton } from './components/ui/AskCoPilotButton'
@@ -1570,11 +1570,11 @@ export default function App() {
           return matchesSearch && matchesTier
         })
         const samMonitorCount = pipeline.filter((p: { type?: string }) => p.type === 'sam-monitor').length
-        const tierFilters: { id: 'all' | ComboTier; label: string }[] = [
-          { id: 'all', label: 'All' },
-          { id: 'prime', label: 'Prime' },
-          { id: 'advance', label: 'Advance' },
-          { id: 'monitor', label: 'Monitor' },
+        const tierFilters: { id: 'all' | ComboTier; label: string; hint: string }[] = [
+          { id: 'all', label: 'All', hint: 'Show every ranked contract' },
+          { id: 'prime', label: 'Prime', hint: COMBO_TIER_META.prime.hint },
+          { id: 'advance', label: 'Advance', hint: COMBO_TIER_META.advance.hint },
+          { id: 'monitor', label: 'Monitor', hint: COMBO_TIER_META.monitor.hint },
         ]
         return (
           <div className="page-sections">
@@ -1582,35 +1582,35 @@ export default function App() {
 
             <div className="opp-summary-grid">
               <MetricCard
-                label="Scored rows"
+                label="Contracts ranked"
                 value={String(oppSummary.row_count ?? filteredOpp.length)}
                 accent="magenta"
                 glossaryId="recompete_radar"
                 onGlossaryLearn={openGlossaryInVault}
               />
               <MetricCard
-                label="Hot agency"
+                label="At hot buyers"
                 value={String(oppSummary.hot_agency_count ?? 0)}
                 accent="magenta"
                 glossaryId="hot_agency"
                 onGlossaryLearn={openGlossaryInVault}
               />
               <MetricCard
-                label="Brain overlap"
+                label="In your vault"
                 value={String(oppSummary.brain_overlap ?? 0)}
                 accent="lime"
                 glossaryId="customer_position"
                 onGlossaryLearn={openGlossaryInVault}
               />
               <MetricCard
-                label="Hot, no monitor"
+                label="Needs SAM watch"
                 value={String(oppSummary.no_monitor_hot ?? 0)}
                 accent="amber"
                 glossaryId="sam_live_discovery"
                 onGlossaryLearn={openGlossaryInVault}
               />
               <MetricCard
-                label="Prime $"
+                label="Top-priority $"
                 value={`$${Number(oppSummary.prime_millions ?? 0).toFixed(1)}M`}
                 accent="cyan"
                 glossaryId="combo_tier"
@@ -1647,6 +1647,7 @@ export default function App() {
                     <button
                       key={t.id}
                       type="button"
+                      title={t.hint}
                       onClick={() => setOppTierFilter(t.id)}
                       className={`filter-pill ${oppTierFilter === t.id ? 'filter-pill-active' : ''}`}
                     >
@@ -1674,73 +1675,66 @@ export default function App() {
               {filteredOpp.length === 0 ? (
                 <div className="chart-module-empty">No recompetes match your filter.</div>
               ) : (
-                <div className="recompete-list">
-                  {filteredOpp.slice(0, 12).map((e: OpportunityRow, i: number) => {
-                    const key = oppRowKey(e, i)
-                    const expanded = oppExpandedKey === key
-                    return (
-                      <RecompeteRowCard
-                        key={key}
-                        row={e}
-                        expanded={expanded}
-                        isHot={hotAgencies.has(e.agency || '')}
-                        onToggle={() => setOppExpandedKey(expanded ? null : key)}
-                        onTrack={() => addToPipeline(e, 'expiring')}
-                        expandedActions={(
-                          <>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  setLoading(true)
-                                  const res = await fetch('/user/actions/create-sam-monitor', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ item: e, naics, brain, use_llm: false }),
-                                  })
-                                  if (res.ok) {
-                                    const data = await res.json()
-                                    await syncAccumulators()
-                                    showToast(`Monitor: ${data.entry?.title || 'created'}`, 'success')
-                                  }
-                                } finally {
-                                  setLoading(false)
-                                }
-                              }}
-                              className="action-btn pipeline text-xs"
-                            >
-                              + Monitor
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSamKeywords(e.suggested_sam_keywords || e.agency || e.recipient || '')
-                                setSamNoticeTypes(e.suggested_notice_types || 'RFI,Sources Sought,Special Notice,Presolicitation')
-                                searchSamLive()
-                              }}
-                              className="action-btn ghost text-xs"
-                            >
-                              Search SAM
-                            </button>
-                            <AskCoPilotButton
-                              prompt={`Scored recompete (${e.tier_label || e.combo_tier}, score ${e.display_score}): ${e.recipient || 'unknown'} at ${e.agency || 'unknown'} ends ${e.end_date} ($${(e.obligation_millions ?? 0).toFixed(1)}M). What capture moves should I prioritize?`}
-                              onAsk={askCoPilot}
-                            />
-                            {e.pursuit_brief_path && (
-                              <button
-                                onClick={() => openVaultPath(e.pursuit_brief_path!, e.pursuit_slug)}
-                                className="action-btn ghost text-xs"
-                              >
-                                Vault
-                              </button>
-                            )}
-                          </>
-                        )}
+                <RecompeteRadarTable
+                  rows={filteredOpp.slice(0, 12)}
+                  expandedKey={oppExpandedKey}
+                  rowKey={oppRowKey}
+                  isHotAgency={(agency) => hotAgencies.has(agency)}
+                  onToggleExpand={(key) => setOppExpandedKey(oppExpandedKey === key ? null : key)}
+                  onTrack={(e) => addToPipeline(e, 'expiring')}
+                  onGlossaryLearn={openGlossaryInVault}
+                  renderExpandedActions={(e) => (
+                    <>
+                      <button
+                        onClick={async () => {
+                          try {
+                            setLoading(true)
+                            const res = await fetch('/user/actions/create-sam-monitor', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ item: e, naics, brain, use_llm: false }),
+                            })
+                            if (res.ok) {
+                              const data = await res.json()
+                              await syncAccumulators()
+                              showToast(`Monitor: ${data.entry?.title || 'created'}`, 'success')
+                            }
+                          } finally {
+                            setLoading(false)
+                          }
+                        }}
+                        className="action-btn pipeline text-xs"
+                      >
+                        + SAM watch
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSamKeywords(e.suggested_sam_keywords || e.agency || e.recipient || '')
+                          setSamNoticeTypes(e.suggested_notice_types || 'RFI,Sources Sought,Special Notice,Presolicitation')
+                          searchSamLive()
+                        }}
+                        className="action-btn ghost text-xs"
+                      >
+                        Search SAM.gov
+                      </button>
+                      <AskCoPilotButton
+                        prompt={`Scored recompete (${e.tier_label || e.combo_tier}, score ${e.display_score}): ${e.recipient || 'unknown'} at ${e.agency || 'unknown'} ends ${e.end_date} ($${(e.obligation_millions ?? 0).toFixed(1)}M). What capture moves should I prioritize?`}
+                        onAsk={askCoPilot}
                       />
-                    )
-                  })}
-                </div>
+                      {e.pursuit_brief_path && (
+                        <button
+                          onClick={() => openVaultPath(e.pursuit_brief_path!, e.pursuit_slug)}
+                          className="action-btn ghost text-xs"
+                        >
+                          Open vault brief
+                        </button>
+                      )}
+                    </>
+                  )}
+                />
               )}
               <div className="text-[10px] text-text-500 mt-2">
-                Scan the list — expand a row for SAM and co-pilot actions. One click <strong className="text-text-primary">+ Track</strong> adds to pipeline.
+                <strong className="text-text-primary">+ Track</strong> saves the contract to your Pipeline. Use <strong className="text-text-primary">More</strong> on a row for SAM watch and co-pilot help.
               </div>
             </CollapsibleSection>
 
