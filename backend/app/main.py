@@ -619,6 +619,15 @@ async def user_global_list():
     return {"global_files": list_global_files()}
 
 
+@app.get("/user/pursuits/list", tags=["user", "vault", "pursuit"])
+async def user_pursuits_list():
+    """Pursuit workspace outputs under data/knowledge/pursuits/ (separate from global/ wiki)."""
+    from .pursuit_workspace import list_all_pursuits
+
+    pursuits = list_all_pursuits()
+    return {"pursuits": pursuits, "count": len(pursuits)}
+
+
 @app.get("/user/knowledge/read", tags=["user", "vault"])
 async def user_knowledge_read(path: str = Query(..., description="relative path e.g. global/global_wiki/capture/xxx.md or brain/agencies/foo.md")):
     """Read the full content of any vault .md for the in-app wiki viewer.

@@ -369,7 +369,7 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
   },
   vault_artifacts: {
     label: 'Vault artifacts',
-    tip: 'Markdown files saved under pursuits/<slug>/ in your Knowledge Vault: capture brief (strategy), SAM scan (live notices), competitive snapshot (award relationships). Open any file in-app or in Obsidian.',
+    tip: 'Markdown files saved under pursuits/<slug>/ only — not in global/ foundational wiki. Includes capture brief, SAM scan, and competitive snapshot. Open in Knowledge Vault reader or Studio; edit in Obsidian at data/knowledge/pursuits/.',
     vaultPath: conceptVaultPath('capture-brief'),
     vaultAnchor: 'capture-brief',
   },

@@ -50,7 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: 'magenta',
     items: [
       { id: 'tools', label: 'MCP Tools', icon: Wrench, accent: 'magenta' },
-      { id: 'skills', label: 'Skills', icon: Layers, accent: 'magenta' },
+      { id: 'skills', label: 'Studio', icon: Layers, accent: 'magenta' },
     ],
   },
   {
@@ -116,8 +116,8 @@ export const VIEW_META: Record<SidebarId, ViewMetaEntry> = {
     accent: 'magenta',
   },
   skills: {
-    title: 'Skills',
-    subtitle: 'Capture automations and agent skills — coming soon',
+    title: 'Studio',
+    subtitle: 'Pursuit artifacts from workspace skills · skill catalog · vault outputs',
     icon: Layers,
     accent: 'magenta',
   },

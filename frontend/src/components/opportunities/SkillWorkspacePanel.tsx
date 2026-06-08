@@ -85,7 +85,7 @@ export function SkillWorkspacePanel({
 
       <div className="skill-workspace-body overflow-auto flex-1 p-4 space-y-4">
         <div className="insight magenta">
-          Run skills to pull SAM.gov + USASpending intel into your vault. Enable LLM for a short capture-manager narrative (requires Ollama).
+          Run skills to save files under <span className="font-mono">pursuits/{workspace.slug}/</span> — separate from the global wiki. Use Open links to view in Knowledge Vault or Studio.
         </div>
 
         {workspace.lastIntel && (
@@ -119,7 +119,7 @@ export function SkillWorkspacePanel({
           >
             + Track
           </Button>
-          <Button variant="soft" onClick={onOpenVault} disabled={!workspace.briefExists}>
+          <Button variant="soft" onClick={onOpenVault} disabled={!workspace.briefExists} title="Opens capture brief in Knowledge Vault reader">
             <BookOpen className="w-3.5 h-3.5" /> Open brief
           </Button>
           <Button variant="soft" onClick={onScaffoldBrief} disabled={loading}>
@@ -132,7 +132,7 @@ export function SkillWorkspacePanel({
           <div>
             <div className="text-[10px] uppercase tracking-wide text-text-500 font-semibold mb-2 flex items-center gap-1">
               Vault artifacts
-              <FieldTip termId="vault_artifacts" label="artifacts" showLearnLink={false} />
+              <FieldTip termId="vault_artifacts" showLearnLink={false} />
             </div>
             <div className="space-y-1">
               {workspace.artifacts!.map((a) => (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .deterministic.opportunity_score import enrich_opportunity_row
@@ -85,6 +86,30 @@ def _artifact_status(slug: str) -> List[Dict[str, Any]]:
             "path": rel,
             "exists": bool(doc),
             "bytes": doc.get("size", 0) if doc else 0,
+        })
+    return out
+
+
+def list_all_pursuits() -> List[Dict[str, Any]]:
+    """List pursuit folders with on-disk artifacts (workspace output — not global wiki)."""
+    base = Path("data/knowledge/pursuits")
+    if not base.exists():
+        return []
+    out: List[Dict[str, Any]] = []
+    for d in sorted(base.iterdir(), key=lambda p: p.name.lower()):
+        if not d.is_dir():
+            continue
+        slug = d.name
+        artifacts = _artifact_status(slug)
+        if not any(a["exists"] for a in artifacts):
+            continue
+        brief = next((a for a in artifacts if a["id"] == "brief"), None)
+        out.append({
+            "slug": slug,
+            "vault_root": f"pursuits/{slug}",
+            "brief_path": brief["path"] if brief else pursuit_brief_path(slug),
+            "brief_exists": bool(brief and brief["exists"]),
+            "artifacts": artifacts,
         })
     return out
 
