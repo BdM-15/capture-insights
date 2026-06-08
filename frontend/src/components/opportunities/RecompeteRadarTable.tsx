@@ -31,6 +31,7 @@ interface RecompeteRadarTableProps {
   isHotAgency: (agency: string) => boolean
   onToggleExpand: (key: string) => void
   onTrack: (row: OpportunityRow) => void
+  onOpenWorkspace?: (row: OpportunityRow) => void
   renderExpandedActions: (row: OpportunityRow) => ReactNode
   onGlossaryLearn?: (termId: GlossaryId) => void
 }
@@ -134,6 +135,7 @@ export function RecompeteRadarTable({
   isHotAgency,
   onToggleExpand,
   onTrack,
+  onOpenWorkspace,
   renderExpandedActions,
   onGlossaryLearn,
 }: RecompeteRadarTableProps) {
@@ -256,9 +258,20 @@ export function RecompeteRadarTable({
                           type="button"
                           className="action-btn pipeline text-xs whitespace-nowrap"
                           onClick={() => onTrack(row)}
+                          title={getGlossaryTip('track_pipeline')}
                         >
                           + Track
                         </button>
+                        {onOpenWorkspace && (
+                          <button
+                            type="button"
+                            className="action-btn ghost text-xs"
+                            onClick={() => onOpenWorkspace(row)}
+                            title="Open pursuit workspace — vault briefs and capture skills for this row"
+                          >
+                            Workspace
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="action-btn ghost text-xs inline-flex items-center gap-0.5"

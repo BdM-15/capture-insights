@@ -586,6 +586,22 @@ def list_global_files() -> list:
     return results
 
 
+def write_knowledge_file(rel_path: str, content: str) -> bool:
+    """Safely write a .md file under data/knowledge/. Creates parent dirs."""
+    try:
+        base = (Path("data") / "knowledge").resolve()
+        candidate = (base / rel_path).resolve()
+        if not str(candidate).startswith(str(base)):
+            return False
+        if candidate.suffix.lower() != ".md":
+            return False
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.write_text(content, encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
 def read_knowledge_file(rel_path: str) -> Optional[Dict]:
     """Safely read any full .md under data/knowledge/ (global/..., brain/..., training/..., education/...).
     Used by the in-app wiki viewer so you can read the actual synthesized content, citations, personal notes etc.

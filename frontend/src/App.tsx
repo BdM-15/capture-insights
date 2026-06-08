@@ -19,6 +19,7 @@ import { Toast, type ToastState, type ToastTone } from './components/ui/Toast'
 import { DataTable } from './components/lists/DataTable'
 import { ReadinessStrip } from './components/opportunities/ReadinessStrip'
 import { RecompeteRadarTable } from './components/opportunities/RecompeteRadarTable'
+import { SkillWorkspacePanel, type SkillWorkspaceState } from './components/opportunities/SkillWorkspacePanel'
 import { EntryRow } from './components/lists/EntryRow'
 import { BrainEntryCard } from './components/lists/BrainEntryCard'
 import { AskCoPilotButton } from './components/ui/AskCoPilotButton'
@@ -233,6 +234,8 @@ export default function App() {
   const [oppSearch, setOppSearch] = useState('')
   const [oppTierFilter, setOppTierFilter] = useState<'all' | ComboTier>('all')
   const [oppExpandedKey, setOppExpandedKey] = useState<string | null>(null)
+  const [skillWorkspace, setSkillWorkspace] = useState<SkillWorkspaceState | null>(null)
+  const [workspaceLoading, setWorkspaceLoading] = useState(false)
   const [agencySearch, setAgencySearch] = useState('')
   const [competitorSearch, setCompetitorSearch] = useState('')
   const [teamingTarget, setTeamingTarget] = useState('')
@@ -602,6 +605,85 @@ export default function App() {
 
   const handleRefresh = () => loadData()
   const handleNaicsKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter') loadData() }
+
+  async function openSkillWorkspace(row: OpportunityRow) {
+    setWorkspaceLoading(true)
+    try {
+      const res = await fetch('/user/pursuit/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: row, naics, brain }),
+      })
+      if (!res.ok) throw new Error('workspace failed')
+      const data = await res.json()
+      setSkillWorkspace({
+        row: (data.row as OpportunityRow) || row,
+        slug: data.slug,
+        briefPath: data.brief_path,
+        briefExists: !!data.brief_exists,
+        skills: data.skills || [],
+      })
+    } catch {
+      showToast('Could not open workspace — restart backend with latest code', 'error')
+    } finally {
+      setWorkspaceLoading(false)
+    }
+  }
+
+  async function scaffoldPursuitBrief(overwrite = false) {
+    if (!skillWorkspace) return
+    setWorkspaceLoading(true)
+    try {
+      const path = overwrite ? '/user/pursuit/run-skill' : '/user/pursuit/scaffold-brief'
+      const body = overwrite
+        ? { skill_id: 'capture-brief', item: skillWorkspace.row, naics, brain, use_llm: false }
+        : { item: skillWorkspace.row, naics, brain }
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setSkillWorkspace((w) => w && { ...w, briefExists: true })
+        showToast(overwrite ? 'Capture brief updated in vault' : 'Capture brief created in vault', 'success')
+      } else {
+        showToast(data.error || 'Brief failed', 'error')
+      }
+    } catch {
+      showToast('Brief action failed', 'error')
+    } finally {
+      setWorkspaceLoading(false)
+    }
+  }
+
+  async function runPursuitSkill(skillId: string) {
+    if (!skillWorkspace) return
+    setWorkspaceLoading(true)
+    try {
+      const res = await fetch('/user/pursuit/run-skill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill_id: skillId, item: skillWorkspace.row, naics, brain, use_llm: false }),
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        showToast(data.error || 'Skill failed', 'error')
+        return
+      }
+      if (skillId === 'sam-monitor-builder') {
+        await syncAccumulators()
+        showToast('SAM search saved to Pipeline', 'success')
+      } else if (skillId === 'capture-brief') {
+        setSkillWorkspace((w) => w && { ...w, briefExists: true })
+        showToast('Capture brief written to vault', 'success')
+      }
+    } catch {
+      showToast('Skill run failed', 'error')
+    } finally {
+      setWorkspaceLoading(false)
+    }
+  }
 
   async function searchSamLive() {
     setLoading(true)
@@ -1682,6 +1764,7 @@ export default function App() {
                   isHotAgency={(agency) => hotAgencies.has(agency)}
                   onToggleExpand={(key) => setOppExpandedKey(oppExpandedKey === key ? null : key)}
                   onTrack={(e) => addToPipeline(e, 'expiring')}
+                  onOpenWorkspace={openSkillWorkspace}
                   onGlossaryLearn={openGlossaryInVault}
                   renderExpandedActions={(e) => (
                     <>
@@ -1734,8 +1817,8 @@ export default function App() {
                 />
               )}
               <div className="text-[10px] text-text-500 mt-2">
-                <strong className="text-text-primary">+ Track</strong> saves the contract to Pipeline.
-                <strong className="text-text-primary"> + Save SAM search</strong> stores a SAM.gov keyword bookmark for that row (under More).
+                Hover <strong className="text-text-primary">+ Track</strong> for what Pipeline means.
+                <strong className="text-text-primary"> Workspace</strong> opens pursuit skills and vault briefs for one row.
                 Click <strong className="text-text-primary">+N more reasons</strong> to see every ranking signal.
               </div>
             </CollapsibleSection>
@@ -5739,6 +5822,21 @@ export default function App() {
       </AppShell>
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+
+      {skillWorkspace && (
+        <SkillWorkspacePanel
+          workspace={skillWorkspace}
+          loading={workspaceLoading}
+          onClose={() => setSkillWorkspace(null)}
+          onScaffoldBrief={() => scaffoldPursuitBrief(!!skillWorkspace.briefExists)}
+          onRunSkill={runPursuitSkill}
+          onOpenVault={() => openVaultPath(skillWorkspace.briefPath, skillWorkspace.slug)}
+          onTrack={() => {
+            addToPipeline(skillWorkspace.row, 'expiring')
+            showToast('Added to Pipeline', 'success')
+          }}
+        />
+      )}
 
       {/* FLOATING / RESIZABLE CHAT PANE — the holistic always-on co-pilot.
           No separate chat page in sidebar. Drag the left handle or use maximize to make it large and useful for real responses.

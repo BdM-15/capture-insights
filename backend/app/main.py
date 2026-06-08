@@ -750,6 +750,53 @@ async def create_sam_monitor(req: CreateSamMonitorRequest):
     }
 
 
+class PursuitWorkspaceRequest(BaseModel):
+    item: dict
+    naics: str = "561210"
+    brain: list[dict] | None = None
+
+
+class PursuitSkillRequest(BaseModel):
+    skill_id: str
+    item: dict
+    naics: str = "561210"
+    brain: list[dict] | None = None
+    use_llm: bool = False
+
+
+@app.post("/user/pursuit/workspace", tags=["user", "pursuit", "skills"])
+async def pursuit_workspace(req: PursuitWorkspaceRequest):
+    """Skill workspace metadata for a recompete row — slug, vault paths, available skills."""
+    from .pursuit_workspace import get_workspace_meta
+
+    brain_names = [str(b.get("name", "")) for b in (req.brain or []) if b.get("name")]
+    return get_workspace_meta(req.item or {}, req.naics, brain_names=brain_names)
+
+
+@app.post("/user/pursuit/scaffold-brief", tags=["user", "pursuit", "skills"])
+async def pursuit_scaffold_brief(req: PursuitWorkspaceRequest):
+    """Create pursuits/<slug>/capture_brief.md if missing (deterministic template)."""
+    from .pursuit_workspace import scaffold_capture_brief
+
+    brain_names = [str(b.get("name", "")) for b in (req.brain or []) if b.get("name")]
+    return scaffold_capture_brief(req.item or {}, req.naics, brain_names=brain_names, overwrite=False)
+
+
+@app.post("/user/pursuit/run-skill", tags=["user", "pursuit", "skills"])
+async def pursuit_run_skill(req: PursuitSkillRequest):
+    """Run a pursuit skill from the row workspace (capture-brief, sam-monitor-builder)."""
+    from .pursuit_workspace import run_pursuit_skill
+
+    brain_names = [str(b.get("name", "")) for b in (req.brain or []) if b.get("name")]
+    return run_pursuit_skill(
+        req.skill_id,
+        req.item or {},
+        req.naics,
+        brain_names=brain_names,
+        use_llm=req.use_llm,
+    )
+
+
 # --- Floating AI Co-pilot (context-aware chat) ---
 # The chat pane is always available. To make the *responses* useful, the frontend
 # now sends the live app state (NAICS, current tab, kpis, brain items, pipeline items).

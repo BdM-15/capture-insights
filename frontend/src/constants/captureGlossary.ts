@@ -47,6 +47,7 @@ export type GlossaryId =
   | 'priority_score'
   | 'your_tracking_status'
   | 'sam_search_saved'
+  | 'track_pipeline'
 
 export interface GlossaryEntry {
   label: string
@@ -344,6 +345,12 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
     tip: 'You saved a SAM.gov search in Pipeline for this contract cycle. It is a bookmarked keyword search (agency + incumbent) so you can revisit SAM.gov for early notices — RFIs, Sources Sought, presolicitations — before the full RFP drops. Not an automatic email alert unless you set that up on SAM.gov.',
     vaultPath: conceptVaultPath('sam-live-discovery'),
     vaultAnchor: 'sam-live-discovery',
+  },
+  track_pipeline: {
+    label: '+ Track (Pipeline)',
+    tip: 'Adds this contract to your Pipeline sidebar — your personal shortlist of pursuits you are actively watching. It does not register with the government or send alerts; it keeps the row handy for SAM searches, vault briefs, and co-pilot questions.',
+    vaultPath: conceptVaultPath('recompete-radar'),
+    vaultAnchor: 'recompete-radar',
   },
 }
 

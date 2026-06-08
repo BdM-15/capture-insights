@@ -437,6 +437,26 @@ body {
   box-shadow: -8px 0 30px rgba(0, 0, 0, 0.55), 0 0 24px rgba(var(--neon-cyan-rgb), 0.06);
 }
 
+.skill-workspace-pane {
+  background: rgba(5, 7, 13, 0.98);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid rgba(255, 0, 170, 0.22);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 0, 170, 0.08);
+}
+
+.skill-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--edge);
+}
+
+.skill-workspace-body {
+  min-height: 0;
+}
+
 .resize-handle {
   position: absolute;
   left: -4px;
