@@ -1,5 +1,7 @@
 /** Combo Insights — cross-signal intersection scoring and capture prioritization */
 
+import { getStateMedians } from './geographicIntel'
+
 export type ComboTier = 'prime' | 'advance' | 'monitor' | 'track'
 export type ComboSignal =
   | 'hot_agency'
@@ -135,6 +137,134 @@ export function buildComboBriefPrompt(match: ComboMatch, naics: string): string 
     `Pricing: ${match.pricing || 'unknown'} (${match.pricing_bucket || '?'}).`,
     'Recommend: 30-day capture plan — customer touch, competitor/displacement, teaming, SAM scan. Cite vault + USASpending.',
   ].join(' ')
+}
+
+function comboTierFromScore(score: number): ComboTier {
+  if (score >= 55) return 'prime'
+  if (score >= 35) return 'advance'
+  if (score >= 20) return 'monitor'
+  return 'track'
+}
+
+/** Client-side fallback when /data/combo-insights is unavailable (stale server, etc.). */
+export function buildClientComboInsights(ctx: {
+  expiring: readonly {
+    award_key?: string
+    recipient?: string
+    obligation?: number
+    end_date?: string
+    agency?: string
+    pop_state?: string
+    pricing?: string
+    pricing_bucket?: string
+    months_to_end?: number
+  }[]
+  intensity: readonly { agency: string; award_count: number; total_oblig: number }[]
+  topRecipients: readonly { recipient?: string; name?: string }[]
+  anchorStates?: readonly string[]
+}): ComboInsightsData {
+  const medActions = getStateMedians(ctx.intensity.map((a) => ({ actions: a.award_count, millions: 0 }))).actions
+  const medOblig =
+    ctx.intensity.length
+      ? [...ctx.intensity].map((a) => a.total_oblig).sort((a, b) => a - b)[Math.floor(ctx.intensity.length / 2)]
+      : 0
+  const hotAgencies = new Set(
+    ctx.intensity
+      .filter((a) => a.award_count > medActions && a.total_oblig > medOblig)
+      .map((a) => a.agency),
+  )
+  const topRecipients = new Set(
+    ctx.topRecipients.map((r) => r.recipient || r.name || '').filter(Boolean),
+  )
+  const anchorStates = new Set(ctx.anchorStates || [])
+
+  const obligations = ctx.expiring.map((e) => e.obligation || 0).sort((a, b) => a - b)
+  const medObligExp = obligations[Math.floor(obligations.length / 2)] || 0
+
+  const signalCounts: Record<string, number> = {}
+  const matches: ComboMatch[] = ctx.expiring.map((e) => {
+    const oblig = e.obligation || 0
+    const months = e.months_to_end ?? 0
+    const signals: ComboSignal[] = []
+    let score = 0
+
+    if (e.agency && hotAgencies.has(e.agency)) {
+      signals.push('hot_agency')
+      score += 30
+      signalCounts.hot_agency = (signalCounts.hot_agency || 0) + 1
+    }
+    if (e.recipient && topRecipients.has(e.recipient)) {
+      signals.push('top_incumbent')
+      score += 25
+      signalCounts.top_incumbent = (signalCounts.top_incumbent || 0) + 1
+    }
+    if (e.pop_state && anchorStates.has(e.pop_state)) {
+      signals.push('anchor_pop')
+      score += 15
+      signalCounts.anchor_pop = (signalCounts.anchor_pop || 0) + 1
+    }
+    if (months <= 12) {
+      signals.push('near_term')
+      score += 20
+      signalCounts.near_term = (signalCounts.near_term || 0) + 1
+    }
+    if (e.pricing_bucket && e.pricing_bucket !== 'firm_fixed') {
+      signals.push('flex_pricing')
+      score += 10
+      signalCounts.flex_pricing = (signalCounts.flex_pricing || 0) + 1
+    }
+    if (oblig >= medObligExp && medObligExp > 0) {
+      signals.push('high_value')
+      score += 10
+      signalCounts.high_value = (signalCounts.high_value || 0) + 1
+    }
+
+    return {
+      award_key: e.award_key,
+      recipient: e.recipient || 'Unknown',
+      obligation: oblig,
+      obligation_millions: Math.round((oblig / 1_000_000) * 100) / 100,
+      end_date: e.end_date,
+      months_to_end: months,
+      agency: e.agency || '(Unspecified)',
+      pop_state: e.pop_state,
+      pricing: e.pricing,
+      pricing_bucket: e.pricing_bucket,
+      signals,
+      signal_count: signals.length,
+      combo_score: score,
+      combo_tier: comboTierFromScore(score),
+    }
+  })
+
+  matches.sort((a, b) => (b.combo_score - a.combo_score) || (a.months_to_end - b.months_to_end))
+
+  const tier_counts: Partial<Record<ComboTier, number>> = {}
+  matches.forEach((m) => {
+    tier_counts[m.combo_tier] = (tier_counts[m.combo_tier] || 0) + 1
+  })
+
+  return {
+    meta: {
+      months_ahead: 36,
+      scoring_note: 'Client-side fallback scoring (restart backend for full /data/combo-insights endpoint).',
+    },
+    summary: {
+      match_count: matches.length,
+      hot_agency_overlap: matches.filter((m) => m.signals.includes('hot_agency')).length,
+      prime_count: tier_counts.prime || 0,
+      advance_count: tier_counts.advance || 0,
+      prime_millions: Math.round(
+        matches.filter((m) => m.combo_tier === 'prime').reduce((s, m) => s + m.obligation_millions, 0) * 100,
+      ) / 100,
+      top_signal: Object.entries(signalCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
+    },
+    signal_mix: Object.entries(signalCounts)
+      .map(([signal, count]) => ({ signal, count }))
+      .sort((a, b) => b.count - a.count),
+    tier_counts,
+    matches,
+  }
 }
 
 export const COMBO_MCP_STUBS = [

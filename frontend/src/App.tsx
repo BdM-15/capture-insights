@@ -108,6 +108,7 @@ import {
 } from './utils/geographicIntel'
 import { GeoDeliveryMap } from './components/charts/GeoDeliveryMap'
 import {
+  buildClientComboInsights,
   buildComboBriefPrompt,
   buildComboScatterPoints,
   COMBO_MCP_STUBS,
@@ -443,6 +444,10 @@ export default function App() {
   async function fetchJson(path: string) {
     const r = await fetch(path)
     if (!r.ok) throw new Error(`${r.status} ${path}`)
+    const ct = r.headers.get('content-type') || ''
+    if (path.startsWith('/data/') && !ct.includes('application/json')) {
+      throw new Error(`Non-JSON from ${path} — restart with .\\scripts\\start.ps1`)
+    }
     return r.json()
   }
 
@@ -455,7 +460,7 @@ export default function App() {
       { key: 'flows', path: `/data/flows${q}&limit=40` },
       { key: 'agencyRelationships', path: `/data/agency-relationships${q}&limit=120` },
       { key: 'intensity', path: `/data/agency-intensity${q}&limit=20` },
-      { key: 'expiring', path: `/data/expiring${q}&months=36&limit=10` },
+      { key: 'expiring', path: `/data/expiring${q}&months=36&limit=40` },
       { key: 'vehicles', path: `/data/vehicles${q}` },
       { key: 'vehicleAnalysis', path: `/data/vehicle-analysis${q}` },
       { key: 'ffpShaping', path: `/data/ffp-shaping-radar${q}&months=36&limit=15` },
@@ -4391,10 +4396,20 @@ export default function App() {
       case 'combo': {
         const isInVault = (name: string) =>
           !!findCompetitorBrainEntry(name) || !!findEntityBrainEntry(name, 'agency')
-        const comboMatches = enrichComboWithVault(comboInsights?.matches || [], isInVault)
-        const comboSummary = comboInsights?.summary || {}
-        const signalMix = comboInsights?.signal_mix || []
-        const tierCounts = comboInsights?.tier_counts || {}
+        const anchorStateCodes = (geographicAnalysis?.map_states || []).slice(0, 5).map((s) => s.state)
+        const resolvedCombo = (comboInsights?.matches?.length
+          ? comboInsights
+          : buildClientComboInsights({
+              expiring,
+              intensity,
+              topRecipients,
+              anchorStates: anchorStateCodes,
+            }))
+        const comboMatches = enrichComboWithVault(resolvedCombo.matches || [], isInVault)
+        const comboSummary = resolvedCombo.summary || {}
+        const signalMix = resolvedCombo.signal_mix || []
+        const tierCounts = resolvedCombo.tier_counts || {}
+        const comboFromFallback = !comboInsights?.matches?.length && comboMatches.length > 0
         const comboScatter = buildComboScatterPoints(comboMatches)
         const tierBarData = (['prime', 'advance', 'monitor', 'track'] as const).map((t) => ({
           tier: t,
@@ -4444,8 +4459,11 @@ export default function App() {
               <div className="insight lime mb-3">
                 Combo stacks <strong className="text-text-primary">real intersections</strong> from tabs you already use — expiring timing + hot agency + top incumbent + anchor PoP + flexible pricing. Vault entries add a +10 boost. Not a suitability score (that needs capability profile).
               </div>
-              {comboInsights?.meta?.scoring_note && (
-                <div className="text-[10px] text-text-500 mb-2">{comboInsights.meta.scoring_note}</div>
+              {(resolvedCombo.meta?.scoring_note) && (
+                <div className={`text-[10px] mb-2 ${comboFromFallback ? 'text-neon-amber' : 'text-text-500'}`}>
+                  {resolvedCombo.meta.scoring_note}
+                  {comboFromFallback && ' Hit Refresh after restarting the backend for the full scored endpoint.'}
+                </div>
               )}
               <div className="flex flex-wrap gap-2">
                 {(['hot_agency', 'top_incumbent', 'anchor_pop', 'near_term', 'flex_pricing', 'high_value', 'vault_tracked'] as ComboSignal[]).map((sig) => (

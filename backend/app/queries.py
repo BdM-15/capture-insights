@@ -198,9 +198,13 @@ def get_expiring_contracts(
             recipient_name,
             federal_action_obligation,
             period_of_performance_current_end_date as end_date,
-            parent_award_agency_name,
+            {_AGENCY_EXPR} as agency,
+            {_STATE_EXPR} as pop_state,
+            COALESCE(NULLIF(type_of_contract_pricing, ''), 'Unknown') as pricing,
+            {_PRICING_BUCKET_EXPR} as pricing_bucket,
+            DATE_DIFF('month', CURRENT_DATE, period_of_performance_current_end_date) as months_to_end,
             naics_code
-        FROM usaspending_prime_awards
+        FROM {TABLE}
         WHERE period_of_performance_current_end_date IS NOT NULL
           AND period_of_performance_current_end_date <= current_date + INTERVAL '{months_ahead}' MONTH
           AND period_of_performance_current_end_date >= current_date
@@ -213,13 +217,28 @@ def get_expiring_contracts(
     con.close()
 
     results = []
-    for award_key, recipient, obligation, end_date, agency, naics in rows:
+    for (
+        award_key,
+        recipient,
+        obligation,
+        end_date,
+        agency,
+        pop_state,
+        pricing,
+        pricing_bucket,
+        months_to_end,
+        naics,
+    ) in rows:
         results.append({
             "award_key": award_key,
             "recipient": recipient,
             "obligation": obligation,
             "end_date": str(end_date) if end_date else None,
             "agency": agency,
+            "pop_state": pop_state,
+            "pricing": pricing,
+            "pricing_bucket": pricing_bucket,
+            "months_to_end": int(months_to_end or 0),
             "naics_code": naics,
         })
     return results
