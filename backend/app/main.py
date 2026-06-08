@@ -156,8 +156,14 @@ from .queries import (
     get_executive_kpis,
     get_agency_intensity,
     get_vehicle_breakdown,
+    get_vehicle_analysis,
+    get_ffp_shaping_radar,
     get_geo_breakdown,
+    get_geographic_analysis,
+    get_combo_insights,
     get_top_recipient_agency_flows,
+    get_agency_recipient_relationships,
+    get_teaming_candidates,
     get_top_recipients,
     get_chat_response,
 )
@@ -309,11 +315,53 @@ async def data_vehicles(naics: str = "561210"):
     return get_vehicle_breakdown(naics_list or None)
 
 
+@app.get("/data/vehicle-analysis", tags=["data"])
+async def data_vehicle_analysis(naics: str = "561210"):
+    """Rich contract vehicle analysis — IDV mix, holders, agency buying preferences."""
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_vehicle_analysis(naics_list or None)
+
+
+@app.get("/data/ffp-shaping-radar", tags=["data"])
+async def data_ffp_shaping_radar(naics: str = "561210", months: int = 36, limit: int = 15):
+    """FFP transition shaping radar — non-fixed pricing pressure + expiring shape targets."""
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_ffp_shaping_radar(naics_list or None, months_ahead=months, target_limit=limit)
+
+
 @app.get("/data/geo", tags=["data"])
 async def data_geo(naics: str = "561210", limit: int = 10):
     """Top states by place of performance (geographic concentration)."""
     naics_list = [n.strip() for n in naics.split(",") if n.strip()]
     return get_geo_breakdown(naics_list or None, limit=limit)
+
+
+@app.get("/data/combo-insights", tags=["data"])
+async def data_combo_insights(
+    naics: str = "561210",
+    months: int = 36,
+    limit: int = 40,
+):
+    """Cross-signal combo matches — scored expiring work with agency, geo, and market overlays."""
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_combo_insights(naics_list or None, months_ahead=months, limit=limit)
+
+
+@app.get("/data/geographic-analysis", tags=["data"])
+async def data_geographic_analysis(
+    naics: str = "561210",
+    state_limit: int = 15,
+    agency_state_limit: int = 48,
+    months: int = 36,
+):
+    """Regional capture intel — state concentration, agency/recipient strongholds, expiring by PoP."""
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_geographic_analysis(
+        naics_list or None,
+        state_limit=state_limit,
+        agency_state_limit=agency_state_limit,
+        months_ahead=months,
+    )
 
 
 @app.get("/data/flows", tags=["data"])
@@ -323,6 +371,35 @@ async def data_flows(naics: str = "561210", limit: int = 8):
     """
     naics_list = [n.strip() for n in naics.split(",") if n.strip()]
     return get_top_recipient_agency_flows(naics_list or None, limit=limit)
+
+
+@app.get("/data/agency-relationships", tags=["data"])
+async def data_agency_relationships(naics: str = "561210", limit: int = 120):
+    """Agency × competitor award counts for relationship heatmaps in Agency Intelligence."""
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    return get_agency_recipient_relationships(naics_list or None, limit=limit)
+
+
+@app.get("/data/teaming-candidates", tags=["data"])
+async def data_teaming_candidates(
+    naics: str = "561210",
+    target: str = "",
+    limit: int = 15,
+    gap: str = "",
+):
+    """Adjacent vendors + subs for gap-fill teaming — excludes top competitors."""
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    result = get_teaming_candidates(target, naics_list or None, limit=limit)
+    if gap.strip():
+        result.setdefault("meta", {})["capability_gap"] = gap.strip()
+    return result
+
+
+@app.get("/skills/catalog", tags=["skills"])
+async def skills_catalog():
+    """1102 + Theseus + marketing skill stubs for the Skills sidebar."""
+    from .federal_skills import build_skills_catalog
+    return build_skills_catalog()
 
 
 @app.get("/data/top-recipients", tags=["data"])
@@ -413,23 +490,25 @@ async def sam_opportunities(
 
 @app.get("/mcp/tools", tags=["mcp"])
 async def mcp_tools_catalog(refresh: int = 0):
-    """Return the currently discoverable MCP tools (primarily from sam-gov-mcp).
+    """Return the eight 1102 federal MCP servers (primary) with nested tool endpoints.
 
-    The floating chat co-pilot (LLM agent) receives this catalog and is the one that
-    decides when and how to call them (e.g. search SAM, create monitors, entity lookups).
-    The human user never interacts with MCPs or uvx directly — this is the agentic contract.
+    Users choose by MCP (SAM.gov, USASpending, …); the co-pilot picks endpoints under the hood.
     """
+    from .federal_mcps import build_mcp_catalog
     from .mcp import list_sam_mcp_tools, MCP_AVAILABLE, settings as mcp_settings
-    tools = []
+    discovered: dict = {}
     try:
-        tools = await list_sam_mcp_tools(force_refresh=bool(refresh))
+        sam_tools = await list_sam_mcp_tools(force_refresh=bool(refresh))
+        if sam_tools:
+            discovered["sam-gov-mcp"] = sam_tools
     except Exception:
         pass
+    catalog = build_mcp_catalog(discovered)
     return {
-        "tools": tools,
-        "mcp_available": bool(tools) or (MCP_AVAILABLE and mcp_settings.enable_live_mcps),
-        "note": "These tools are for the LLM co-pilot only. Manual use is not the intended workflow.",
-        "how_to_enable": "App pre-warms MCP catalog at startup (lifespan). For fresh live data after you start an external server: append ?refresh=1. (uvx sam-gov-mcp from 1102tools/federal-contracting-mcps; we only consume via client.)",
+        **catalog,
+        "mcp_available": catalog.get("online_count", 0) > 0 or (MCP_AVAILABLE and mcp_settings.enable_live_mcps),
+        "note": "Pick an MCP by data need — co-pilot and buttons invoke tools for you.",
+        "how_to_enable": "SAM.gov MCP warms at startup. Other 1102 MCPs appear in catalog until integrated. Refresh after starting external servers.",
     }
 
 

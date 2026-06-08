@@ -126,6 +126,8 @@ async def list_sam_mcp_tools(force_refresh: bool = False) -> List[Dict[str, Any]
                         "name": getattr(t, "name", str(t)),
                         "description": getattr(t, "description", ""),
                         "input_schema": getattr(t, "inputSchema", None) or getattr(t, "input_schema", None),
+                        "server_id": "sam-gov-mcp",
+                        "server_name": "SAM.gov",
                     })
         _mcp_tools_cache = tools
         _mcp_tools_cache_ts = now

@@ -1,8 +1,12 @@
 import type { ReactNode } from 'react'
+import type { GlossaryId } from '../../constants/captureGlossary'
+import { FieldTip } from '../ui/FieldTip'
 
 export interface DataTableColumn<T> {
   key: string
   header: string
+  /** Glossary term — renders info icon + optional vault link in header */
+  headerTip?: GlossaryId
   align?: 'left' | 'right' | 'center'
   headerClassName?: string
   cellClassName?: string
@@ -18,6 +22,7 @@ interface DataTableProps<T> {
   stickyHeader?: boolean
   className?: string
   minHeight?: string
+  onGlossaryLearn?: (termId: GlossaryId) => void
 }
 
 export function DataTable<T>({
@@ -29,6 +34,7 @@ export function DataTable<T>({
   stickyHeader = true,
   className = '',
   minHeight,
+  onGlossaryLearn,
 }: DataTableProps<T>) {
   if (data.length === 0) {
     return (
@@ -51,7 +57,15 @@ export function DataTable<T>({
                 key={col.key}
                 className={`data-table-th ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'} ${col.headerClassName ?? ''}`.trim()}
               >
-                {col.header}
+                {col.headerTip ? (
+                  <FieldTip
+                    termId={col.headerTip}
+                    label={col.header}
+                    onLearnMore={onGlossaryLearn}
+                  />
+                ) : (
+                  col.header
+                )}
               </th>
             ))}
           </tr>

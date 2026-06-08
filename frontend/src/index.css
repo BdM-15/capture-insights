@@ -1145,6 +1145,65 @@ body {
   @apply h-2 rounded bg-neon-cyan/80;
 }
 
+/* Agency × competitor relationship heatmap */
+.relationship-heatmap-wrap {
+  @apply min-w-0 overflow-x-auto;
+}
+
+.relationship-heatmap-grid {
+  @apply inline-grid gap-px min-w-full text-[9px];
+}
+
+.relationship-heatmap-corner {
+  @apply sticky left-0 z-[1];
+}
+
+.relationship-heatmap-col-head {
+  @apply px-1 py-1 text-center text-text-500 truncate font-medium;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  max-height: 88px;
+}
+
+.relationship-heatmap-row {
+  @apply contents;
+}
+
+.relationship-heatmap-row-head {
+  @apply sticky left-0 z-[1] text-left px-1.5 py-1 truncate text-neon-cyan hover:underline;
+  background: var(--ink-card);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+}
+
+.relationship-heatmap-cell {
+  @apply flex items-center justify-center min-h-[28px] rounded border border-edge/60 bg-ink-900/40 transition-colors;
+}
+
+.relationship-heatmap-cell.has-data {
+  @apply cursor-pointer hover:border-neon-magenta/50;
+}
+
+.relationship-heatmap-cell-value {
+  @apply tabular-nums font-medium text-text-primary;
+}
+
+.relationship-heatmap-cell-empty {
+  @apply text-text-500/50;
+}
+
+.profile-skill-chip {
+  @apply border border-edge rounded-lg p-2 bg-ink-900/60 min-w-0 flex flex-col gap-1;
+}
+
+.profile-skill-chip-name {
+  @apply text-[11px] font-medium text-text-primary truncate;
+}
+
+.profile-skill-chip-meta {
+  @apply text-[9px] text-text-500 leading-snug;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .topbar-vibrant::after,
   .sidebar-vibrant::after,

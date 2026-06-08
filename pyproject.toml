@@ -19,6 +19,8 @@ dependencies = [
     # "pydantic-ai>=0.0.1",  # when stable / desired for agents
     "structlog>=24.0",
     "typer>=0.12",  # for CLI scripts
+    "requests>=2.32",  # bulk USASpending downloads
+    "tqdm>=4.66",  # download progress polling
 ]
 
 [project.optional-dependencies]

@@ -146,6 +146,107 @@ def _assign_id(entry: dict, kind: str, existing: List[dict]) -> dict:
     new_id = f"{kind}-{base}-{len(existing)}-{int(__import__('time').time()*1000)}"
     return {**entry, "id": new_id}
 
+
+def _normalize_entity_name(name: str) -> str:
+    import re
+    s = (name or "").strip().lower()
+    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r"[.,'\"()]", "", s)
+    return s
+
+
+def _names_match_entity(a: str, b: str) -> bool:
+    na, nb = _normalize_entity_name(a), _normalize_entity_name(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    prefix = min(len(na), len(nb), 18)
+    if prefix >= 8 and na[:prefix] == nb[:prefix]:
+        return True
+    if na in nb or nb in na:
+        return True
+    return _slug(a) == _slug(b)
+
+
+def _brain_subdir(typ: str) -> str:
+    mapping = {
+        "agency": "agencies",
+        "competitor": "competitors",
+        "recipient": "competitors",
+        "office": "offices",
+        "teammate": "teammates",
+        "partner": "teammates",
+    }
+    t = (typ or "entity").lower()
+    return mapping.get(t, t + "s" if not t.endswith("s") else t)
+
+
+def _find_existing_brain_entry(brain: List[dict], name: str, typ: str) -> Optional[dict]:
+    for existing in brain:
+        if (existing.get("type") or "").lower() != (typ or "").lower():
+            continue
+        if _names_match_entity(existing.get("name", ""), name):
+            return existing
+    return None
+
+
+def _find_md_path_for_entity(typ: str, name: str) -> Optional[Path]:
+    subdir = BRAIN_DIR / _brain_subdir(typ)
+    if not subdir.exists():
+        return None
+    target_slug = _slug(name)
+    exact = subdir / f"{target_slug}.md"
+    if exact.exists():
+        return exact
+    for md in subdir.glob("*.md"):
+        try:
+            for line in md.read_text(encoding="utf-8").splitlines()[:20]:
+                if line.lower().startswith("name:"):
+                    fm_name = line.split(":", 1)[1].strip()
+                    if _names_match_entity(fm_name, name):
+                        return md
+        except Exception:
+            continue
+    return None
+
+
+def _extract_context_from_entry(entry: dict) -> dict:
+    raw = entry.get("raw") or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "addedAt": entry.get("addedAt") or "",
+        "sourceTab": entry.get("sourceTab") or "brain",
+        "citation": entry.get("citation") or "",
+        "summary": (entry.get("notes") or "").strip(),
+        "award_key": raw.get("award_key") or entry.get("award_key"),
+        "agency": raw.get("agency") or entry.get("agency"),
+        "office": raw.get("office") or entry.get("office"),
+        "recipient": raw.get("recipient") or entry.get("recipient"),
+        "end_date": raw.get("end_date"),
+        "obligation": raw.get("obligation"),
+        "millions": raw.get("millions"),
+        "actions": raw.get("actions"),
+    }
+
+
+def _context_dedupe_key(ctx: dict) -> str:
+    return "|".join([
+        str(ctx.get("citation") or ""),
+        str(ctx.get("award_key") or ""),
+        str(ctx.get("sourceTab") or ""),
+        str(ctx.get("office") or ""),
+        (ctx.get("summary") or "")[:96],
+    ])
+
+
+def _canonical_entity_name(existing_name: str, incoming_name: str) -> str:
+    if len((incoming_name or "").strip()) > len((existing_name or "").strip()):
+        return incoming_name.strip()
+    return (existing_name or incoming_name or "unknown").strip()
+
+
 def add_to_pipeline(entry: dict) -> Dict[str, List[dict]]:
     data = _load()
     entry = _assign_id(entry, "pipe", data["pipeline"])
@@ -158,35 +259,53 @@ def add_to_pipeline(entry: dict) -> Dict[str, List[dict]]:
 def add_to_brain(entry: dict) -> Dict[str, List[dict]]:
     """
     Add or compound a brain entry.
-    If an entry with the same (name, type) already exists, we append to its notes + citations
-    instead of creating a duplicate. This is how the wiki/brain "gets smarter".
+    Same agency/office/competitor (fuzzy name + slug match) appends a new *context*
+    to one JSON entry and one .md file — no duplicate folders or files.
+    User overlay notes (via update_brain_note) stay separate from auto context.
     """
     data = _load()
+    name = (entry.get("name") or "").strip()
+    typ = (entry.get("type") or "competitor").lower()
+    ctx = _extract_context_from_entry(entry)
+
+    existing = _find_existing_brain_entry(data["brain"], name, typ) if name else None
+    if existing:
+        existing["name"] = _canonical_entity_name(existing.get("name", ""), name)
+        contexts = list(existing.get("contexts") or [])
+        dedupe_key = _context_dedupe_key(ctx)
+        if not any(_context_dedupe_key(c) == dedupe_key for c in contexts):
+            contexts.append(ctx)
+        existing["contexts"] = contexts[-25:]
+
+        old_cit = existing.get("citation", "")
+        new_cit = entry.get("citation", "")
+        if new_cit and new_cit not in (old_cit or ""):
+            existing["citation"] = (old_cit + " ; " + new_cit).strip(" ;").strip()
+        if entry.get("addedAt"):
+            existing["addedAt"] = entry["addedAt"]
+
+        md_path = _find_md_path_for_entity(typ, existing["name"])
+        if md_path:
+            try:
+                existing["wikiPath"] = str(md_path.relative_to(BRAIN_DIR.parent))
+            except ValueError:
+                existing["wikiPath"] = str(md_path)
+        existing["slug"] = _slug(existing["name"])
+
+        _save(data)
+        _write_brain_md(existing, new_context=ctx)
+        return data
+
     entry = _assign_id(entry, "brain", data["brain"])
+    entry["type"] = typ
+    entry["contexts"] = [ctx]
+    entry["slug"] = _slug(name)
+    entry["notes"] = entry.get("notes") or ""
 
-    name = entry.get("name")
-    typ = entry.get("type")
-    if name and typ:
-        for existing in data["brain"]:
-            if existing.get("name") == name and existing.get("type") == typ:
-                # compound
-                old_notes = existing.get("notes", "")
-                new_notes = entry.get("notes", "")
-                existing["notes"] = (old_notes + " | " + new_notes).strip(" |").strip()
-                old_cit = existing.get("citation", "")
-                new_cit = entry.get("citation", "")
-                existing["citation"] = (old_cit + " ; " + new_cit).strip(" ;").strip()
-                if entry.get("addedAt"):
-                    existing["addedAt"] = entry["addedAt"]
-                _save(data)
-                _write_brain_md(existing)
-                return data
-
-    # new entry
     data["brain"] = [entry] + [e for e in data["brain"] if e.get("id") != entry.get("id")]
     data["brain"] = data["brain"][:30]
     _save(data)
-    _write_brain_md(entry)
+    _write_brain_md(entry, new_context=ctx)
     return data
 
 def remove_from_pipeline(entry_id: str) -> Dict[str, List[dict]]:
@@ -206,7 +325,7 @@ def update_brain_note(entry_id: str, notes: str) -> Dict[str, List[dict]]:
     for e in data["brain"]:
         if e.get("id") == entry_id:
             e["notes"] = notes or ""
-            _write_brain_md(e)
+            _update_brain_overlay_md(e)
             break
     _save(data)
     return data
@@ -227,6 +346,10 @@ def list_brain_wiki_files() -> List[Dict[str, str]]:
         "agencys": "agency",   # legacy
         "competitors": "competitor",
         "competitor": "competitor",
+        "offices": "office",
+        "office": "office",
+        "teammates": "teammate",
+        "teammate": "teammate",
     }
 
     for sub in BRAIN_DIR.iterdir():
@@ -593,84 +716,143 @@ def _strip_frontmatter(content: str) -> str:
     return content.strip()
 
 
-def _write_brain_md(entry: dict):
-    """Write/append a native Obsidian-friendly Markdown file for the Brain entry.
-    This is the foundation slice: plain .md with frontmatter + [[wikilinks]]-ready content,
-    citations preserved, so user can immediately point Obsidian at data/knowledge/brain/
-    for free rich wiki UI (backlinks, graph, search). The app still uses the JSON accumulator
-    for speed; md files are the compounding wiki substrate aligned with Karpathy/Obsidian.
-    Later slices can make the app read from md and expand to global_wiki/ + pursuits/ tiers.
+def _format_context_section(ctx: dict, entity_name: str, typ: str) -> str:
+    """One append-only context block — ties disparate opportunities to the same entity."""
+    lines = [f"## Context — {(ctx.get('addedAt') or '')[:10]} — {ctx.get('sourceTab') or 'brain'}"]
+    if ctx.get("award_key"):
+        lines.append(f"- **Award**: `{ctx.get('award_key')}`")
+    if ctx.get("agency") and typ != "agency":
+        lines.append(f"- **Agency**: [[{ctx.get('agency')}]]")
+    if ctx.get("office"):
+        lines.append(f"- **Office**: [[{ctx.get('office')}]]")
+    if ctx.get("recipient") and typ != "competitor":
+        lines.append(f"- **Recipient**: [[{ctx.get('recipient')}]]")
+    if ctx.get("end_date"):
+        lines.append(f"- **PoP ends**: {ctx.get('end_date')}")
+    if ctx.get("obligation"):
+        try:
+            lines.append(f"- **Obligation**: ${float(ctx.get('obligation')) / 1e6:.2f}M")
+        except (TypeError, ValueError):
+            pass
+    if ctx.get("millions"):
+        lines.append(f"- **Flow**: ${ctx.get('millions')}M ({ctx.get('actions') or '?'} actions)")
+    summary = (ctx.get("summary") or "").strip()
+    if summary:
+        lines.append("")
+        lines.append(summary)
+    lines.append("")
+    lines.append(f"**Citations**: {ctx.get('citation') or 'N/A'}")
+    return "\n".join(lines)
 
-    LLM is used here (when available) to synthesize richer, more structured wiki-style content
-    from the triggering data context + citations. This makes the Brain a true LLM-augmented
-    wiki that compounds knowledge from the USASpending insights and your actions.
+
+def _update_brain_overlay_md(entry: dict):
+    """Update user overlay notes without duplicating context sections."""
+    try:
+        typ = entry.get("type") or "entity"
+        name = entry.get("name") or "unknown"
+        path = _find_md_path_for_entity(typ, name)
+        if not path:
+            subdir = BRAIN_DIR / _brain_subdir(typ)
+            subdir.mkdir(parents=True, exist_ok=True)
+            path = subdir / f"{_slug(name)}.md"
+        overlay = (entry.get("notes") or "").strip()
+        marker = "## Personal overlay"
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            body = _strip_frontmatter(content)
+            if marker in body:
+                before, _, _after = body.partition(marker)
+                body = before.rstrip() + f"\n\n{marker}\n\n{overlay}\n"
+            else:
+                body = body.rstrip() + f"\n\n{marker}\n\n{overlay}\n"
+            if content.startswith("---"):
+                fm_end = content.find("---", 3)
+                if fm_end != -1:
+                    front = content[: fm_end + 3]
+                    path.write_text(front + "\n\n" + body, encoding="utf-8")
+                    return
+            path.write_text(body, encoding="utf-8")
+        else:
+            _write_brain_md(entry, new_context=None)
+    except Exception:
+        pass
+
+
+def _write_brain_md(entry: dict, new_context: dict | None = None):
+    """Write/append a native Obsidian-friendly Markdown file for the Brain entry.
+
+    One file per entity (slug + fuzzy name match). Re-encounters append a dated Context
+    section with opportunity-specific provenance — same agency/office/competitor, new signal.
     """
     try:
         name = entry.get("name") or "unknown"
-        typ = entry.get("type") or "entity"
-        if typ == 'agency':
-            sub = 'agencies'
-        elif typ == 'competitor':
-            sub = 'competitors'
-        else:
-            sub = typ + 's' if not typ.endswith('s') else typ
-        subdir = BRAIN_DIR / sub
+        typ = (entry.get("type") or "entity").lower()
+        subdir = BRAIN_DIR / _brain_subdir(typ)
         subdir.mkdir(parents=True, exist_ok=True)
-        slug = _slug(name)
-        path = subdir / f"{slug}.md"
+
+        path = _find_md_path_for_entity(typ, name) or (subdir / f"{_slug(name)}.md")
+        ctx = new_context or (entry.get("contexts") or [{}])[-1]
+        section = _format_context_section(ctx, name, typ)
+        section_key = _context_dedupe_key(ctx)
 
         frontmatter = f"""---
 name: {name}
 type: {typ}
 id: {entry.get("id", "")}
+slug: {_slug(name)}
 added: {entry.get("addedAt", "")}
 citations: {entry.get("citation", "")}
+contexts: {len(entry.get("contexts") or [])}
 ---
 
 """
 
-        raw_notes = entry.get("notes", "").strip()
-        body = raw_notes or "No notes yet. Add via +brain or agent actions."
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            body = _strip_frontmatter(content)
+            if section_key and section_key in body:
+                return
+            if "## Context —" in body and (ctx.get("summary") or "")[:48] in body:
+                return
+            path.write_text(content.rstrip() + "\n\n" + section + "\n", encoding="utf-8")
+            try:
+                entry["wikiPath"] = str(path.relative_to(BRAIN_DIR.parent))
+            except ValueError:
+                entry["wikiPath"] = str(path)
+            return
 
-        # Use LLM (if available) to synthesize a richer wiki-style entry when the provided notes
-        # are basic/short. This is the "LLM wiki" part: grounded in data + citations, atomic,
-        # linkable, ready for compounding.
-        if llm_client and len(body) < 200 and name:
-            context = f"Entity: {name} (type: {typ}). Citation: {entry.get('citation','')}. Trigger source: {entry.get('sourceTab','brain')}. NAICS context: {entry.get('naics','')}. Raw notes: {raw_notes}."
+        body = section
+        raw_summary = (ctx.get("summary") or "").strip()
+
+        if llm_client and raw_summary and len(raw_summary) < 200:
+            context = (
+                f"Entity: {name} (type: {typ}). Citation: {ctx.get('citation', '')}. "
+                f"Source: {ctx.get('sourceTab', 'brain')}. Context: {raw_summary}."
+            )
             prompt = (
-                "You are helping build a capture professional's Obsidian-style LLM wiki / knowledge base following the Karpathy LLM Wiki pattern (see data/knowledge/schema/capture-llm-wiki.md for the full schema and capture ontology you must follow).\n"
-                "Create a clean, atomic Markdown note for this entity. Use sections like:\n"
+                "You are building an Obsidian-style capture wiki entry (atomic, evidence-based).\n"
+                "Write ONLY the body sections below the frontmatter — no YAML. Sections:\n"
                 "- Key Signals from USASpending Data + Citations\n"
                 "- Citations & Sources\n"
                 "- Synthesis / Analysis\n"
                 "- Open Questions / Next Actions\n"
-                "Follow the schema rules exactly: plain .md + frontmatter, [[wikilinks]], evidence-based with citations back to award_key/NAICS/source, professional capture/BD tone, Shipley-aligned elements where relevant (win themes, discriminators, etc.). Keep it concise and atomic. Base everything only on the provided context. Do not invent data.\n\n"
-                f"Context:\n{context}\n\nWrite the wiki note now (append-only style if the file already exists):"
+                "Use [[wikilinks]] for related agencies/offices/recipients when mentioned. "
+                "Do not invent data. Keep concise.\n\n"
+                f"{context}\n\nWiki body:"
             )
             try:
-                generated = llm_client.call_llm(prompt, temperature=0.2, max_tokens=180)
-                if generated and not generated.startswith("[LLM") and len(generated) > 30:
-                    body = generated.strip()
+                generated = llm_client.call_llm(prompt, temperature=0.2, max_tokens=220)
+                if generated and not generated.startswith("[LLM") and len(generated) > 40:
+                    body = generated.strip() + "\n\n" + section
             except Exception:
-                pass  # fall back to raw notes
+                pass
 
-        # Append mode for compounding (new synthesized content from LLM/buttons gets added)
-        existing = ""
-        if path.exists():
-            existing = _strip_frontmatter(path.read_text(encoding="utf-8"))
-            if existing:
-                existing = existing + "\n\n"
-
-        new_section = f"""## Added/Updated {entry.get("addedAt", "")[:10]}
-{body}
-
-**Citations**: {entry.get("citation", "N/A")}
-_Source_: {entry.get("sourceTab", "brain")} • NAICS {entry.get("naics", "")}
-"""
-
-        path.write_text(frontmatter + existing + new_section, encoding="utf-8")
+        path.write_text(frontmatter + body + "\n", encoding="utf-8")
+        try:
+            entry["wikiPath"] = str(path.relative_to(BRAIN_DIR.parent))
+        except ValueError:
+            entry["wikiPath"] = str(path)
     except Exception:
-        # Non-fatal; JSON accumulator is still authoritative for the app
         pass
 
 def clear_all():

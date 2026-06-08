@@ -133,3 +133,59 @@ export function summarizeAgencyFlows(
   })
   return out
 }
+
+export interface RelationshipRow {
+  agency: string
+  recipient: string
+  actions: number
+  millions?: number
+}
+
+export interface RelationshipHeatmapModel {
+  agencies: string[]
+  recipients: string[]
+  cells: Map<string, RelationshipRow>
+  maxActions: number
+}
+
+export function buildRelationshipHeatmap(
+  relationships: readonly RelationshipRow[],
+  maxAgencies = 8,
+  maxRecipients = 8,
+): RelationshipHeatmapModel {
+  const agencyTotals = new Map<string, number>()
+  const recipientTotals = new Map<string, number>()
+  relationships.forEach((r) => {
+    agencyTotals.set(r.agency, (agencyTotals.get(r.agency) || 0) + (r.actions || 0))
+    recipientTotals.set(r.recipient, (recipientTotals.get(r.recipient) || 0) + (r.actions || 0))
+  })
+
+  const agencies = [...agencyTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxAgencies)
+    .map(([name]) => name)
+  const recipients = [...recipientTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxRecipients)
+    .map(([name]) => name)
+
+  const agencySet = new Set(agencies)
+  const recipientSet = new Set(recipients)
+  const cells = new Map<string, RelationshipRow>()
+  let maxActions = 0
+
+  relationships.forEach((r) => {
+    if (!agencySet.has(r.agency) || !recipientSet.has(r.recipient)) return
+    const key = `${r.agency}|${r.recipient}`
+    cells.set(key, r)
+    if (r.actions > maxActions) maxActions = r.actions
+  })
+
+  return { agencies, recipients, cells, maxActions: maxActions || 1 }
+}
+
+/** 0–1 strength for heatmap cell fill from award count. */
+export function relationshipStrength(actions: number, maxActions: number): number {
+  if (!actions || !maxActions) return 0
+  return Math.min(1, actions / maxActions)
+}

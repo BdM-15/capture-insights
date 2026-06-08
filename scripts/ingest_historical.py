@@ -23,6 +23,7 @@ because DuckDB is extremely good at this kind of analytical workload.
 Usage examples (the script always deduplicates on the government's unique key, so re-running only adds new data):
 
   # Simplest & recommended (no shell glob quoting headaches on Windows/PowerShell):
+  # Re-runs automatically skip chunks already loaded (based on MAX(action_date) in DuckDB).
   uv run python scripts/ingest_historical.py --dir data/raw/10year_bulk/prime
 
   # Same for subaward chunks
@@ -41,9 +42,11 @@ and (soon) by the dashboard UI.
 from __future__ import annotations
 
 import glob
+import re
 import sys
+from datetime import date, datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import duckdb
 import typer
@@ -53,6 +56,12 @@ app = typer.Typer(help="Load historical USASpending Prime Award CSVs into local 
 
 DEFAULT_DB = Path("data/capture.duckdb")
 TABLE = "usaspending_prime_awards"
+SUB_TABLE = "usaspending_subawards"
+CHUNK_LOG_TABLE = "ingest_chunk_log"
+CHUNK_NAME_RE = re.compile(
+    r"^(?:prime|sub)_(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})\.(?:zip|csv)$",
+    re.IGNORECASE,
+)
 
 
 def ensure_table(con: duckdb.DuckDBPyConnection, is_sub: bool = False) -> None:
@@ -92,6 +101,156 @@ def ensure_table(con: duckdb.DuckDBPyConnection, is_sub: bool = False) -> None:
             {col_sql}
         )
     """)
+    ensure_prime_index(con)
+
+
+def ensure_chunk_log(con: duckdb.DuckDBPyConnection) -> None:
+    """Track successfully ingested bulk chunk files for fast resume (like sub append speed)."""
+    con.execute(f"""
+        CREATE TABLE IF NOT EXISTS {CHUNK_LOG_TABLE} (
+            chunk_name TEXT NOT NULL,
+            award_type TEXT NOT NULL,
+            rows_in_file BIGINT,
+            rows_inserted BIGINT,
+            loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (chunk_name, award_type)
+        )
+    """)
+
+
+def chunk_already_loaded(
+    con: duckdb.DuckDBPyConnection, chunk_name: str, award_type: str
+) -> bool:
+    return (
+        con.execute(
+            f"SELECT COUNT(*) FROM {CHUNK_LOG_TABLE} WHERE chunk_name = ? AND award_type = ?",
+            [chunk_name, award_type],
+        ).fetchone()[0]
+        > 0
+    )
+
+
+def record_chunk_loaded(
+    con: duckdb.DuckDBPyConnection,
+    chunk_name: str,
+    award_type: str,
+    rows_in_file: int,
+    rows_inserted: int,
+) -> None:
+    con.execute(
+        f"""
+        INSERT OR REPLACE INTO {CHUNK_LOG_TABLE}
+            (chunk_name, award_type, rows_in_file, rows_inserted)
+        VALUES (?, ?, ?, ?)
+        """,
+        [chunk_name, award_type, rows_in_file, rows_inserted],
+    )
+
+
+def clear_chunk_log(con: duckdb.DuckDBPyConnection, award_type: str) -> None:
+    con.execute(
+        f"DELETE FROM {CHUNK_LOG_TABLE} WHERE award_type = ?",
+        [award_type],
+    )
+
+
+def ensure_prime_index(con: duckdb.DuckDBPyConnection) -> None:
+    """Unique key enables INSERT OR IGNORE — same per-chunk speed as sub append."""
+    con.execute(f"DROP INDEX IF EXISTS idx_{TABLE}_txn_key")
+    try:
+        con.execute(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{TABLE}_txn_key_unique "
+            f"ON {TABLE}(contract_transaction_unique_key)"
+        )
+    except duckdb.Error:
+        # Legacy DB may contain duplicate keys; keep a non-unique index and fall back to join dedup.
+        con.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_txn_key "
+            f"ON {TABLE}(contract_transaction_unique_key)"
+        )
+
+
+def prime_uses_ignore_insert(con: duckdb.DuckDBPyConnection) -> bool:
+    return (
+        con.execute(
+            "SELECT COUNT(*) FROM duckdb_indexes() WHERE index_name = ?",
+            [f"idx_{TABLE}_txn_key_unique"],
+        ).fetchone()[0]
+        > 0
+    )
+
+
+def parse_chunk_start(path: Path) -> Optional[date]:
+    """Return the chunk start date from bulk download filenames."""
+    match = CHUNK_NAME_RE.match(path.name)
+    if not match:
+        return None
+    return datetime.strptime(match.group(1), "%Y-%m-%d").date()
+
+
+def parse_chunk_end(path: Path) -> Optional[date]:
+    """Return the chunk end date from bulk download filenames like prime_2015-10-01_to_2015-10-02.zip."""
+    match = CHUNK_NAME_RE.match(path.name)
+    if not match:
+        return None
+    return datetime.strptime(match.group(2), "%Y-%m-%d").date()
+
+
+def get_table_max_action_date(con: duckdb.DuckDBPyConnection, is_sub: bool) -> Optional[date]:
+    """Return the latest action date already loaded, if the target table exists."""
+    table = SUB_TABLE if is_sub else TABLE
+    exists = (
+        con.execute(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?",
+            [table],
+        ).fetchone()[0]
+        > 0
+    )
+    if not exists:
+        return None
+
+    if is_sub:
+        columns = {
+            row[0]
+            for row in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+                [table],
+            ).fetchall()
+        }
+        for column in ("subaward_action_date", "action_date"):
+            if column not in columns:
+                continue
+            value = con.execute(f"SELECT MAX({column}) FROM {table}").fetchone()[0]
+            if value is None:
+                continue
+            if isinstance(value, date):
+                return value
+            return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+        return None
+
+    value = con.execute(f"SELECT MAX(action_date) FROM {table}").fetchone()[0]
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+
+
+def should_skip_chunk(
+    con: duckdb.DuckDBPyConnection,
+    path: Path,
+    resume_before: Optional[date],
+    award_type: str,
+) -> bool:
+    """Skip chunks already logged or whose date range is covered by data in DuckDB."""
+    if chunk_already_loaded(con, path.name, award_type):
+        return True
+    if resume_before is None:
+        return False
+    chunk_end = parse_chunk_end(path)
+    if chunk_end is None:
+        return False
+    return chunk_end <= resume_before
 
 
 def derive_fy_quarter(con: duckdb.DuckDBPyConnection, source_table: str) -> None:
@@ -169,27 +328,41 @@ PRIME_TARGET_FIELDS = [
 ]
 
 
-def load_csv(con: duckdb.DuckDBPyConnection, csv_path: Path, naics_filter: Optional[List[str]] = None, is_sub: bool = False) -> int:
+def load_csv(
+    con: duckdb.DuckDBPyConnection,
+    csv_path: Path,
+    naics_filter: Optional[List[str]] = None,
+    is_sub: bool = False,
+) -> Tuple[int, int]:
     """Load one CSV using the exact target fields from the original Data_Insights.
 
     The download script already requested only those columns.
     We add derived fy/quarter for convenience.
+
+    Returns (rows_in_file, rows_inserted).
     """
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
 
+    csv_sql_path = csv_path.as_posix()
     temp = "raw_load"
     con.execute(f"DROP TABLE IF EXISTS {temp}")
 
     if is_sub:
         select = "*"
-        target = "usaspending_subawards"
+        target = SUB_TABLE
         read_options = ", all_varchar=true"
     else:
         field_list = ", ".join(PRIME_TARGET_FIELDS)
-        select = f"{field_list}, EXTRACT(year FROM action_date + INTERVAL '3 months') AS fy, ((EXTRACT(month FROM action_date + INTERVAL '3 months')-1)/3)+1 AS quarter, CURRENT_DATE AS fetch_date"
+        action_dt = "TRY_CAST(action_date AS DATE)"
+        select = (
+            f"{field_list}, "
+            f"EXTRACT(year FROM {action_dt} + INTERVAL '3 months') AS fy, "
+            f"((EXTRACT(month FROM {action_dt} + INTERVAL '3 months') - 1) / 3) + 1 AS quarter, "
+            f"CURRENT_DATE AS fetch_date"
+        )
         target = TABLE
-        read_options = ""
+        read_options = ", all_varchar=true"
 
     where = ""
     if naics_filter and not is_sub:
@@ -199,9 +372,17 @@ def load_csv(con: duckdb.DuckDBPyConnection, csv_path: Path, naics_filter: Optio
     con.execute(f"""
         CREATE TEMP TABLE {temp} AS
         SELECT {select}
-        FROM read_csv_auto('{csv_path}'{read_options})
+        FROM read_csv_auto('{csv_sql_path}'{read_options})
         {where}
     """)
+    rows_in_file = con.execute(f"SELECT COUNT(*) FROM {temp}").fetchone()[0]
+    rows_before = con.execute(f"SELECT COUNT(*) FROM {target}").fetchone()[0] if (
+        con.execute(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?",
+            [target],
+        ).fetchone()[0]
+        > 0
+    ) else 0
 
     if is_sub:
         # Subawards: dynamic columns from the USASpending sub bulk CSV (very wide, ~100+ cols, different naming from prime).
@@ -209,10 +390,15 @@ def load_csv(con: duckdb.DuckDBPyConnection, csv_path: Path, naics_filter: Optio
         # Then simple append for the rest of the batch (and future incremental ingests).
         # Subaward date chunks from the download script are time-partitioned so overlap/dup risk is very low for the historical bulk use case.
         # (If you ever see dups later you can always DROP TABLE + full re-ingest.)
-        exists = con.execute(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{target}'").fetchone()[0] > 0
+        exists = con.execute(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?",
+            [target],
+        ).fetchone()[0] > 0
         if not exists:
             con.execute(f"CREATE TABLE {target} AS SELECT * FROM {temp} LIMIT 0")
         con.execute(f"INSERT INTO {target} SELECT * FROM {temp}")
+    elif prime_uses_ignore_insert(con):
+        con.execute(f"INSERT OR IGNORE INTO {target} SELECT * FROM {temp}")
     else:
         con.execute(f"""
             INSERT INTO {target}
@@ -222,9 +408,9 @@ def load_csv(con: duckdb.DuckDBPyConnection, csv_path: Path, naics_filter: Optio
             WHERE t.contract_transaction_unique_key IS NULL
         """)
 
-    inserted = con.execute(f"SELECT COUNT(*) FROM {temp}").fetchone()[0]
+    rows_after = con.execute(f"SELECT COUNT(*) FROM {target}").fetchone()[0]
     con.execute(f"DROP TABLE {temp}")
-    return inserted
+    return rows_in_file, rows_after - rows_before
 
 
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
@@ -258,6 +444,11 @@ def main(
         "--delete-source",
         help="After successfully loading a CSV/zip, delete the source file(s) to save disk space. Use with caution."
     ),
+    no_resume: bool = typer.Option(
+        False,
+        "--no-resume",
+        help="Reprocess every file from the beginning. Default behavior skips bulk chunks already covered by MAX(action_date) in DuckDB."
+    ),
     ctx: typer.Context = None,  # injected by Typer when using allow_extra_args
 ):
     """Ingest historical USASpending data with light ETL into a single fast local DuckDB file.
@@ -289,7 +480,7 @@ def main(
 
     # For real bulk loads, if the table exists but has wrong schema (from old demo), drop it
     # so we get the full TARGET_FIELDS columns.
-    target_table = "usaspending_subawards" if sub else TABLE
+    target_table = SUB_TABLE if sub else TABLE
     try:
         col_count = con.execute(f"SELECT COUNT(*) FROM information_schema.columns WHERE table_name = '{target_table}'").fetchone()[0]
         expected_cols = len(PRIME_TARGET_FIELDS) + 3 if not sub else 10  # rough: fields + fy/quarter/fetch
@@ -300,6 +491,11 @@ def main(
         pass  # table may not exist yet
 
     ensure_table(con, is_sub=sub)
+    ensure_chunk_log(con)
+    award_type = "sub" if sub else "prime"
+
+    if no_resume and not demo:
+        clear_chunk_log(con, award_type)
 
     if demo:
         typer.echo("Loading synthetic demo data (good for quick testing)...")
@@ -370,17 +566,34 @@ def main(
         import tempfile
         import zipfile
         import shutil
+        import time
+
+        resume_before: Optional[date] = None
+        if not no_resume and not naics_list:
+            resume_before = get_table_max_action_date(con, is_sub=sub)
+            if resume_before:
+                typer.echo(f"  Resuming from DB max action_date {resume_before} (use --no-resume to reprocess everything)")
 
         total_inserted = 0
+        skipped = 0
+        processed = 0
         for p in paths:
             p = Path(p)
+            if should_skip_chunk(con, p, resume_before, award_type):
+                skipped += 1
+                if not chunk_already_loaded(con, p.name, award_type):
+                    record_chunk_loaded(con, p.name, award_type, 0, 0)
+                if skipped == 1 or skipped % 100 == 0:
+                    typer.echo(f"  ... skipping {skipped} already-loaded chunk(s) (latest: {p.name})")
+                continue
+
             csv_to_load = p
             temp_dir = None
 
             if p.suffix.lower() == ".zip":
                 # Auto-extract zip to temp dir for loading
                 temp_dir = Path(tempfile.mkdtemp(prefix="usaspending_ingest_"))
-                typer.echo(f"  Extracting zip {p} to temp...")
+                typer.echo(f"  Extracting zip {p.name} ...")
                 with zipfile.ZipFile(p) as zf:
                     zf.extractall(temp_dir)
                 # Find the CSV inside
@@ -392,12 +605,23 @@ def main(
                 csv_to_load = csvs[0]  # assume first/only CSV
 
             try:
-                inserted = load_csv(con, csv_to_load, naics_filter=naics_list, is_sub=sub)
+                t0 = time.perf_counter()
+                rows_in_file, inserted = load_csv(con, csv_to_load, naics_filter=naics_list, is_sub=sub)
+                elapsed = time.perf_counter() - t0
                 total_inserted += inserted
-                typer.echo(f"  {p} → +{inserted} new rows")
+                processed += 1
+                record_chunk_loaded(con, p.name, award_type, rows_in_file, inserted)
+                if inserted == 0 and rows_in_file > 0:
+                    typer.echo(
+                        f"  {p.name} → 0 new rows ({rows_in_file:,} already in DB) [{elapsed:.1f}s]"
+                    )
+                else:
+                    typer.echo(
+                        f"  {p.name} → +{inserted:,} new rows ({rows_in_file:,} in file) [{elapsed:.1f}s]"
+                    )
             except Exception as load_err:
                 inserted = 0
-                typer.echo(f"  {p} → ERROR loading chunk: {load_err}")
+                typer.echo(f"  {p.name} → ERROR loading chunk: {load_err}")
                 typer.echo("    (skipped this chunk; batch continues. Re-run just the failing file later if needed.)")
 
             # Cleanup temp extract
@@ -412,6 +636,10 @@ def main(
                 except Exception as e:
                     typer.echo(f"    Warning: could not delete {p}: {e}")
 
+        if skipped:
+            typer.echo(f"  Skipped {skipped} chunk(s) already covered by the DB.")
+        typer.echo(f"  Processed {processed} chunk(s) this run.")
+
         # Derive fy/quarter for new rows if not already (prime only, sub may have different date cols)
         if not sub:
             con.execute(f"""
@@ -423,7 +651,7 @@ def main(
 
         total = con.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
         typer.echo(f"\nDone. Total rows in {target_table}: {total}")
-        typer.echo(f"New rows inserted this run: {total_inserted}")
+        typer.echo(f"New rows inserted this run: {total_inserted:,}")
 
     con.close()
     typer.echo(f"\nYour data is now in {db}")

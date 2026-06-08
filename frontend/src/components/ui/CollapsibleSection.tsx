@@ -1,7 +1,9 @@
 import { ChevronDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
+import type { GlossaryId } from '../../constants/captureGlossary'
 import type { SurfaceAccent } from './Surface'
+import { FieldTip } from './FieldTip'
 
 interface CollapsibleSectionProps {
   title: string
@@ -12,6 +14,9 @@ interface CollapsibleSectionProps {
   children: ReactNode
   className?: string
   badge?: ReactNode
+  /** Glossary term for section title — layman tip on the section name */
+  titleGlossaryId?: GlossaryId
+  onGlossaryLearn?: (termId: GlossaryId) => void
 }
 
 export function CollapsibleSection({
@@ -23,6 +28,8 @@ export function CollapsibleSection({
   children,
   className = '',
   badge,
+  titleGlossaryId,
+  onGlossaryLearn,
 }: CollapsibleSectionProps) {
   return (
     <details
@@ -37,7 +44,17 @@ export function CollapsibleSection({
             </span>
           )}
           <div className="min-w-0">
-            <div className="collapsible-section-title">{title}</div>
+            <div className="collapsible-section-title">
+              {titleGlossaryId ? (
+                <FieldTip
+                  termId={titleGlossaryId}
+                  label={title}
+                  onLearnMore={onGlossaryLearn}
+                />
+              ) : (
+                title
+              )}
+            </div>
             {subtitle && <div className="collapsible-section-subtitle">{subtitle}</div>}
           </div>
           {badge}

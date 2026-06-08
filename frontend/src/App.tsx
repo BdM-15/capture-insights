@@ -4,7 +4,7 @@ import {
   RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
   GitBranch, PieChart, Crosshair, Lightbulb, Zap, Search, Radar, Users, MapPin,
-  Settings, Sparkles, ClipboardList, UserCheck,
+  Settings, Sparkles, ClipboardList, UserCheck, Link2, Globe, Trophy, Handshake, Truck,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
@@ -25,11 +25,22 @@ import {
   VIEW_META,
   type SidebarId,
 } from './constants/viewMeta'
+import {
+  CAPTURE_GLOSSARY,
+  getGlossaryTip,
+  GLOSSARY_VAULT_PATH,
+  type GlossaryId,
+} from './constants/captureGlossary'
 import { CHART } from './constants/chartTheme'
 import { CollapsibleSection } from './components/ui/CollapsibleSection'
 import { SetAsideBarChart } from './components/charts/SetAsideBarChart'
+import { RelationshipHeatmap } from './components/charts/RelationshipHeatmap'
+import { AgencyNoteInline } from './components/lists/AgencyNoteInline'
+import { McpServerCard, type McpServer } from './components/lists/McpServerCard'
+import { SkillCard, type SkillEntry } from './components/lists/SkillCard'
 import { normalizeSetAsideRows } from './utils/chartLabels'
 import {
+  buildRelationshipHeatmap,
   CUSTOMER_POSITION_META,
   getAgencyQuadrant,
   getCustomerPosition,
@@ -37,7 +48,77 @@ import {
   QUAL_GATE_META,
   QUADRANT_META,
   summarizeAgencyFlows,
+  type RelationshipRow,
 } from './utils/agencyIntel'
+import {
+  CONCENTRATION_META,
+  getCompeteStrategy,
+  getCompetitorPosture,
+  getConcentrationTier,
+  POSTURE_META,
+  recipientMatchesExpiring,
+  STRATEGY_META,
+  buildTeamingCandidatesFromFlows,
+  buildTeamingDeepSearchPrompt,
+  enrichTeamingCandidates,
+  getSetAsideTeamingHint,
+  parseTeamingApiResponse,
+  summarizeRecipientFlows,
+  TEAMING_FIT_META,
+  TEAMING_MARKETING_STUBS,
+  TEAMING_MCP_STUBS,
+  TEAMING_TYPE_META,
+  type CompetitorIntelRow,
+  type TeamingCandidate,
+} from './utils/competitiveIntel'
+import {
+  buildVehicleComboRows,
+  buildVehicleStrategyPrompt,
+  getVehicleConcentration,
+  parseVehicleAnalysis,
+  VEHICLE_ACCESS_META,
+  VEHICLE_CONCENTRATION_META,
+  AGENCY_SHAPE_GATE_META,
+  buildFfpShapingPrompt,
+  FFP_SHAPE_GATE_META,
+  FFP_SHAPING_MCP_STUBS,
+  parseFfpShapingRadar,
+  PRESSURE_TIER_META,
+  PRICING_BUCKET_META,
+  VEHICLE_MCP_STUBS,
+  VEHICLE_POSTURE_META,
+  type AgencyPricingPressure,
+  type FfpShapeTarget,
+  type FfpShapingRadar,
+  type VehicleAnalysisData,
+  type VehicleComboRow,
+} from './utils/vehicleIntel'
+import {
+  buildAgencyStateHeatmap,
+  buildRegionalStrategyPrompt,
+  buildStateScatterData,
+  GEO_CONCENTRATION_META,
+  GEO_MCP_STUBS,
+  getStateMedians,
+  parseGeographicAnalysis,
+  PURSUIT_LENS_META,
+  STATE_QUADRANT_META,
+  type GeographicAnalysisData,
+  type GeoStateRow,
+} from './utils/geographicIntel'
+import { GeoDeliveryMap } from './components/charts/GeoDeliveryMap'
+import {
+  buildComboBriefPrompt,
+  buildComboScatterPoints,
+  COMBO_MCP_STUBS,
+  COMBO_SIGNAL_META,
+  COMBO_TIER_META,
+  enrichComboWithVault,
+  parseComboInsights,
+  type ComboInsightsData,
+  type ComboMatch,
+  type ComboSignal,
+} from './utils/comboIntel'
 
 // capture-insights React Frontend
 // Per latest feedback:
@@ -124,7 +205,11 @@ export default function App() {
   const [intensity, setIntensity] = useState<IntensityData[]>([])
   const [expiring, setExpiring] = useState<ExpiringData[]>([])
   const [vehicles, setVehicles] = useState<any[]>([])
+  const [vehicleAnalysis, setVehicleAnalysis] = useState<VehicleAnalysisData | null>(null)
+  const [ffpShaping, setFfpShaping] = useState<FfpShapingRadar | null>(null)
   const [geo, setGeo] = useState<any[]>([])
+  const [geographicAnalysis, setGeographicAnalysis] = useState<GeographicAnalysisData | null>(null)
+  const [comboInsights, setComboInsights] = useState<ComboInsightsData | null>(null)
   const [fyTrends, setFyTrends] = useState<any[]>([])
   const [futureTrajectory, setFutureTrajectory] = useState<any[]>([])
   const [setAside, setSetAside] = useState<any[]>([])
@@ -132,6 +217,20 @@ export default function App() {
   const [marketPotential, setMarketPotential] = useState<MarketPotentialData | null>(null)
   const [oppSearch, setOppSearch] = useState('')
   const [agencySearch, setAgencySearch] = useState('')
+  const [competitorSearch, setCompetitorSearch] = useState('')
+  const [teamingTarget, setTeamingTarget] = useState('')
+  const [teamingSearch, setTeamingSearch] = useState('')
+  const [teamingCapabilityGap, setTeamingCapabilityGap] = useState('')
+  const [teamingRaw, setTeamingRaw] = useState<unknown>(null)
+  const [skillsCatalog, setSkillsCatalog] = useState<{
+    skill_count?: number
+    partial_count?: number
+    active_count?: number
+    federal_1102?: SkillEntry[]
+    theseus_capture?: SkillEntry[]
+    marketing?: SkillEntry[]
+  }>({})
+  const [agencyRelationships, setAgencyRelationships] = useState<RelationshipRow[]>([])
   const [samKeywords, setSamKeywords] = useState('')
   const [samNoticeTypes, setSamNoticeTypes] = useState('RFI,Sources Sought,Special Notice,Presolicitation')
   const [samResults, setSamResults] = useState<any[]>([])
@@ -154,6 +253,37 @@ export default function App() {
 
   const showToast = (message: string, tone: ToastTone = 'info') => {
     setToast({ message, tone })
+  }
+
+  /** Open glossary term in Knowledge Vault reader (in-app education). */
+  async function openGlossaryInVault(termId: GlossaryId) {
+    const entry = CAPTURE_GLOSSARY[termId]
+    if (!entry) return
+    setSidebar('vault')
+    const normPath = entry.vaultPath.replace(/\\/g, '/')
+    const existing = globalFiles.find((g: { path?: string }) => {
+      const p = (g.path || '').replace(/\\/g, '/')
+      return p.includes(normPath) || p.endsWith('capture-insights-glossary.md')
+    })
+    if (existing) {
+      setViewedWiki(existing)
+      return
+    }
+    try {
+      const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(entry.vaultPath)}`)
+      if (r.ok) {
+        const d = await r.json()
+        const content = d.content || ''
+        setViewedWiki({
+          name: entry.vaultTitle || 'Capture Insights Glossary',
+          path: entry.vaultPath,
+          content,
+          excerpt: content.slice(0, 600),
+        })
+      }
+    } catch {
+      showToast('Could not load glossary from vault', 'error')
+    }
   }
 
   // Real on-disk persistence via backend (data/user_accumulators.json).
@@ -212,6 +342,9 @@ export default function App() {
         const data = await res.json()
         setMcpInfo({
           tools: Array.isArray(data.tools) ? data.tools : [],
+          servers: Array.isArray(data.servers) ? data.servers : [],
+          server_count: data.server_count,
+          online_count: data.online_count,
           mcp_available: data.mcp_available,
           note: data.note,
           how_to_enable: data.how_to_enable,
@@ -220,6 +353,38 @@ export default function App() {
     } catch {}
   }
   useEffect(() => { loadMcpTools() }, [])
+
+  async function loadSkillsCatalog() {
+    try {
+      const res = await fetch('/skills/catalog')
+      if (res.ok) {
+        const data = await res.json()
+        setSkillsCatalog(data)
+      }
+    } catch {}
+  }
+  useEffect(() => { loadSkillsCatalog() }, [])
+
+  useEffect(() => {
+    const target = teamingTarget || topRecipients[0]?.recipient
+    if (!target) {
+      setTeamingRaw(null)
+      return
+    }
+    let cancelled = false
+    const gapQ = teamingCapabilityGap.trim()
+      ? `&gap=${encodeURIComponent(teamingCapabilityGap.trim())}`
+      : ''
+    fetch(`/data/teaming-candidates?naics=${encodeURIComponent(naics)}&target=${encodeURIComponent(target)}&limit=15${gapQ}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled) setTeamingRaw(data)
+      })
+      .catch(() => {
+        if (!cancelled) setTeamingRaw(null)
+      })
+    return () => { cancelled = true }
+  }, [naics, teamingTarget, teamingCapabilityGap, topRecipients])
 
   // Call after mutations so React state matches the JSON file on disk
   async function syncAccumulators() {
@@ -265,7 +430,15 @@ export default function App() {
   ])
   const [useSmartModel, setUseSmartModel] = useState(false)  // opt into local LLM (qwen3.5:9b etc.) for more natural answers; default is fast deterministic path using your exact persisted data + suggested action chips
   // MCP info for the dedicated sidebar view + for feeding the chat co-pilot (catalog of what the agent can drive)
-  const [mcpInfo, setMcpInfo] = useState<{tools: any[], mcp_available?: boolean, note?: string, how_to_enable?: string}>({ tools: [] })
+  const [mcpInfo, setMcpInfo] = useState<{
+    tools: any[]
+    servers?: McpServer[]
+    server_count?: number
+    online_count?: number
+    mcp_available?: boolean
+    note?: string
+    how_to_enable?: string
+  }>({ tools: [], servers: [] })
 
   async function fetchJson(path: string) {
     const r = await fetch(path)
@@ -279,15 +452,20 @@ export default function App() {
     const q = `?naics=${naics}`
     const endpoints: { key: string; path: string; required?: boolean }[] = [
       { key: 'kpis', path: `/data/kpis${q}`, required: true },
-      { key: 'flows', path: `/data/flows${q}&limit=6` },
+      { key: 'flows', path: `/data/flows${q}&limit=40` },
+      { key: 'agencyRelationships', path: `/data/agency-relationships${q}&limit=120` },
       { key: 'intensity', path: `/data/agency-intensity${q}&limit=20` },
       { key: 'expiring', path: `/data/expiring${q}&months=36&limit=10` },
       { key: 'vehicles', path: `/data/vehicles${q}` },
+      { key: 'vehicleAnalysis', path: `/data/vehicle-analysis${q}` },
+      { key: 'ffpShaping', path: `/data/ffp-shaping-radar${q}&months=36&limit=15` },
       { key: 'geo', path: `/data/geo${q}&limit=8` },
+      { key: 'geographicAnalysis', path: `/data/geographic-analysis${q}&state_limit=15&agency_state_limit=48&months=36` },
+      { key: 'comboInsights', path: `/data/combo-insights${q}&months=36&limit=40` },
       { key: 'fyTrends', path: `/data/fy-trends${q}` },
       { key: 'futureTrajectory', path: `/data/future-trajectory${q}&months=60` },
       { key: 'setAside', path: `/data/set-aside${q}` },
-      { key: 'topRecipients', path: `/data/top-recipients${q}&limit=8` },
+      { key: 'topRecipients', path: `/data/top-recipients${q}&limit=15` },
       { key: 'marketPotential', path: `/data/market_potential${q}` },
     ]
     const settled = await Promise.allSettled(endpoints.map((e) => fetchJson(e.path)))
@@ -305,7 +483,12 @@ export default function App() {
 
     if (data._requiredFailed || !data.kpis) {
       console.error('Dashboard data load failed:', failures)
-      setStatus('Backend unreachable — run .\\scripts\\start.ps1 from project root (or open http://127.0.0.1:8000 after backend starts).')
+      const locked = failures.some((f) => /500|locked|cannot access/i.test(f))
+      setStatus(
+        locked
+          ? 'Database busy (ingest may be running) — wait a moment and hit Refresh, or restart with .\\scripts\\start.ps1'
+          : 'Backend unreachable — run .\\scripts\\start.ps1 from project root (open http://127.0.0.1:8000, not the Vite dev port).',
+      )
       setLoading(false)
       return
     }
@@ -313,10 +496,15 @@ export default function App() {
     setKpis(data.kpis as KpiData)
     setMarketPotential((data.marketPotential as MarketPotentialData) || null)
     setFlows((data.flows as FlowData[]) || [])
+    setAgencyRelationships(Array.isArray(data.agencyRelationships) ? data.agencyRelationships as RelationshipRow[] : [])
     setIntensity((data.intensity as IntensityData[]) || [])
     setExpiring((data.expiring as ExpiringData[]) || [])
     setVehicles((data.vehicles as any[]) || [])
+    setVehicleAnalysis(parseVehicleAnalysis(data.vehicleAnalysis))
+    setFfpShaping(parseFfpShapingRadar(data.ffpShaping))
     setGeo((data.geo as any[]) || [])
+    setGeographicAnalysis(parseGeographicAnalysis(data.geographicAnalysis))
+    setComboInsights(parseComboInsights(data.comboInsights))
     setFyTrends((data.fyTrends as any[]) || [])
     setFutureTrajectory(Array.isArray(data.futureTrajectory) ? data.futureTrajectory as any[] : [])
     setSetAside((data.setAside as any[]) || [])
@@ -444,6 +632,84 @@ export default function App() {
     } catch {}
     await syncAccumulators()
     showToast('Note saved to vault', 'success')
+  }
+
+  function findEntityBrainEntry(name: string, type: 'agency' | 'competitor' | 'office') {
+    const n = name.toLowerCase()
+    return brain.find((b: any) => {
+      if (b.type !== type) return false
+      const bn = (b.name || '').toLowerCase()
+      return bn === n || bn.includes(n.slice(0, 18)) || n.includes(bn.slice(0, 18))
+    })
+  }
+
+  const findAgencyBrainEntry = (agencyName: string) => findEntityBrainEntry(agencyName, 'agency')
+  const findCompetitorBrainEntry = (recipientName: string) => findEntityBrainEntry(recipientName, 'competitor')
+
+  function navigateToAgencyOpportunities(agencyName: string) {
+    setOppSearch(agencyName)
+    setDashTab('opportunities')
+    showToast(`Filtering recompetes for ${agencyName.slice(0, 28)}…`, 'info')
+  }
+
+  async function saveAgencyInlineNote(agencyName: string, notes: string, agencyRow?: any) {
+    const existing = findAgencyBrainEntry(agencyName)
+    if (existing?.id) {
+      await updateBrainNote(existing.id, notes)
+      return
+    }
+    if (!notes.trim()) return
+    const entry = {
+      name: agencyName,
+      type: 'agency',
+      sourceTab: 'agency',
+      notes,
+      citation: `NAICS ${naics} • source: agency-intel • inline note • ${new Date().toISOString().slice(0, 10)}`,
+      addedAt: new Date().toISOString(),
+      raw: agencyRow || { agency: agencyName },
+    }
+    try {
+      await fetch('/user/brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      })
+    } catch {}
+    await syncAccumulators()
+    showToast(`Note saved for ${agencyName.slice(0, 24)}`, 'success')
+  }
+
+  function navigateToCompetitorOpportunities(recipientName: string) {
+    setOppSearch(recipientName)
+    setDashTab('opportunities')
+    showToast(`Filtering recompetes for ${recipientName.slice(0, 28)}…`, 'info')
+  }
+
+  async function saveCompetitorInlineNote(recipientName: string, notes: string, row?: any) {
+    const existing = findCompetitorBrainEntry(recipientName)
+    if (existing?.id) {
+      await updateBrainNote(existing.id, notes)
+      return
+    }
+    if (!notes.trim()) return
+    const entry = {
+      name: recipientName,
+      type: 'competitor',
+      sourceTab: 'competitive',
+      notes,
+      citation: `NAICS ${naics} • source: competitive-intel • inline note • ${new Date().toISOString().slice(0, 10)}`,
+      addedAt: new Date().toISOString(),
+      raw: row || { recipient: recipientName },
+    }
+    try {
+      await fetch('/user/brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      })
+    } catch {}
+    await syncAccumulators()
+    showToast(`Note saved for ${recipientName.slice(0, 24)}`, 'success')
   }
 
   // === Holistic chat with rich live context + suggested actions that can mutate state ===
@@ -705,20 +971,20 @@ export default function App() {
                 <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume — high count = active or fragmented market." accent="cyan" />
                 <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size for bid/no-bid and team sizing." accent="lime" />
                 <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with PoP still open — incumbent landscape signal." accent="cyan" />
-                <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} tooltip="Recompete count in next 24 months — primary radar." accent="magenta" />
+                <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} tooltip={getGlossaryTip('recompete_radar')} accent="magenta" />
                 <MetricCard
                   label="Suitability"
                   value={`${kpis.suitability_pct}%`}
                   stub
                   accent="amber"
-                  tooltip="Vision stub: % of expiring work matching YOUR business unit capabilities. Will compare contract/agency requirements (from research + web profile building) against global wiki domain intel + company capabilities. Drives go/no-go."
+                  tooltip={getGlossaryTip('suitability_stub')}
                 />
                 <MetricCard
                   label="Synergy"
                   value={`${kpis.synergy_pct}%`}
                   stub
                   accent="magenta"
-                  tooltip="Vision stub: % where OTHER business units' capabilities create a teaming/synergy play. Uses global wiki multi-BU capability map vs opportunity requirements."
+                  tooltip={getGlossaryTip('synergy_stub')}
                 />
               </div>
             </div>
@@ -1165,12 +1431,28 @@ export default function App() {
                 Live recompete opportunities you can position for today. Prioritize rows in hot agencies or ones already in your Brain.
               </div>
               <div className="text-[10px] text-neon-lime mb-2">Monitor (smart) uses the agent (LLM + MCP) with citations. Co-pilot works for open-ended questions.</div>
-              <input
-                value={oppSearch}
-                onChange={(e) => setOppSearch(e.target.value)}
-                placeholder="Filter by recipient or agency name..."
-                className="input-field mb-2 w-full"
-              />
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <input
+                  value={oppSearch}
+                  onChange={(e) => setOppSearch(e.target.value)}
+                  placeholder="Filter by recipient or agency name..."
+                  className="input-field flex-1 min-w-[200px]"
+                />
+                {oppSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setOppSearch('')}
+                    className="pill text-[10px] text-neon-cyan hover:border-neon-cyan/50"
+                  >
+                    Clear filter ×
+                  </button>
+                )}
+              </div>
+              {oppSearch && (
+                <div className="text-[10px] text-text-500 mb-2">
+                  Linked from Agency Intelligence — showing matches for <span className="text-neon-cyan">{oppSearch}</span>
+                </div>
+              )}
               <DataTable
                 data={filteredExpiring.slice(0, 10)}
                 rowKey={(e: any, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
@@ -1555,15 +1837,68 @@ export default function App() {
           isHot: isHotAgency(a),
         }))
         const topAgencyShare = agencyIntelRows[0]?.sharePct ?? 0
+        const relationshipSource: RelationshipRow[] = agencyRelationships.length
+          ? agencyRelationships
+          : flows.map((f) => ({
+              agency: f.agency,
+              recipient: f.recipient,
+              actions: f.actions,
+              millions: f.millions,
+            }))
+        const relationshipHeatmap = buildRelationshipHeatmap(relationshipSource)
+        const marketingSkillStubs = [
+          { id: 'value-propositions', label: 'Value propositions', note: 'Outcome-led hooks per agency mission' },
+          { id: 'positioning', label: 'Positioning', note: 'Differentiation vs incumbents at this buyer' },
+          { id: 'messaging', label: 'Messaging', note: 'Talk tracks for KO / program office' },
+          { id: 'customer-research', label: 'Customer research', note: 'Pain points, budget drivers, timing' },
+          { id: 'competitor-analysis', label: 'Competitor profiling', note: 'Strengths, vehicles, teaming posture' },
+          { id: 'sales-enablement', label: 'Sales enablement', note: 'Battlecards, objection handling' },
+          { id: 'pricing', label: 'Pricing', note: 'Rate realism + competitive price-to-win' },
+          { id: 'cro', label: 'CRO', note: 'Capture funnel moves that advance position' },
+        ]
+        const mcpResearchStubs = [
+          { label: 'Agency org map', mcp: 'SAM.gov', status: 'Ready' },
+          { label: 'Bill payer vs KO office', mcp: 'USASpending.gov', status: 'Catalog' },
+          { label: 'Subordinate offices', mcp: 'SAM.gov', status: 'Ready' },
+          { label: 'Incumbent deep dive', mcp: 'USASpending.gov', status: 'Catalog' },
+        ]
 
         return (
           <div className="page-sections">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
-              <MetricCard label="Hot agencies" value={String(hotAgencyList.length)} accent="magenta" tooltip="Above median actions AND obligations — original Data Insights quadrant" />
+              <MetricCard label="Hot agencies" value={String(hotAgencyList.length)} accent="magenta" tooltip={getGlossaryTip('hot_agency')} />
               <MetricCard label="In vault" value={String(trackedCount)} accent="purple" tooltip="Agency brain entries — Shipley unknown → known" />
               <MetricCard label="Hot recompetes" value={String(comboExpiring.length)} accent="lime" tooltip="Expiring work at hot agencies — advance candidates" />
               <MetricCard label="Top agency share" value={`${topAgencyShare}%`} accent="cyan" tooltip="Largest buyer concentration in NAICS slice" />
             </div>
+
+            <CollapsibleSection
+              title="Relationship Heatmap"
+              subtitle="Agency × competitor · award count strength"
+              icon={Target}
+              accent="magenta"
+              defaultOpen={relationshipHeatmap.agencies.length > 0}
+              titleGlossaryId="relationship_heatmap"
+              onGlossaryLearn={openGlossaryInVault}
+              badge={relationshipHeatmap.maxActions > 1 ? (
+                <span className="pill text-[10px]">max {relationshipHeatmap.maxActions} awards</span>
+              ) : undefined}
+            >
+              <div className="insight magenta mb-3">
+                Darker cells = more awards between buyer and prime — a proxy for entrenched relationships. Use before teaming or price-to-win decisions.
+              </div>
+              <RelationshipHeatmap
+                model={relationshipHeatmap}
+                onAgencyClick={navigateToAgencyOpportunities}
+                onCellClick={(agency, recipient, actions) => {
+                  addToBrain(
+                    { agency, recipient, actions, notes: `${actions} awards at ${agency}` },
+                    recipient,
+                    'competitor',
+                  )
+                }}
+              />
+            </CollapsibleSection>
 
             <CollapsibleSection
               title="Capture Intensity"
@@ -1571,6 +1906,8 @@ export default function App() {
               icon={Crosshair}
               accent="cyan"
               defaultOpen
+              titleGlossaryId="capture_intensity"
+              onGlossaryLearn={openGlossaryInVault}
             >
               <div className="insight mb-3">
                 Original Data Insights scatter: agencies above <strong className="text-text-primary">both</strong> median action count and median obligations = dedicated BD targets. Pink dots = hot quadrant.
@@ -1634,21 +1971,40 @@ export default function App() {
                 rowKey={(a) => a.agency}
                 rowClassName={(a) => a.quadrant === 'hot' ? 'intensity-row-hot' : ''}
                 emptyMessage="No agencies match filter."
+                onGlossaryLearn={openGlossaryInVault}
                 columns={[
                   {
                     key: 'agency',
                     header: 'Agency',
                     cellClassName: 'max-w-[160px]',
                     render: (a) => (
-                      <span className="truncate block" title={a.agency}>
-                        {a.agency}
-                        {a.inBrain && <span className="text-neon-lime text-[9px] ml-1">🧠</span>}
-                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => navigateToAgencyOpportunities(a.agency)}
+                            className="truncate text-left text-neon-cyan hover:underline"
+                            title={`Filter Future Opportunities for ${a.agency}`}
+                          >
+                            {a.agency}
+                          </button>
+                          {a.inBrain && <span className="text-neon-lime text-[9px] shrink-0">🧠</span>}
+                          <button
+                            type="button"
+                            onClick={() => navigateToAgencyOpportunities(a.agency)}
+                            className="text-text-500 hover:text-neon-cyan shrink-0"
+                            title="Link filter → Future Opportunities"
+                          >
+                            <Link2 size={10} />
+                          </button>
+                        </div>
+                      </div>
                     ),
                   },
                   {
                     key: 'quadrant',
                     header: 'Quad',
+                    headerTip: 'hot_agency',
                     cellClassName: 'whitespace-nowrap text-[10px]',
                     render: (a) => (
                       <span className={QUADRANT_META[a.quadrant].tone} title={QUADRANT_META[a.quadrant].label}>
@@ -1659,9 +2015,10 @@ export default function App() {
                   {
                     key: 'gate',
                     header: 'Gate',
+                    headerTip: 'qual_gate',
                     cellClassName: 'whitespace-nowrap text-[10px]',
                     render: (a) => (
-                      <span className={QUAL_GATE_META[a.qualGate].tone} title="Shipley-style qualify: advance / monitor / defer">
+                      <span className={QUAL_GATE_META[a.qualGate].tone} title={getGlossaryTip('qual_gate')}>
                         {QUAL_GATE_META[a.qualGate].label}
                       </span>
                     ),
@@ -1687,6 +2044,17 @@ export default function App() {
                     render: (a) => a.flow
                       ? <span title={a.flow.topRecipient}>{a.flow.topRecipient.slice(0, 16)}</span>
                       : '—',
+                  },
+                  {
+                    key: 'notes',
+                    header: 'Notes',
+                    cellClassName: 'min-w-[140px] max-w-[200px]',
+                    render: (a) => (
+                      <AgencyNoteInline
+                        value={(findAgencyBrainEntry(a.agency)?.notes as string) || ''}
+                        onSave={(notes) => saveAgencyInlineNote(a.agency, notes, a)}
+                      />
+                    ),
                   },
                   {
                     key: 'cta',
@@ -1754,7 +2122,7 @@ export default function App() {
                           {!row?.inBrain && (
                             <button onClick={() => addToBrain(a, a.agency, 'agency')} className="action-btn brain text-[10px]">+brain (move to known)</button>
                           )}
-                          <button onClick={() => setDashTab('opportunities')} className="text-[10px] text-neon-cyan hover:underline">Recompete radar →</button>
+                          <button onClick={() => navigateToAgencyOpportunities(a.agency)} className="text-[10px] text-neon-cyan hover:underline">Recompetes at agency →</button>
                         </div>
                       </div>
                     )
@@ -1811,6 +2179,109 @@ export default function App() {
             </CollapsibleSection>
 
             <CollapsibleSection
+              title="Agency Profile Builder"
+              subtitle="Marketing skills · 1102 MCPs · web research → vault"
+              icon={Globe}
+              accent="purple"
+              defaultOpen={false}
+            >
+              <div className="insight vault mb-3">
+                Stub workspace for deepening agency knowledge: bill payer vs contracting office, subordinate offices, and capture-ready messaging. Skills from{' '}
+                <a href="https://github.com/coreyhaines31/marketingskills" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">
+                  marketingskills
+                </a>
+                {' '}plus{' '}
+                <a href="https://github.com/1102tools/federal-contracting-mcps" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">
+                  federal-contracting-mcps
+                </a>
+                {' '}will run via co-pilot and Skills — outputs land in Knowledge Vault.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                {[
+                  { role: 'Bill payer', hint: 'Funding agency / appropriation owner' },
+                  { role: 'Contracting office', hint: 'KO / CS / PCO that signs' },
+                  { role: 'Subordinate offices', hint: 'Program elements & end users' },
+                ].map((office) => (
+                  <div key={office.role} className="market-stat-chip">
+                    <div className="label">{office.role}</div>
+                    <div className="value text-sm text-text-500">—</div>
+                    <div className="text-[9px] text-text-500 mt-0.5">{office.hint}</div>
+                  </div>
+                ))}
+              </div>
+
+              {(hotAgencyList[0] || agencyIntelRows[0]) && (
+                <div className="tool-card mb-3">
+                  <div className="tool-card-name truncate">
+                    Profile target: {(hotAgencyList[0] || agencyIntelRows[0]).agency}
+                  </div>
+                  <div className="tool-card-desc">
+                    Run a research pass to map offices, incumbents, and messaging angles — then +brain to compound in vault.
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <AskCoPilotButton
+                      prompt={`Build an agency profile for ${(hotAgencyList[0] || agencyIntelRows[0]).agency} in NAICS ${naics}: identify likely bill payer vs contracting office vs subordinate program offices, top incumbents, and 3 customer-interface moves. Use vault + USASpending context; cite sources.`}
+                      label="Research profile"
+                      onAsk={askCoPilot}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addToBrain(hotAgencyList[0] || agencyIntelRows[0], (hotAgencyList[0] || agencyIntelRows[0]).agency, 'agency')}
+                      className="action-btn brain text-[10px]"
+                    >
+                      + brain target
+                    </button>
+                    <button type="button" onClick={() => setSidebar('skills')} className="text-[10px] text-neon-cyan hover:underline">
+                      Skills roadmap →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Marketing skills (vendored roadmap)</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                {marketingSkillStubs.map((skill) => (
+                  <div key={skill.id} className="profile-skill-chip">
+                    <div className="profile-skill-chip-name">{skill.label}</div>
+                    <div className="profile-skill-chip-meta">{skill.note}</div>
+                    <button
+                      type="button"
+                      onClick={() => askCoPilot(
+                        `Using ${skill.label} framing for ${(hotAgencyList[0] || agencyIntelRows[0] || { agency: 'top agency' }).agency} (NAICS ${naics}): draft capture-ready bullets I can paste into vault. Ground in our data slice + competitive intel.`,
+                      )}
+                      className="text-[9px] text-neon-cyan hover:underline text-left mt-auto"
+                    >
+                      Draft via co-pilot →
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Federal 1102 MCP research</div>
+              <div className="space-y-2">
+                {mcpResearchStubs.map((stub) => (
+                  <div key={stub.label} className="tool-card flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="tool-card-name">{stub.label}</div>
+                      <div className="tool-card-desc">Via <span className="text-neon-cyan">{stub.mcp}</span> MCP</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`pill text-[9px] ${stub.status === 'Ready' ? 'text-neon-lime border-neon-lime/40' : stub.status === 'Catalog' ? 'text-text-500' : ''}`}>
+                        {stub.status}
+                      </span>
+                      <AskCoPilotButton
+                        prompt={`${stub.label} for ${(hotAgencyList[0] || agencyIntelRows[0] || { agency: 'priority agency' }).agency} in NAICS ${naics}. Use available MCP tools and web research; structure output for vault: offices, citations, open questions.`}
+                        label="Stub run"
+                        onAsk={askCoPilot}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
               title="Who Wins Here"
               subtitle="Top incumbents by agency · flow view"
               icon={ClipboardList}
@@ -1825,7 +2296,21 @@ export default function App() {
                 rowKey={(a) => a.agency}
                 emptyMessage="No flow data."
                 columns={[
-                  { key: 'agency', header: 'Agency', cellClassName: 'max-w-[160px] truncate', render: (a) => <span title={a.agency}>{a.agency}</span> },
+                  {
+                    key: 'agency',
+                    header: 'Agency',
+                    cellClassName: 'max-w-[160px] truncate',
+                    render: (a) => (
+                      <button
+                        type="button"
+                        onClick={() => navigateToAgencyOpportunities(a.agency)}
+                        className="text-neon-cyan hover:underline truncate max-w-full text-left"
+                        title={`Filter recompetes for ${a.agency}`}
+                      >
+                        {a.agency}
+                      </button>
+                    ),
+                  },
                   {
                     key: 'winner',
                     header: 'Top recipient',
@@ -1865,8 +2350,59 @@ export default function App() {
       }
 
       case 'competitive': {
-        // +BRAIN / +WIKI here. Sankey pulse (3-level Follow the Money) is on Overview; this tab is the deep table + larger visual + actions.
-        // Prepare 3-level Sankey data from flows (Recipient → Agency → Office) — scoped block.
+        const totalMarketM = kpis.total_obligations_m || 1
+        const top3M = topRecipients.slice(0, 3).reduce((s: number, r: any) => s + (r.millions || 0), 0)
+        const top3Pct = Math.round((top3M / totalMarketM) * 100)
+        const concentration = getConcentrationTier(top3Pct)
+        const recipientFlowByRecipient = summarizeRecipientFlows(flows)
+        const isCompetitorInBrain = (name: string) => !!findCompetitorBrainEntry(name)
+
+        const recompetesByRecipient = new Map<string, { count: number; millions: number }>()
+        expiring.forEach((e: any) => {
+          const rec = e.recipient || ''
+          if (!rec) return
+          topRecipients.forEach((tr: any) => {
+            const trName = tr.recipient || ''
+            if (!recipientMatchesExpiring(trName, rec)) return
+            const key = trName
+            const cur = recompetesByRecipient.get(key) || { count: 0, millions: 0 }
+            cur.count += 1
+            cur.millions += (e.obligation || 0) / 1e6
+            recompetesByRecipient.set(key, cur)
+          })
+        })
+
+        const competitorRows: CompetitorIntelRow[] = topRecipients.map((r: any) => {
+          const recipient = r.recipient || 'Unknown'
+          const flow = recipientFlowByRecipient.get(recipient)
+          const sharePct = Math.round(((r.millions || 0) / totalMarketM) * 100)
+          const recomp = recompetesByRecipient.get(recipient) || { count: 0, millions: 0 }
+          const inBrain = isCompetitorInBrain(recipient)
+          const posture = getCompetitorPosture({
+            sharePct,
+            agencyCount: flow?.agencyCount ?? 0,
+            recompeteCount: recomp.count,
+          })
+          const strategy = getCompeteStrategy(posture, sharePct, inBrain)
+          return { ...r, recipient, flow, sharePct, recomp, inBrain, posture, strategy } as CompetitorIntelRow
+        })
+        const filteredCompetitorRows = competitorRows.filter((r) =>
+          !competitorSearch || r.recipient.toLowerCase().includes(competitorSearch.toLowerCase()),
+        )
+        const trackedCompetitors = competitorRows.filter((r) => r.inBrain).length
+        const incumbentRecompetes = expiring.filter((e: any) =>
+          topRecipients.some((tr: any) => recipientMatchesExpiring(tr.recipient || '', e.recipient || '')),
+        )
+        const relationshipSource: RelationshipRow[] = agencyRelationships.length
+          ? agencyRelationships
+          : flows.map((f) => ({
+              agency: f.agency,
+              recipient: f.recipient,
+              actions: f.actions,
+              millions: f.millions,
+            }))
+        const relationshipHeatmap = buildRelationshipHeatmap(relationshipSource)
+
         const sankeyNodes: any[] = []
         const sankeyNodeMap = new Map<string, number>()
         const sankeyLinks: any[] = []
@@ -1892,7 +2428,6 @@ export default function App() {
           sankeyLinks.push({ source: sankeyNodeMap.get(rk)!, target: sankeyNodeMap.get(ak)!, value: f.millions || 0 })
           sankeyLinks.push({ source: sankeyNodeMap.get(ak)!, target: sankeyNodeMap.get(ok)!, value: f.millions || 0 })
         })
-
         const sankeyData = [{
           type: 'sankey',
           orientation: 'h',
@@ -1911,17 +2446,564 @@ export default function App() {
           },
         }]
 
+        const defaultTeamingTarget = competitorRows.find((r) => r.strategy === 'displace' || r.strategy === 'team')?.recipient
+          || competitorRows[0]?.recipient
+          || ''
+        const activeTeamingTarget = teamingTarget || defaultTeamingTarget
+        const topRecipientNames = topRecipients.map((r: any) => r.recipient || '')
+        const teamingParsed = teamingRaw ? parseTeamingApiResponse(teamingRaw) : null
+        const teamingFromApi = (() => {
+          if (teamingParsed) {
+            const enriched = enrichTeamingCandidates(teamingParsed, topRecipientNames)
+            if (enriched.length) return enriched
+          }
+          return buildTeamingCandidatesFromFlows(activeTeamingTarget, flows, topRecipientNames).candidates
+        })()
+        const teamingBulk = teamingFromApi.filter((t) => t.candidateType === 'adjacent_prime')
+        const teamingSubs = teamingFromApi.filter((t) => t.candidateType === 'subcontractor')
+        const filterTeaming = (rows: TeamingCandidate[]) => rows.filter((t) =>
+          !teamingSearch || t.recipient.toLowerCase().includes(teamingSearch.toLowerCase()),
+        )
+        const filteredTeamingBulk = filterTeaming(teamingBulk)
+        const filteredTeamingSubs = filterTeaming(teamingSubs)
+        const filteredTeaming = filterTeaming(teamingFromApi)
+        const teamingMeta = teamingParsed?.meta || {}
+        const teamingStrongCount = filteredTeaming.filter((t) => t.fit === 'strong').length
+        const teamingPromisingCount = filteredTeaming.filter((t) => t.fit === 'promising').length
+        const setAsideTeaming = getSetAsideTeamingHint(setAside)
+        const teamingDeepPrompt = buildTeamingDeepSearchPrompt({
+          target: activeTeamingTarget,
+          naics,
+          gap: teamingCapabilityGap,
+          smallBizPct: setAsideTeaming.smallBizPct,
+          metaNote: teamingMeta.note,
+        })
+        const theseusSkills = skillsCatalog.theseus_capture || []
+        const federal1102Skills = skillsCatalog.federal_1102 || []
+
         return (
           <div className="page-sections">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+              <MetricCard label="Top 3 share" value={`${top3Pct}%`} accent="magenta" tooltip={getGlossaryTip('market_concentration')} />
+              <MetricCard label="In vault" value={String(trackedCompetitors)} accent="purple" tooltip="Competitor brain entries — compounds across opportunities" />
+              <MetricCard label="Primes in slice" value={String(topRecipients.length)} accent="cyan" tooltip="Distinct recipients winning work in NAICS" />
+              <MetricCard label="Incumbent recompetes" value={String(incumbentRecompetes.length)} accent="lime" tooltip="Expiring contracts held by top-market primes" />
+            </div>
+
+            <CollapsibleSection
+              title="Market Concentration"
+              subtitle={`${CONCENTRATION_META[concentration].label} · treemap`}
+              icon={Trophy}
+              accent="magenta"
+              defaultOpen
+            >
+              <div className={`insight mb-3 ${concentration === 'high' ? 'magenta' : ''}`}>
+                <span className={CONCENTRATION_META[concentration].tone}>{CONCENTRATION_META[concentration].label}</span>
+                {' — '}{CONCENTRATION_META[concentration].hint}
+              </div>
+              <div className="chart-panel surface-accent-magenta border-0 shadow-none p-0 bg-transparent min-w-0">
+                {topRecipients.length ? (
+                  <div className="chart-panel-plot" style={{ height: 240 }}>
+                    <Plot
+                      data={[{
+                        type: 'treemap',
+                        labels: topRecipients.map((r: any) => (r.recipient || '').slice(0, 28)),
+                        values: topRecipients.map((r: any) => r.millions || 0),
+                        parents: Array(topRecipients.length).fill(''),
+                        textinfo: 'label+value',
+                        hovertemplate: '%{label}<br>$%{value}M<extra></extra>',
+                      }]}
+                      layout={{
+                        margin: { t: 4, l: 4, r: 4, b: 4 },
+                        paper_bgcolor: CHART.transparent,
+                        plot_bgcolor: CHART.transparent,
+                        font: { size: 9, color: CHART.fontColor },
+                        uniformtext: { minsize: 8, mode: 'hide' },
+                      }}
+                      style={{ width: '100%', height: '100%' }}
+                      config={{ displayModeBar: false }}
+                    />
+                  </div>
+                ) : (
+                  <div className="chart-module-empty">Load more data for competitor share.</div>
+                )}
+              </div>
+              {topRecipients.length > 0 && (
+                <button
+                  onClick={() => topRecipients.slice(0, 5).forEach((r: any) => addToBrain(r, r.recipient, 'competitor'))}
+                  className="action-btn brain text-[10px] mt-2"
+                >
+                  +brain top 5 primes
+                </button>
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Competitor Rankings"
+              subtitle={`${filteredCompetitorRows.length} primes · posture & strategy`}
+              icon={Target}
+              accent="magenta"
+              defaultOpen
+              badge={top3Pct >= 30 ? <span className="pill text-[10px]">{top3Pct}% top 3</span> : undefined}
+            >
+              <input
+                value={competitorSearch}
+                onChange={(e) => setCompetitorSearch(e.target.value)}
+                placeholder="Filter competitors…"
+                className="input-field mb-2 w-full max-w-md"
+              />
+              <DataTable
+                data={filteredCompetitorRows}
+                rowKey={(r) => r.recipient}
+                emptyMessage="No competitors match filter."
+                onGlossaryLearn={openGlossaryInVault}
+                columns={[
+                  {
+                    key: 'recipient',
+                    header: 'Prime',
+                    cellClassName: 'max-w-[150px]',
+                    render: (r) => (
+                      <div className="flex items-center gap-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => navigateToCompetitorOpportunities(r.recipient)}
+                          className="truncate text-left text-neon-cyan hover:underline"
+                          title={`Filter recompetes for ${r.recipient}`}
+                        >
+                          {r.recipient}
+                        </button>
+                        {r.inBrain && <span className="text-neon-lime text-[9px] shrink-0">🧠</span>}
+                        <button
+                          type="button"
+                          onClick={() => navigateToCompetitorOpportunities(r.recipient)}
+                          className="text-text-500 hover:text-neon-cyan shrink-0"
+                          title="Link filter → Future Opportunities"
+                        >
+                          <Link2 size={10} />
+                        </button>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'share',
+                    header: 'Share',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (r) => (
+                      <span className={r.sharePct >= 15 ? 'text-neon-magenta' : ''}>{r.sharePct}%</span>
+                    ),
+                  },
+                  {
+                    key: 'posture',
+                    header: 'Posture',
+                    headerTip: 'competitor_posture',
+                    cellClassName: 'text-[10px] whitespace-nowrap',
+                    render: (r) => (
+                      <span className={POSTURE_META[r.posture].tone} title={POSTURE_META[r.posture].strategy}>
+                        {POSTURE_META[r.posture].label}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'strategy',
+                    header: 'Lens',
+                    headerTip: 'strategy_lens',
+                    cellClassName: 'text-[10px] whitespace-nowrap',
+                    render: (r) => (
+                      <span className={STRATEGY_META[r.strategy].tone} title={getGlossaryTip('strategy_lens')}>
+                        {STRATEGY_META[r.strategy].label}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'stats',
+                    header: '$M',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (r) => `${r.millions}M · ${r.actions?.toLocaleString() || '—'} act`,
+                  },
+                  {
+                    key: 'agencies',
+                    header: 'Agencies',
+                    cellClassName: 'text-[10px] text-text-400 max-w-[90px] truncate',
+                    render: (r) => r.flow
+                      ? <span title={r.flow.topAgency}>{r.flow.agencyCount} · {r.flow.topAgency.slice(0, 12)}</span>
+                      : '—',
+                  },
+                  {
+                    key: 'recomp',
+                    header: 'Recomp',
+                    cellClassName: 'tabular-nums text-xs',
+                    render: (r) => r.recomp.count > 0
+                      ? <span className="text-neon-magenta">{r.recomp.count}</span>
+                      : <span className="text-text-500">—</span>,
+                  },
+                  {
+                    key: 'notes',
+                    header: 'Notes',
+                    cellClassName: 'min-w-[120px] max-w-[180px]',
+                    render: (r) => (
+                      <AgencyNoteInline
+                        value={(findCompetitorBrainEntry(r.recipient)?.notes as string) || ''}
+                        placeholder="Teaming angle, weaknesses, ghost notes…"
+                        onSave={(notes) => saveCompetitorInlineNote(r.recipient, notes, r)}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'cta',
+                    header: '',
+                    align: 'right',
+                    render: (r) => (
+                      <div className="row-actions">
+                        <button onClick={() => addToBrain(r, r.recipient, 'competitor')} className="action-btn brain text-xs">+ brain</button>
+                        <AskCoPilotButton
+                          prompt={`Competitive brief for ${r.recipient}: ${r.sharePct}% market share, $${r.millions}M, ${r.actions} actions in NAICS ${naics}. Posture: ${POSTURE_META[r.posture].label}. Top agency: ${r.flow?.topAgency || 'unknown'}. ${r.recomp.count} recompetes. Strategy lens: ${STRATEGY_META[r.strategy].label}. What discriminators and teaming/ghost moves should I pursue?`}
+                          label="Brief"
+                          onAsk={askCoPilot}
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Gap-Fill Teaming"
+              subtitle="Adjacent vendors · subs · MCP + web research"
+              icon={Handshake}
+              accent="lime"
+              titleGlossaryId="gap_fill_teaming"
+              onGlossaryLearn={openGlossaryInVault}
+              defaultOpen={filteredTeaming.length > 0 || teamingMeta.research_recommended === true}
+              badge={filteredTeaming.length > 0 ? (
+                <span className="pill text-[10px]">
+                  {teamingStrongCount} strong · {teamingPromisingCount} promising
+                </span>
+              ) : undefined}
+            >
+              <div className="insight lime mb-3">
+                Teaming partners are <strong className="text-text-primary">not</strong> top competitors — look for adjacent vendors and subs who fill a capability gap against your displacement target. Bulk overlap below is a weak signal; strong fits usually need USASpending + SAM.gov MCP passes and web/marketing research. Set-aside: {setAsideTeaming.smallBizPct}% SB-weighted — {setAsideTeaming.hint}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <label className="text-[10px] text-text-500 shrink-0">Displace target</label>
+                <select
+                  value={activeTeamingTarget}
+                  onChange={(e) => setTeamingTarget(e.target.value)}
+                  className="input-field text-xs max-w-md flex-1 min-w-[200px]"
+                >
+                  {competitorRows.slice(0, 10).map((r) => (
+                    <option key={r.recipient} value={r.recipient}>
+                      {r.recipient.slice(0, 48)} ({r.sharePct}% · {STRATEGY_META[r.strategy].label})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                value={teamingCapabilityGap}
+                onChange={(e) => setTeamingCapabilityGap(e.target.value)}
+                placeholder="Capability gap we need filled (e.g. cleared staff, regional O&M, cyber ATO)…"
+                className="input-field mb-2 w-full max-w-2xl"
+              />
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <AskCoPilotButton
+                  prompt={teamingDeepPrompt}
+                  label="Full research pipeline"
+                  onAsk={askCoPilot}
+                />
+                <button type="button" onClick={() => setSidebar('skills')} className="text-[10px] text-neon-cyan hover:underline">
+                  Teaming Finder skill →
+                </button>
+                {teamingMeta.excluded_top_primes ? (
+                  <span className="text-[9px] text-text-500">
+                    Excluded top {teamingMeta.excluded_top_primes} market primes + target
+                  </span>
+                ) : null}
+              </div>
+              {teamingMeta.note && (
+                <div className="text-[10px] text-text-400 mb-3 border-l-2 border-neon-lime/30 pl-2">
+                  {teamingMeta.note}
+                </div>
+              )}
+
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">
+                Research pipeline — MCP + marketing skills
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                {TEAMING_MARKETING_STUBS.map((skill) => (
+                  <div key={skill.id} className="profile-skill-chip">
+                    <div className="profile-skill-chip-name">{skill.label}</div>
+                    <div className="profile-skill-chip-meta">{skill.note}</div>
+                    <button
+                      type="button"
+                      onClick={() => askCoPilot(skill.prompt({
+                        target: activeTeamingTarget,
+                        naics,
+                        gap: teamingCapabilityGap,
+                        smallBizPct: setAsideTeaming.smallBizPct,
+                      }))}
+                      className="text-[9px] text-neon-cyan hover:underline text-left mt-auto"
+                    >
+                      Run via co-pilot →
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2 mb-4">
+                {TEAMING_MCP_STUBS.map((stub) => (
+                  <div key={stub.label} className="tool-card flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="tool-card-name">{stub.label}</div>
+                      <div className="tool-card-desc">Via <span className="text-neon-cyan">{stub.mcp}</span> MCP</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`pill text-[9px] ${stub.status === 'Ready' ? 'text-neon-lime border-neon-lime/40' : 'text-text-500'}`}>
+                        {stub.status}
+                      </span>
+                      <AskCoPilotButton
+                        prompt={`${stub.label} for gap-fill teaming vs ${activeTeamingTarget} in NAICS ${naics}. Gap: ${teamingCapabilityGap || 'TBD'}. Find adjacent vendors/subs — exclude top market primes. Use ${stub.mcp} MCP. Cite sources.`}
+                        label="Query"
+                        onAsk={askCoPilot}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <input
+                value={teamingSearch}
+                onChange={(e) => setTeamingSearch(e.target.value)}
+                placeholder="Filter bulk-signal candidates…"
+                className="input-field mb-2 w-full max-w-md"
+              />
+
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">
+                Bulk signal — award overlap (weak)
+                {teamingMeta.subaward_data === false && (
+                  <span className="normal-case text-text-500 ml-1">· no FFATA subaward bulk loaded</span>
+                )}
+              </div>
+              {filteredTeamingSubs.length > 0 && (
+                <>
+                  <div className="text-[10px] text-neon-cyan mb-1">Subs / FFATA ({filteredTeamingSubs.length})</div>
+                  <DataTable
+                    data={filteredTeamingSubs}
+                    rowKey={(t) => `sub-${t.recipient}`}
+                    emptyMessage="No subs match filter."
+                    columns={[
+                      {
+                        key: 'recipient',
+                        header: 'Sub',
+                        cellClassName: 'max-w-[140px]',
+                        render: (t: TeamingCandidate) => (
+                          <div className="min-w-0">
+                            <span className="truncate block" title={t.recipient}>{t.recipient}</span>
+                            {t.underPrime && (
+                              <span className="text-[9px] text-text-500 truncate block" title={t.underPrime}>
+                                under {t.underPrime.slice(0, 24)}
+                              </span>
+                            )}
+                          </div>
+                        ),
+                      },
+                      {
+                        key: 'fit',
+                        header: 'Fit',
+                        cellClassName: 'text-[10px] whitespace-nowrap',
+                        render: (t: TeamingCandidate) => (
+                          <span className={TEAMING_FIT_META[t.fit].tone}>{TEAMING_FIT_META[t.fit].label}</span>
+                        ),
+                      },
+                      {
+                        key: 'why',
+                        header: 'Why',
+                        cellClassName: 'text-[9px] text-text-400 max-w-[160px]',
+                        render: (t: TeamingCandidate) => (
+                          <span title={t.fitReason}>{t.fitReason.slice(0, 48)}{t.fitReason.length > 48 ? '…' : ''}</span>
+                        ),
+                      },
+                      {
+                        key: 'millions',
+                        header: '$M sub',
+                        cellClassName: 'tabular-nums text-neon-cyan text-xs',
+                        render: (t: TeamingCandidate) => `$${t.sharedMillions}M`,
+                      },
+                      {
+                        key: 'cta',
+                        header: '',
+                        align: 'right',
+                        render: (t: TeamingCandidate) => (
+                          <div className="row-actions">
+                            <button
+                              onClick={() => addToBrain(
+                                {
+                                  recipient: t.recipient,
+                                  agency: t.sampleAgency,
+                                  notes: `Sub teaming candidate vs ${activeTeamingTarget}: ${t.fitReason}`,
+                                },
+                                t.recipient,
+                                'competitor',
+                              )}
+                              className="action-btn brain text-[10px]"
+                            >
+                              +brain
+                            </button>
+                            <AskCoPilotButton
+                              prompt={`Vet sub ${t.recipient} (under ${t.underPrime || 'unknown prime'}) as gap-fill teammate to displace ${activeTeamingTarget} in NAICS ${naics}. Gap: ${teamingCapabilityGap || 'TBD'}. Team vs ghost?`}
+                              label="Vet"
+                              onAsk={askCoPilot}
+                            />
+                          </div>
+                        ),
+                      },
+                    ]}
+                  />
+                </>
+              )}
+              {filteredTeamingBulk.length ? (
+                <DataTable
+                  data={filteredTeamingBulk}
+                  rowKey={(t) => `adj-${t.recipient}`}
+                  emptyMessage="No adjacent vendors match filter."
+                  onGlossaryLearn={openGlossaryInVault}
+                  columns={[
+                    {
+                      key: 'recipient',
+                      header: 'Adjacent vendor',
+                      cellClassName: 'max-w-[140px]',
+                      render: (t: TeamingCandidate) => (
+                        <div className="min-w-0">
+                          <span className="truncate block" title={t.recipient}>{t.recipient}</span>
+                          {t.niche && <span className="text-[9px] text-neon-lime">niche · ≤3% share</span>}
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'type',
+                      header: 'Type',
+                      cellClassName: 'text-[9px] whitespace-nowrap',
+                      render: (t: TeamingCandidate) => TEAMING_TYPE_META[t.candidateType].label,
+                    },
+                    {
+                      key: 'fit',
+                      header: 'Fit',
+                      headerTip: 'teaming_fit',
+                      cellClassName: 'text-[10px] whitespace-nowrap',
+                      render: (t: TeamingCandidate) => (
+                        <span className={TEAMING_FIT_META[t.fit].tone} title={t.fitReason}>
+                          {TEAMING_FIT_META[t.fit].label}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'why',
+                      header: 'Why',
+                      cellClassName: 'text-[9px] text-text-400 max-w-[140px]',
+                      render: (t: TeamingCandidate) => (
+                        <span title={t.fitReason}>{t.fitReason.slice(0, 40)}{t.fitReason.length > 40 ? '…' : ''}</span>
+                      ),
+                    },
+                    {
+                      key: 'share',
+                      header: 'Share',
+                      cellClassName: 'tabular-nums text-xs',
+                      render: (t: TeamingCandidate) => (
+                        t.marketSharePct != null ? `${t.marketSharePct}%` : '—'
+                      ),
+                    },
+                    {
+                      key: 'agencies',
+                      header: 'Buyers',
+                      headerTip: 'shared_buyers',
+                      cellClassName: 'tabular-nums text-xs',
+                      render: (t: TeamingCandidate) => t.sharedAgencies,
+                    },
+                    {
+                      key: 'millions',
+                      header: '$M overlap',
+                      cellClassName: 'tabular-nums text-neon-cyan text-xs',
+                      render: (t: TeamingCandidate) => `$${t.sharedMillions}M`,
+                    },
+                    {
+                      key: 'cta',
+                      header: '',
+                      align: 'right',
+                      render: (t: TeamingCandidate) => (
+                        <div className="row-actions">
+                          <button
+                            onClick={() => addToBrain(
+                              {
+                                recipient: t.recipient,
+                                agency: t.sampleAgency,
+                                notes: `Gap-fill teammate vs ${activeTeamingTarget}: ${t.fitReason}`,
+                              },
+                              t.recipient,
+                              'competitor',
+                            )}
+                            className="action-btn brain text-[10px]"
+                          >
+                            +brain
+                          </button>
+                          <AskCoPilotButton
+                            prompt={`Evaluate gap-fill fit: ${t.recipient} (${t.marketSharePct ?? '?'}% market share) as teammate to displace ${activeTeamingTarget} in NAICS ${naics}. ${t.sharedAgencies} shared buyers, $${t.sharedMillions}M overlap. Gap: ${teamingCapabilityGap || 'TBD'}. Team vs ghost vs pass?`}
+                            label="Vet"
+                            onAsk={askCoPilot}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              ) : !filteredTeamingSubs.length ? (
+                <EmptyState
+                  icon={Handshake}
+                  title="No bulk-signal teammates"
+                  description="Top competitors are excluded by design. Define a capability gap and run the research pipeline — MCP + web passes surface adjacent vendors and subs bulk data misses."
+                  accent="lime"
+                  actions={
+                    <AskCoPilotButton
+                      prompt={teamingDeepPrompt}
+                      label="Run research pipeline"
+                      onAsk={askCoPilot}
+                    />
+                  }
+                />
+              ) : null}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Relationship Heatmap"
+              subtitle="Buyer × prime · award count strength"
+              icon={Crosshair}
+              accent="cyan"
+              defaultOpen={relationshipHeatmap.recipients.length > 0}
+              titleGlossaryId="relationship_heatmap"
+              onGlossaryLearn={openGlossaryInVault}
+            >
+              <div className="insight cyan mb-3">
+                Same signal as Agency Intel — read from the competitor side. Darker cells = entrenched buyer relationships to team around or displace.
+              </div>
+              <RelationshipHeatmap
+                model={relationshipHeatmap}
+                onAgencyClick={navigateToAgencyOpportunities}
+                onCellClick={(agency, recipient, actions) => {
+                  addToBrain(
+                    { agency, recipient, actions, notes: `${actions} awards — ${recipient} at ${agency}` },
+                    recipient,
+                    'competitor',
+                  )
+                }}
+              />
+            </CollapsibleSection>
+
             <CollapsibleSection
               title="Money Flows"
               subtitle={`Recipient → agency → office · ${flows.length} flows`}
               icon={GitBranch}
               accent="cyan"
-              defaultOpen
+              defaultOpen={flows.length > 0}
             >
               <div className="insight magenta mb-3">
-                Deeper Sankey than Market Overview — trace who gets paid, through which agency and office. +brain competitors that matter.
+                Original Data Insights “Follow the Money” — trace who gets paid, through which agency and contracting office. Office-level = KO/PCO concentration.
               </div>
               <div className="chart-panel surface-accent-cyan border-0 shadow-none p-0 bg-transparent min-w-0">
                 {flows.length ? (
@@ -1946,8 +3028,8 @@ export default function App() {
 
             <CollapsibleSection
               title="Flow Detail"
-              subtitle="Sortable relationships · +brain competitors"
-              icon={Target}
+              subtitle="Recipient → agency → office · vault actions"
+              icon={GitBranch}
               accent="magenta"
               defaultOpen
             >
@@ -1959,25 +3041,43 @@ export default function App() {
                   {
                     key: 'recipient',
                     header: 'Recipient',
-                    cellClassName: 'max-w-[160px]',
-                    render: (f) => <span className="font-medium text-text-primary truncate block" title={f.recipient}>{f.recipient}</span>,
+                    cellClassName: 'max-w-[140px]',
+                    render: (f) => (
+                      <button
+                        type="button"
+                        onClick={() => navigateToCompetitorOpportunities(f.recipient)}
+                        className="font-medium text-neon-cyan hover:underline truncate block text-left max-w-full"
+                        title={f.recipient}
+                      >
+                        {f.recipient}
+                      </button>
+                    ),
                   },
                   {
                     key: 'agency',
                     header: 'Agency',
-                    cellClassName: 'text-text-400 text-xs max-w-[140px] truncate',
-                    render: (f) => <span title={f.agency}>{f.agency}</span>,
+                    cellClassName: 'text-text-400 text-xs max-w-[120px] truncate',
+                    render: (f) => (
+                      <button
+                        type="button"
+                        onClick={() => navigateToAgencyOpportunities(f.agency)}
+                        className="hover:text-neon-cyan truncate max-w-full text-left"
+                        title={f.agency}
+                      >
+                        {f.agency}
+                      </button>
+                    ),
                   },
                   {
                     key: 'office',
                     header: 'Office',
-                    cellClassName: 'text-text-500 text-xs max-w-[120px] truncate',
+                    cellClassName: 'text-text-500 text-xs max-w-[110px] truncate',
                     render: (f) => <span title={f.office}>{f.office || '—'}</span>,
                   },
                   {
                     key: 'value',
                     header: '$M',
-                    cellClassName: 'tabular-nums whitespace-nowrap',
+                    cellClassName: 'tabular-nums whitespace-nowrap text-xs',
                     render: (f) => (
                       <>
                         ${f.millions}M <span className="text-[10px] text-text-500">({f.actions})</span>
@@ -1990,9 +3090,18 @@ export default function App() {
                     align: 'right',
                     render: (f) => (
                       <div className="row-actions">
-                        <button onClick={() => addToBrain(f, f.recipient, 'competitor')} className="action-btn brain text-xs">+ brain</button>
+                        <button onClick={() => addToBrain(f, f.recipient, 'competitor')} className="action-btn brain text-[10px]">+prime</button>
+                        {f.office && f.office !== '(Unspecified Office)' && (
+                          <button
+                            onClick={() => addToBrain({ ...f, office: f.office }, f.office!, 'office')}
+                            className="action-btn brain text-[10px]"
+                          >
+                            +office
+                          </button>
+                        )}
+                        <button onClick={() => addToBrain({ agency: f.agency }, f.agency, 'agency')} className="action-btn brain text-[10px]">+agency</button>
                         <AskCoPilotButton
-                          prompt={`Draft a competitive brief angle for ${f.recipient} at ${f.agency}${f.office ? ` (${f.office})` : ''} — $${f.millions}M across ${f.actions} actions in NAICS ${naics}.`}
+                          prompt={`Flow analysis: ${f.recipient} receives $${f.millions}M (${f.actions} actions) via ${f.agency}${f.office ? ` / ${f.office}` : ''} in NAICS ${naics}. Teaming, ghost, or displacement angle?`}
                           label="Brief"
                           onAsk={askCoPilot}
                         />
@@ -2002,35 +3111,826 @@ export default function App() {
                 ]}
               />
             </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Incumbent Recompetes"
+              subtitle="Top primes · expiring contracts"
+              icon={Clock}
+              accent="lime"
+              defaultOpen={incumbentRecompetes.length > 0}
+              badge={incumbentRecompetes.length > 0 ? <span className="pill text-[10px]">{incumbentRecompetes.length}</span> : undefined}
+            >
+              <div className="insight lime mb-3">
+                Expiring work held by market leaders — highest-leverage displacement or teaming timing. Link through to Future Opportunities for full radar.
+              </div>
+              {incumbentRecompetes.length ? (
+                <DataTable
+                  data={incumbentRecompetes.slice(0, 8)}
+                  rowKey={(e, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
+                  columns={[
+                    {
+                      key: 'recipient',
+                      header: 'Incumbent',
+                      cellClassName: 'max-w-[140px] truncate',
+                      render: (e) => (
+                        <button
+                          type="button"
+                          onClick={() => navigateToCompetitorOpportunities(e.recipient)}
+                          className="text-neon-cyan hover:underline truncate max-w-full text-left"
+                        >
+                          {e.recipient}
+                        </button>
+                      ),
+                    },
+                    { key: 'agency', header: 'Agency', cellClassName: 'text-xs max-w-[120px] truncate', render: (e) => <span title={e.agency}>{e.agency}</span> },
+                    { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs', render: (e) => e.end_date?.slice(0, 10) },
+                    { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan', render: (e) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M` },
+                    {
+                      key: 'actions',
+                      header: '',
+                      align: 'right',
+                      render: (e) => (
+                        <div className="row-actions">
+                          <button onClick={() => addToPipeline(e, 'incumbent-recompete')} className="action-btn pipeline text-xs">+ pipeline</button>
+                          <button onClick={() => addToBrain(e, e.recipient, 'competitor')} className="action-btn brain text-xs">+ brain</button>
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState
+                  icon={Clock}
+                  title="No top-prime recompetes in slice"
+                  description="When expiring contracts match ranked competitors, they surface here for displacement planning."
+                  accent="lime"
+                  actions={<Button variant="soft" onClick={() => setDashTab('opportunities')}>Future Opportunities</Button>}
+                />
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Skills & MCP Pairing"
+              subtitle="1102 + Theseus · data vs deliverables"
+              icon={Sparkles}
+              accent="purple"
+              defaultOpen={false}
+            >
+              <div className="insight vault mb-3">
+                <a href="https://github.com/1102tools/federal-contracting-mcps" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">MCPs</a>
+                {' '}fetch data;{' '}
+                <a href="https://github.com/1102tools/federal-contracting-skills" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">1102 skills</a>
+                {' '}+ Theseus capture skills orchestrate deliverables (PTW, RFP reverse engineer, IGCE, SOW/PWS). Vendored and adapted in this workspace.
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Theseus capture (partial / planned)</div>
+              <div className="space-y-2 mb-3">
+                {(theseusSkills.filter((s) => ['teaming-finder', 'price-to-win', 'rfp-reverse-engineer', 'competitive-battlecard'].includes(s.id))).map((skill) => (
+                  <SkillCard
+                    key={skill.id}
+                    skill={skill}
+                    naics={naics}
+                    contextHint={`Competitive tab · target ${activeTeamingTarget || competitorRows[0]?.recipient || 'incumbent'}`}
+                    onAsk={askCoPilot}
+                    onOpenMcp={() => setSidebar('tools')}
+                  />
+                ))}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">1102 acquisition skills (catalog)</div>
+              <div className="space-y-2 mb-2">
+                {federal1102Skills.slice(0, 3).map((skill) => (
+                  <SkillCard
+                    key={skill.id}
+                    skill={skill}
+                    naics={naics}
+                    onAsk={askCoPilot}
+                    onOpenMcp={() => setSidebar('tools')}
+                  />
+                ))}
+              </div>
+              <button type="button" onClick={() => setSidebar('skills')} className="text-[10px] text-neon-cyan hover:underline">
+                Full skills library →
+              </button>
+            </CollapsibleSection>
           </div>
         )
       }
 
       case 'vehicles': {
         const setAsideRows = normalizeSetAsideRows(setAside, 10)
+        const va = vehicleAnalysis
+        const vSummary = va?.summary || {}
+        const posture = (vSummary.posture || 'mixed') as keyof typeof VEHICLE_POSTURE_META
+        const concentration = getVehicleConcentration(vSummary.top3_vehicle_pct || 0)
+        const comboRows = va
+          ? buildVehicleComboRows(va.combinations, vSummary.total_millions || 0, vSummary.idv_pct || 0)
+          : vehicles.map((v: any) => ({
+              pricing: v.pricing || 'Unknown',
+              vehicle: v.vehicle || 'Unknown',
+              actions: v.actions || 0,
+              millions: v.millions || 0,
+              sharePct: 0,
+              accessLens: 'monitor' as const,
+            }))
+        const setAsideVehicle = getSetAsideTeamingHint(setAside)
+        const vehicleStrategyPrompt = buildVehicleStrategyPrompt({
+          naics,
+          summary: vSummary,
+          topCombo: comboRows[0],
+          smallBizPct: setAsideVehicle.smallBizPct,
+        })
+        const ffp = ffpShaping
+        const ffpSummary = ffp?.summary || {}
+        const ffpAgencyPressure = ffp?.agency_pressure || []
+        const ffpShapeTargets = ffp?.shape_targets || []
+        const ffpShapeNow = ffpShapeTargets.filter((t) => t.shape_gate === 'shape_now')
+        const ffpShapingPrompt = buildFfpShapingPrompt({
+          naics,
+          summary: ffpSummary,
+          target: ffpShapeNow[0],
+          agency: ffpAgencyPressure[0],
+        })
+
         return (
           <div className="page-sections">
-            <CollapsibleSection title="Contract Vehicles & Pricing" subtitle={`NAICS ${naics} · buying mechanisms`} icon={Layers} accent="lime" defaultOpen>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+              <MetricCard label="IDIQ / TO share" value={`${vSummary.idv_pct ?? '—'}%`} accent="cyan" tooltip={getGlossaryTip('idiq_task_order')} />
+              <MetricCard label="Top vehicle" value={(vSummary.top_vehicle || '—').slice(0, 22)} accent="lime" tooltip={getGlossaryTip('buying_posture')} />
+              <MetricCard label="Top pricing" value={(vSummary.top_pricing || '—').slice(0, 22)} accent="amber" tooltip={getGlossaryTip('pricing_bucket')} />
+              <MetricCard label="Top 3 vehicles" value={`${vSummary.top3_vehicle_pct ?? '—'}%`} accent="magenta" tooltip={getGlossaryTip('top3_vehicle_share')} />
+            </div>
+
+            <CollapsibleSection
+              title="Buying Posture"
+              subtitle={VEHICLE_POSTURE_META[posture].label}
+              icon={Layers}
+              accent="lime"
+              defaultOpen
+              titleGlossaryId="buying_posture"
+              onGlossaryLearn={openGlossaryInVault}
+            >
               <div className="insight lime mb-3">
-                This tells you the actual buying mechanisms in your NAICS. High volume on a particular IDIQ or FFP tells you which vehicles to chase or team through. Not every opportunity is a good +pipeline candidate — use this lens to decide capture strategy first.
+                <span className={VEHICLE_POSTURE_META[posture].tone}>{VEHICLE_POSTURE_META[posture].label}</span>
+                {' — '}{VEHICLE_POSTURE_META[posture].hint}
+                {' '}
+                <span className={VEHICLE_CONCENTRATION_META[concentration].tone}>
+                  {VEHICLE_CONCENTRATION_META[concentration].label}
+                </span>
+                {' — '}{VEHICLE_CONCENTRATION_META[concentration].hint}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <AskCoPilotButton
+                  prompt={vehicleStrategyPrompt}
+                  label="Vehicle strategy brief"
+                  onAsk={askCoPilot}
+                />
+                <button type="button" onClick={() => setSidebar('skills')} className="text-[10px] text-neon-cyan hover:underline">
+                  PTW / CALC+ skills →
+                </button>
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Vehicle & Pricing Mix"
+              subtitle={`${va?.by_idv.length || 0} vehicles · ${va?.by_pricing.length || 0} pricing types`}
+              icon={PieChart}
+              accent="lime"
+              defaultOpen={!!va?.by_idv.length}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="chart-panel surface-accent-lime border-0 shadow-none p-0 bg-transparent min-w-0">
+                  <div className="text-xs font-medium text-text-500 mb-1">Contract vehicles / IDV (by $M)</div>
+                  {va?.by_idv.length ? (
+                    <div className="chart-panel-plot" style={{ height: 240 }}>
+                      <Plot
+                        data={[{
+                          type: 'bar',
+                          orientation: 'h',
+                          y: (va?.by_idv || []).map((v) => (v.vehicle || '').slice(0, 28)).reverse(),
+                          x: (va?.by_idv || []).map((v) => v.millions).reverse(),
+                          marker: { color: CHART.colors.lime },
+                          hovertemplate: '%{y}<br>$%{x}M<extra></extra>',
+                        }]}
+                        layout={{
+                          margin: { t: 4, l: 120, r: 12, b: 24 },
+                          paper_bgcolor: CHART.transparent,
+                          plot_bgcolor: CHART.transparent,
+                          font: { size: 9, color: CHART.fontColor },
+                          xaxis: { title: '$M' },
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        config={{ displayModeBar: false }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="chart-module-empty">No vehicle type data in slice.</div>
+                  )}
+                </div>
+                <div className="chart-panel surface-accent-amber border-0 shadow-none p-0 bg-transparent min-w-0">
+                  <div className="text-xs font-medium text-text-500 mb-1">Pricing types (by $M)</div>
+                  {va?.by_pricing.length ? (
+                    <div className="chart-panel-plot" style={{ height: 240 }}>
+                      <Plot
+                        data={[{
+                          type: 'pie',
+                          labels: va.by_pricing.map((p) => (p.pricing || '').slice(0, 24)),
+                          values: va.by_pricing.map((p) => p.millions),
+                          textinfo: 'label+percent',
+                          hovertemplate: '%{label}<br>$%{value}M<extra></extra>',
+                        }]}
+                        layout={{
+                          margin: { t: 4, l: 4, r: 4, b: 4 },
+                          paper_bgcolor: CHART.transparent,
+                          plot_bgcolor: CHART.transparent,
+                          font: { size: 9, color: CHART.fontColor },
+                          showlegend: false,
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        config={{ displayModeBar: false }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="chart-module-empty">No pricing data in slice.</div>
+                  )}
+                </div>
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Buying Mechanism Rankings"
+              subtitle={`${comboRows.length} pricing × vehicle combos`}
+              icon={Truck}
+              accent="lime"
+              defaultOpen
+            >
+              <div className="insight mb-3">
+                Each row is how work is actually bought — pricing plus vehicle. Hover column headers for plain-language definitions; click <strong className="text-text-primary">vault</strong> for deeper education in Knowledge Vault.
               </div>
               <DataTable
-                data={vehicles.slice(0, 7)}
+                data={comboRows}
                 rowKey={(v, i) => `${v.pricing}-${v.vehicle}-${i}`}
                 emptyMessage="Vehicle breakdown loads with more ingest data."
+                onGlossaryLearn={openGlossaryInVault}
                 columns={[
-                  { key: 'vehicle', header: 'Vehicle / Pricing', cellClassName: 'max-w-[200px] truncate', render: (v) => <span title={`${v.pricing} / ${v.vehicle}`}>{v.pricing} / {v.vehicle}</span> },
-                  { key: 'actions', header: 'Actions', cellClassName: 'tabular-nums whitespace-nowrap', render: (v) => `${v.actions} actions` },
-                  { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (v) => `$${v.millions}M` },
-                  { key: 'note', header: '', align: 'right', cellClassName: 'text-[10px] text-text-500', render: () => 'vehicle intel' },
+                  {
+                    key: 'combo',
+                    header: 'Pricing / Vehicle',
+                    cellClassName: 'max-w-[180px]',
+                    render: (v: VehicleComboRow) => (
+                      <span title={`${v.pricing} / ${v.vehicle}`} className="truncate block">
+                        {v.pricing} / {v.vehicle}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'share',
+                    header: 'Share',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (v: VehicleComboRow) => (
+                      <span className={v.sharePct >= 15 ? 'text-neon-magenta' : ''}>{v.sharePct}%</span>
+                    ),
+                  },
+                    {
+                      key: 'lens',
+                      header: 'Access lens',
+                      headerTip: 'access_lens',
+                      cellClassName: 'text-[10px] whitespace-nowrap',
+                      render: (v: VehicleComboRow) => (
+                        <span className={VEHICLE_ACCESS_META[v.accessLens].tone}>
+                          {VEHICLE_ACCESS_META[v.accessLens].label}
+                        </span>
+                      ),
+                    },
+                  {
+                    key: 'stats',
+                    header: 'Volume',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (v: VehicleComboRow) => `$${v.millions}M · ${v.actions?.toLocaleString() || '—'} act`,
+                  },
+                  {
+                    key: 'cta',
+                    header: '',
+                    align: 'right',
+                    render: (v: VehicleComboRow) => (
+                      <AskCoPilotButton
+                        prompt={`Vehicle capture angle: ${v.pricing} / ${v.vehicle} is ${v.sharePct}% of NAICS ${naics} spend. Access lens: ${VEHICLE_ACCESS_META[v.accessLens].label}. Who holds this vehicle, should we prime/team/ghost, and what schedule or on-ramp paths exist? Use USASpending + SAM + GSA CALC+ context.`}
+                        label="Brief"
+                        onAsk={askCoPilot}
+                      />
+                    ),
+                  },
                 ]}
               />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Set-Aside Mix" subtitle="How work is competed · by obligated $" icon={Crosshair} accent="magenta" defaultOpen>
+            <CollapsibleSection
+              title="Vehicle Holders"
+              subtitle="Who owns access on dominant vehicles"
+              icon={Users}
+              accent="cyan"
+              defaultOpen={(va?.vehicle_holders.length || 0) > 0}
+              titleGlossaryId="vehicle_holder"
+              onGlossaryLearn={openGlossaryInVault}
+            >
+              <div className="insight cyan mb-3">
+                Top recipients on each dominant vehicle — teaming targets if you lack schedule position, or competitive intel if you are displacing.
+              </div>
+              {va?.vehicle_holders.length ? (
+                <DataTable
+                  data={va.vehicle_holders}
+                  rowKey={(h) => `${h.vehicle}-${h.recipient}`}
+                  emptyMessage="No holder data."
+                  columns={[
+                    {
+                      key: 'vehicle',
+                      header: 'Vehicle',
+                      cellClassName: 'max-w-[120px] truncate text-[10px]',
+                      render: (h) => <span title={h.vehicle}>{h.vehicle.slice(0, 22)}</span>,
+                    },
+                    {
+                      key: 'recipient',
+                      header: 'Holder',
+                      cellClassName: 'max-w-[150px]',
+                      render: (h) => (
+                        <button
+                          type="button"
+                          onClick={() => navigateToCompetitorOpportunities(h.recipient)}
+                          className="truncate text-left text-neon-cyan hover:underline"
+                          title={h.recipient}
+                        >
+                          {h.recipient}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: 'share',
+                      header: 'On vehicle',
+                      cellClassName: 'tabular-nums text-xs',
+                      render: (h) => `${h.holderSharePct}%`,
+                    },
+                    {
+                      key: 'millions',
+                      header: '$M',
+                      cellClassName: 'tabular-nums text-neon-cyan text-xs',
+                      render: (h) => `$${h.millions}M`,
+                    },
+                    {
+                      key: 'cta',
+                      header: '',
+                      align: 'right',
+                      render: (h) => (
+                        <div className="row-actions">
+                          <button
+                            onClick={() => addToBrain(
+                              { recipient: h.recipient, notes: `Vehicle holder on ${h.vehicle}: $${h.millions}M (${h.holderSharePct}% of vehicle)` },
+                              h.recipient,
+                              'competitor',
+                            )}
+                            className="action-btn brain text-[10px]"
+                          >
+                            +brain
+                          </button>
+                          <AskCoPilotButton
+                            prompt={`Vehicle holder intel: ${h.recipient} holds ${h.holderSharePct}% of ${h.vehicle} spend in NAICS ${naics} ($${h.millions}M). Team vs displace vs ghost?`}
+                            label="Angle"
+                            onAsk={askCoPilot}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState
+                  icon={Users}
+                  title="No holder rollup yet"
+                  description="Load more bulk data or run a co-pilot vehicle search via USASpending MCP."
+                  accent="cyan"
+                />
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Agency Buying Preferences"
+              subtitle="How top buyers procure work"
+              icon={Briefcase}
+              accent="cyan"
+              defaultOpen={(va?.by_agency.length || 0) > 0}
+            >
+              <div className="insight mb-3">
+                Dominant vehicle per agency — tailor capture: some buyers route everything through IDIQs, others issue standalone definitives.
+              </div>
+              {va?.by_agency.length ? (
+                <DataTable
+                  data={va.by_agency}
+                  rowKey={(a) => a.agency}
+                  emptyMessage="No agency vehicle data."
+                  columns={[
+                    {
+                      key: 'agency',
+                      header: 'Agency',
+                      cellClassName: 'max-w-[150px]',
+                      render: (a) => (
+                        <button
+                          type="button"
+                          onClick={() => navigateToAgencyOpportunities(a.agency)}
+                          className="truncate text-left text-neon-cyan hover:underline"
+                          title={a.agency}
+                        >
+                          {a.agency}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: 'vehicle',
+                      header: 'Top vehicle',
+                      cellClassName: 'text-[10px] max-w-[140px] truncate',
+                      render: (a) => <span title={a.top_vehicle}>{a.top_vehicle}</span>,
+                    },
+                    {
+                      key: 'millions',
+                      header: 'Agency $M',
+                      cellClassName: 'tabular-nums text-xs',
+                      render: (a) => `$${a.agency_millions}M`,
+                    },
+                    {
+                      key: 'vehicle_m',
+                      header: 'Vehicle $M',
+                      cellClassName: 'tabular-nums text-neon-cyan text-xs',
+                      render: (a) => `$${a.top_vehicle_millions}M`,
+                    },
+                    {
+                      key: 'cta',
+                      header: '',
+                      align: 'right',
+                      render: (a) => (
+                        <AskCoPilotButton
+                          prompt={`Agency vehicle preference: ${a.agency} buys primarily via ${a.top_vehicle} ($${a.top_vehicle_millions}M of $${a.agency_millions}M in NAICS ${naics}). Capture implications and holder map?`}
+                          label="Brief"
+                          onAsk={askCoPilot}
+                        />
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState icon={Briefcase} title="No agency vehicle split" description="Agency rollup appears as more award data loads." accent="cyan" />
+              )}
+            </CollapsibleSection>
+
+            {va?.by_extent_competed.length ? (
+              <CollapsibleSection
+                title="Extent Competed"
+                subtitle="Full & open vs limited competition"
+                icon={Crosshair}
+                accent="amber"
+                defaultOpen={false}
+              >
+                <DataTable
+                  data={va.by_extent_competed}
+                  rowKey={(e) => e.extent_competed}
+                  emptyMessage=""
+                  columns={[
+                    { key: 'extent', header: 'Extent', cellClassName: 'max-w-[200px] truncate', render: (e) => <span title={e.extent_competed}>{e.extent_competed}</span> },
+                    { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan text-xs', render: (e) => `$${e.millions}M` },
+                    { key: 'actions', header: 'Actions', cellClassName: 'tabular-nums text-xs', render: (e) => e.actions?.toLocaleString() },
+                  ]}
+                />
+              </CollapsibleSection>
+            ) : null}
+
+            <CollapsibleSection
+              title="Vehicle Access Builder"
+              subtitle="1102 MCPs · schedule research → vault"
+              icon={Globe}
+              accent="purple"
+              defaultOpen={false}
+            >
+              <div className="insight vault mb-3">
+                Deep vehicle intel often needs schedule holder lookup (SAM.gov), labor rate sanity (GSA CALC+), and award history (USASpending) — run via co-pilot; outputs land in Knowledge Vault.
+              </div>
+              <div className="space-y-2 mb-4">
+                {VEHICLE_MCP_STUBS.map((stub) => (
+                  <div key={stub.label} className="tool-card flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="tool-card-name">{stub.label}</div>
+                      <div className="tool-card-desc">Via <span className="text-neon-cyan">{stub.mcp}</span> MCP</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`pill text-[9px] ${stub.status === 'Ready' ? 'text-neon-lime border-neon-lime/40' : 'text-text-500'}`}>
+                        {stub.status}
+                      </span>
+                      <AskCoPilotButton
+                        prompt={`${stub.label} for NAICS ${naics}. Dominant vehicle: ${vSummary.top_vehicle || 'TBD'}. ${vehicleStrategyPrompt}`}
+                        label="Query"
+                        onAsk={askCoPilot}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => setSidebar('tools')} className="text-[10px] text-neon-cyan hover:underline">
+                MCP Tools catalog →
+              </button>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="FFP / Performance Shaping Radar"
+              subtitle="Non-fixed pricing pressure · expiring shape targets"
+              icon={Sparkles}
+              accent="amber"
+              defaultOpen={ffpShapeNow.length > 0 || (ffpSummary.agencies_high_pressure || 0) > 0}
+              titleGlossaryId="ffp_shaping_radar"
+              onGlossaryLearn={openGlossaryInVault}
+              badge={ffpShapeNow.length > 0 ? (
+                <span className="pill text-[10px]">{ffpShapeNow.length} shape now</span>
+              ) : undefined}
+            >
+              <div className="insight amber mb-3">
+                {ffp?.meta.policy_note || 'EO signal: agencies pushed toward firm-fixed and performance-based buying.'}
+                {' '}
+                <a
+                  href={ffp?.meta.eo_reference || 'https://www.whitehouse.gov/presidential-actions/2026/04/promoting-efficiency-accountability-and-performance-in-federal-contracting/'}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-neon-cyan hover:underline"
+                >
+                  EO reference →
+                </a>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <div className="market-stat-chip" title={getGlossaryTip('non_fixed_pricing')}>
+                  <div className="label">Non-fixed market</div>
+                  <div className="value text-neon-amber">{ffpSummary.market_non_fixed_pct ?? '—'}%</div>
+                </div>
+                <div className="market-stat-chip" title={getGlossaryTip('pricing_bucket')}>
+                  <div className="label">Cost-type</div>
+                  <div className="value">{ffpSummary.market_cost_reimbursement_pct ?? '—'}%</div>
+                </div>
+                <div className="market-stat-chip" title={getGlossaryTip('pricing_bucket')}>
+                  <div className="label">T&M / LH</div>
+                  <div className="value">{ffpSummary.market_time_materials_pct ?? '—'}%</div>
+                </div>
+                <div className="market-stat-chip" title={getGlossaryTip('firm_fixed_pricing')}>
+                  <div className="label">Firm fixed</div>
+                  <div className="value text-neon-lime">{ffpSummary.market_firm_fixed_pct ?? '—'}%</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <AskCoPilotButton
+                  prompt={ffpShapingPrompt}
+                  label="Shaping strategy brief"
+                  onAsk={askCoPilot}
+                />
+                <button type="button" onClick={() => setSidebar('skills')} className="text-[10px] text-neon-cyan hover:underline">
+                  IGCE FFP skill →
+                </button>
+              </div>
+
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">
+                Agency non-fixed pricing pressure
+              </div>
+              {ffpAgencyPressure.length ? (
+                <DataTable
+                  data={ffpAgencyPressure}
+                  rowKey={(a) => a.agency}
+                  emptyMessage=""
+                  onGlossaryLearn={openGlossaryInVault}
+                  columns={[
+                    {
+                      key: 'agency',
+                      header: 'Agency',
+                      cellClassName: 'max-w-[140px]',
+                      render: (a: AgencyPricingPressure) => (
+                        <button
+                          type="button"
+                          onClick={() => navigateToAgencyOpportunities(a.agency)}
+                          className="truncate text-left text-neon-cyan hover:underline"
+                          title={a.agency}
+                        >
+                          {a.agency}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: 'non_fixed',
+                      header: 'Non-fixed',
+                      headerTip: 'non_fixed_pricing',
+                      cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                      render: (a: AgencyPricingPressure) => (
+                        <span className={a.non_fixed_pct >= 45 ? 'text-neon-magenta' : ''}>{a.non_fixed_pct}%</span>
+                      ),
+                    },
+                    {
+                      key: 'pressure',
+                      header: 'Pressure',
+                      headerTip: 'pressure_tier',
+                      cellClassName: 'text-[10px] whitespace-nowrap',
+                      render: (a: AgencyPricingPressure) => (
+                        <span className={PRESSURE_TIER_META[a.pressure_tier].tone}>
+                          {PRESSURE_TIER_META[a.pressure_tier].label}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'gate',
+                      header: 'Gate',
+                      headerTip: 'agency_shape_gate',
+                      cellClassName: 'text-[10px] whitespace-nowrap',
+                      render: (a: AgencyPricingPressure) => (
+                        <span className={AGENCY_SHAPE_GATE_META[a.shape_gate].tone}>
+                          {AGENCY_SHAPE_GATE_META[a.shape_gate].label}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'flex',
+                      header: 'Dominant flex type',
+                      headerTip: 'dominant_flex_pricing',
+                      cellClassName: 'text-[9px] text-text-400 max-w-[120px] truncate',
+                      render: (a: AgencyPricingPressure) => (
+                        <span title={a.dominant_non_fixed_pricing || getGlossaryTip('dominant_flex_pricing')}>
+                          {(a.dominant_non_fixed_pricing || '—').slice(0, 20)}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'exp',
+                      header: 'Exp. non-fixed',
+                      headerTip: 'non_fixed_pricing',
+                      cellClassName: 'tabular-nums text-xs',
+                      render: (a: AgencyPricingPressure) => a.expiring_non_fixed_count || '—',
+                    },
+                    {
+                      key: 'cta',
+                      header: '',
+                      align: 'right',
+                      render: (a: AgencyPricingPressure) => (
+                        <AskCoPilotButton
+                          prompt={buildFfpShapingPrompt({ naics, summary: ffpSummary, agency: a })}
+                          label="Brief"
+                          onAsk={askCoPilot}
+                        />
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState icon={Sparkles} title="No agency pressure data" description="Loads with bulk pricing fields in ingest." accent="amber" />
+              )}
+
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5 mt-4">
+                Shape-now targets — non-fixed expiring work
+              </div>
+              {ffpShapeTargets.length ? (
+                <DataTable
+                  data={ffpShapeTargets}
+                  rowKey={(t) => t.award_key || `${t.recipient}-${t.end_date}`}
+                  emptyMessage=""
+                  onGlossaryLearn={openGlossaryInVault}
+                  columns={[
+                    {
+                      key: 'gate',
+                      header: 'Gate',
+                      headerTip: 'shape_gate',
+                      cellClassName: 'text-[10px] whitespace-nowrap',
+                      render: (t: FfpShapeTarget) => (
+                        <span className={FFP_SHAPE_GATE_META[t.shape_gate].tone} title={t.shape_reason}>
+                          {FFP_SHAPE_GATE_META[t.shape_gate].label}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'recipient',
+                      header: 'Incumbent',
+                      cellClassName: 'max-w-[130px]',
+                      render: (t: FfpShapeTarget) => (
+                        <button
+                          type="button"
+                          onClick={() => navigateToCompetitorOpportunities(t.recipient)}
+                          className="truncate text-left text-neon-cyan hover:underline"
+                          title={t.recipient}
+                        >
+                          {t.recipient}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: 'agency',
+                      header: 'Agency',
+                      cellClassName: 'text-[10px] max-w-[110px] truncate',
+                      render: (t: FfpShapeTarget) => (
+                        <button
+                          type="button"
+                          onClick={() => navigateToAgencyOpportunities(t.agency)}
+                          className="hover:text-neon-cyan truncate max-w-full text-left"
+                          title={t.agency}
+                        >
+                          {t.agency.slice(0, 18)}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: 'pricing',
+                      header: 'Pricing',
+                      headerTip: 'pricing_bucket',
+                      cellClassName: 'text-[9px] max-w-[100px]',
+                      render: (t: FfpShapeTarget) => (
+                        <span title={`${t.pricing} — ${t.shape_reason}`}>
+                          <span className={PRICING_BUCKET_META[t.pricing_bucket]?.tone || ''}>
+                            {PRICING_BUCKET_META[t.pricing_bucket]?.label || t.pricing_bucket}
+                          </span>
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'end',
+                      header: 'Ends',
+                      cellClassName: 'tabular-nums text-[10px] whitespace-nowrap',
+                      render: (t: FfpShapeTarget) => t.end_date?.slice(0, 10) || '—',
+                    },
+                    {
+                      key: 'oblig',
+                      header: '$M',
+                      cellClassName: 'tabular-nums text-neon-cyan text-xs',
+                      render: (t: FfpShapeTarget) => `$${t.obligation_millions}M`,
+                    },
+                    {
+                      key: 'cta',
+                      header: '',
+                      align: 'right',
+                      render: (t: FfpShapeTarget) => (
+                        <div className="row-actions">
+                          <button
+                            onClick={() => addToPipeline(
+                              {
+                                ...t,
+                                title: `Shape: ${t.recipient} (${t.pricing})`,
+                                notes: t.shape_reason,
+                              },
+                              'ffp-shaping',
+                            )}
+                            className="action-btn pipeline text-[10px]"
+                          >
+                            +pipeline
+                          </button>
+                          <AskCoPilotButton
+                            prompt={buildFfpShapingPrompt({ naics, summary: ffpSummary, target: t })}
+                            label="Shape"
+                            onAsk={askCoPilot}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState
+                  icon={Target}
+                  title="No non-fixed expiring targets"
+                  description="Firm-fixed recompetes are excluded. Expand ingest years or check agencies with lower flexible-pricing share."
+                  accent="amber"
+                  actions={
+                    <AskCoPilotButton
+                      prompt={`SAM.gov scan for pre-RFP shaping opportunities (RFI, Sources Sought) in NAICS ${naics} where agencies may shift toward firm-fixed or performance-based pricing. ${ffpShapingPrompt}`}
+                      label="SAM pre-RFP scan"
+                      onAsk={askCoPilot}
+                    />
+                  }
+                />
+              )}
+
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5 mt-4">
+                Shaping research pipeline
+              </div>
+              <div className="space-y-2">
+                {FFP_SHAPING_MCP_STUBS.map((stub) => (
+                  <div key={stub.label} className="tool-card flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="tool-card-name">{stub.label}</div>
+                      <div className="tool-card-desc">Via <span className="text-neon-cyan">{stub.mcp}</span> MCP</div>
+                    </div>
+                    <AskCoPilotButton
+                      prompt={`${stub.label} for FFP shaping in NAICS ${naics}. Focus agencies with high non-fixed pricing and expiring flexible contracts. ${ffpShapingPrompt}`}
+                      label="Run"
+                      onAsk={askCoPilot}
+                    />
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Set-Aside Mix"
+              subtitle="How work is competed · by obligated $"
+              icon={Crosshair}
+              accent="magenta"
+              defaultOpen
+              titleGlossaryId="set_aside_mix"
+              onGlossaryLearn={openGlossaryInVault}
+            >
               <div className="chart-panel surface-accent-magenta border-0 shadow-none p-0 bg-transparent min-w-0">
                 <div className="chart-panel-sub mb-3">
-                  Dominant full-and-open spend → prime-level competition. High small-business share → teaming / sub opportunities.
+                  Dominant full-and-open spend → prime-level competition. High small-business share ({setAsideVehicle.smallBizPct}%) → teaming / sub opportunities. {setAsideVehicle.hint}
                 </div>
                 <SetAsideBarChart data={setAsideRows} />
                 {setAsideRows.length > 0 && (
@@ -2053,22 +3953,208 @@ export default function App() {
       }
 
       case 'geo': {
+        const ga = geographicAnalysis
+        const gSummary = ga?.summary || {}
+        const geoPosture = (gSummary.posture || 'moderate') as keyof typeof GEO_CONCENTRATION_META
+        const geoStates = ga?.by_state || geo.map((g: any, i: number) => ({
+          state: g.state,
+          actions: g.actions || 0,
+          millions: g.millions || 0,
+          share_pct: 0,
+          avg_award_k: 0,
+          quadrant: 'watch' as const,
+          pursuit_lens: i < 2 ? 'anchor' as const : 'monitor' as const,
+          expiring_count: 0,
+          expiring_millions: 0,
+        })) as GeoStateRow[]
+        const mapStates = ga?.map_states?.length
+          ? ga.map_states
+          : geoStates.map((s) => ({
+              state: s.state,
+              actions: s.actions,
+              millions: s.millions,
+              share_pct: s.share_pct,
+            }))
+        const stateScatterData = buildStateScatterData(mapStates)
+        const stateMedians = getStateMedians(mapStates)
+        const medStateActions = stateMedians.actions
+        const medStateMillions = stateMedians.millions * 1e6
+        const agencyStateHeatmap = buildAgencyStateHeatmap(ga?.agency_state_pairs || [], 6, 10)
+        const anchorStates = geoStates.filter((s) => s.pursuit_lens === 'anchor' || s.pursuit_lens === 'target')
+        const expiringByState = ga?.expiring_by_state || []
+        const agencyStatePairs = ga?.agency_state_pairs || []
+        const recompeteBarStates = geoStates.slice(0, 8).filter((s) => s.millions > 0)
+        const regionalPrompt = buildRegionalStrategyPrompt({
+          naics,
+          summary: gSummary,
+          topState: geoStates[0],
+          expiringState: expiringByState[0],
+        })
+
         return (
           <div className="page-sections">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+              <MetricCard
+                label="Top delivery state"
+                value={gSummary.top_state || geoStates[0]?.state || '—'}
+                accent="cyan"
+                tooltip={getGlossaryTip('place_of_performance')}
+              />
+              <MetricCard
+                label="Top 3 state share"
+                value={`${gSummary.top3_state_pct ?? '—'}%`}
+                accent="magenta"
+                tooltip={getGlossaryTip('geo_concentration')}
+              />
+              <MetricCard
+                label="States in slice"
+                value={String(gSummary.state_count ?? (geoStates.length || '—'))}
+                accent="lime"
+                tooltip={getGlossaryTip('place_of_performance')}
+              />
+              <MetricCard
+                label="Expiring (36m)"
+                value={`${gSummary.expiring_state_count ?? expiringByState.length} st · $${gSummary.expiring_millions ?? '—'}M`}
+                accent="amber"
+                tooltip={getGlossaryTip('recompete_radar')}
+              />
+            </div>
+
             <CollapsibleSection
-              title="Place of Performance"
-              subtitle={`${geo.length} states · concentration by obligated $`}
+              title="Regional Posture"
+              subtitle={GEO_CONCENTRATION_META[geoPosture].label}
               icon={MapPin}
               accent="cyan"
               defaultOpen
+              titleGlossaryId="geo_concentration"
+              onGlossaryLearn={openGlossaryInVault}
+            >
+              <div className="insight cyan mb-3">
+                <span className={GEO_CONCENTRATION_META[geoPosture].tone}>
+                  {GEO_CONCENTRATION_META[geoPosture].label}
+                </span>
+                {' — '}{GEO_CONCENTRATION_META[geoPosture].hint}
+                {ga?.meta?.data_note && (
+                  <span className="block mt-2 text-text-500 text-[10px]">{ga.meta.data_note}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <AskCoPilotButton
+                  prompt={regionalPrompt}
+                  label="Regional strategy brief"
+                  onAsk={askCoPilot}
+                />
+                <button type="button" onClick={() => setDashTab('competitive')} className="text-[10px] text-neon-cyan hover:underline">
+                  Map regional incumbents →
+                </button>
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Regional Views"
+              subtitle="Map · intensity scatter · where dollars land"
+              icon={Layers}
+              accent="cyan"
+              defaultOpen
+              titleGlossaryId="place_of_performance"
+              onGlossaryLearn={openGlossaryInVault}
             >
               <div className="insight mb-3">
-                Where work actually happens — office footprint, regional teaming, and customer concentration. Strategic context, not a pipeline action list.
+                USASpending <strong className="text-text-primary">place of performance</strong> — darker cyan = more obligated $. Scatter uses the same quadrant logic as Agency Intelligence (hot = above both medians). SAM.gov live reqs will layer on top by PoP filters later.
               </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                <div className="chart-panel surface-accent-cyan border-0 shadow-none p-3 bg-transparent min-w-0">
+                  <div className="text-xs font-medium text-text-500 mb-1">Delivery concentration map</div>
+                  <GeoDeliveryMap states={mapStates} />
+                  <div className="text-[10px] text-text-500 mt-1">Hover states for $M share. Empty states = no awards in NAICS slice.</div>
+                </div>
+                <div className="chart-panel surface-accent-lime border-0 shadow-none p-3 bg-transparent min-w-0">
+                  <div className="text-xs font-medium text-text-500 mb-1">State intensity (volume vs value)</div>
+                  {stateScatterData.length ? (
+                    <div className="chart-module" style={{ height: 300 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ScatterChart margin={{ top: 8, right: 12, bottom: 8, left: 4 }}>
+                          <CartesianGrid stroke={CHART.gridStroke} />
+                          <XAxis
+                            type="number"
+                            dataKey="x"
+                            name="Actions"
+                            stroke={CHART.axisStroke}
+                            tick={CHART.axisTickSm}
+                            tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v))}
+                          />
+                          <YAxis
+                            type="number"
+                            dataKey="y"
+                            name="Obligations"
+                            stroke={CHART.axisStroke}
+                            tick={CHART.axisTickSm}
+                            width={48}
+                            tickFormatter={(v) =>
+                              v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(0)}M` : `$${v}`
+                            }
+                          />
+                          <ZAxis type="number" dataKey="z" range={[48, 220]} />
+                          <Tooltip
+                            cursor={{ strokeDasharray: '3 3' }}
+                            content={({ payload }) => {
+                              if (!payload?.length) return null
+                              const d = payload[0].payload
+                              return (
+                                <div className="chart-tooltip">
+                                  <div style={{ fontWeight: 600 }}>{d.name}</div>
+                                  <div>Actions: {d.x.toLocaleString()}</div>
+                                  <div>Obligations: ${d.millions}M ({d.sharePct}%)</div>
+                                  {d.isHot && <div className="text-neon-magenta">★ Hot state</div>}
+                                </div>
+                              )
+                            }}
+                          />
+                          <ReferenceLine x={medStateActions} stroke={CHART.colors.magenta} strokeDasharray="3 3" />
+                          <ReferenceLine y={medStateMillions} stroke={CHART.colors.cyan} strokeDasharray="3 3" />
+                          <Scatter data={stateScatterData}>
+                            {stateScatterData.map((entry, index) => (
+                              <Cell
+                                key={`state-scatter-${index}`}
+                                fill={
+                                  entry.quadrant === 'hot'
+                                    ? CHART.colors.magenta
+                                    : entry.quadrant === 'high_value'
+                                      ? CHART.colors.cyan
+                                      : entry.quadrant === 'high_volume'
+                                        ? CHART.colors.lime
+                                        : '#64748b'
+                                }
+                              />
+                            ))}
+                          </Scatter>
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="chart-module-empty">Need state data in current NAICS slice.</div>
+                  )}
+                  <div className="text-[10px] text-text-500 mt-2">
+                    Magenta = hot · Cyan = high $ · Lime = high volume · Gray = watch. Reference lines = medians.
+                  </div>
+                </div>
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Delivery State Rankings"
+              subtitle={`${geoStates.length} top states · detail table`}
+              icon={BarChart3}
+              accent="cyan"
+              defaultOpen={false}
+              titleGlossaryId="place_of_performance"
+              onGlossaryLearn={openGlossaryInVault}
+            >
               <DataTable
-                data={geo}
+                data={geoStates}
                 rowKey={(g) => g.state}
                 emptyMessage="No geographic data in current slice."
+                onGlossaryLearn={openGlossaryInVault}
                 columns={[
                   {
                     key: 'state',
@@ -2077,87 +4163,544 @@ export default function App() {
                     render: (g) => g.state,
                   },
                   {
+                    key: 'share',
+                    header: 'Share',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (g) => (
+                      <span className={g.share_pct >= 12 ? 'text-neon-magenta' : ''}>{g.share_pct}%</span>
+                    ),
+                  },
+                  {
+                    key: 'quadrant',
+                    header: 'Quadrant',
+                    headerTip: 'state_quadrant',
+                    cellClassName: 'text-[10px] whitespace-nowrap',
+                    render: (g) => (
+                      <span className={STATE_QUADRANT_META[g.quadrant]?.tone || ''}>
+                        {STATE_QUADRANT_META[g.quadrant]?.short || g.quadrant}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'lens',
+                    header: 'Pursuit lens',
+                    headerTip: 'pursuit_lens',
+                    cellClassName: 'text-[10px] whitespace-nowrap',
+                    render: (g) => (
+                      <span className={PURSUIT_LENS_META[g.pursuit_lens]?.tone || ''}>
+                        {PURSUIT_LENS_META[g.pursuit_lens]?.label || g.pursuit_lens}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'buyer',
+                    header: 'Top buyer',
+                    cellClassName: 'max-w-[120px] truncate text-xs',
+                    render: (g) => <span title={g.top_agency || ''}>{(g.top_agency || '—').slice(0, 18)}</span>,
+                  },
+                  {
+                    key: 'incumbent',
+                    header: 'Top incumbent',
+                    cellClassName: 'max-w-[120px] truncate text-xs',
+                    render: (g) => <span title={g.top_recipient || ''}>{(g.top_recipient || '—').slice(0, 18)}</span>,
+                  },
+                  {
+                    key: 'expiring',
+                    header: 'Expiring',
+                    cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                    render: (g) => (
+                      g.expiring_count > 0
+                        ? <span className="text-neon-amber">{g.expiring_count} · ${g.expiring_millions}M</span>
+                        : '—'
+                    ),
+                  },
+                  {
                     key: 'stats',
                     header: 'Volume',
                     cellClassName: 'tabular-nums whitespace-nowrap text-xs',
-                    render: (g) => `${g.actions} act · $${g.millions}M`,
-                  },
-                  {
-                    key: 'bar',
-                    header: 'Share',
-                    cellClassName: 'min-w-[120px]',
-                    render: (g) => {
-                      const w = Math.min(100, Math.round((g.millions / (geo[0]?.millions || 1)) * 100))
-                      return <div className="geo-bar max-w-full" style={{ width: `${w}%` }} title={`${w}% of top state`} />
-                    },
+                    render: (g) => `${g.actions.toLocaleString()} act · $${g.millions}M`,
                   },
                 ]}
               />
+            </CollapsibleSection>
+
+            {anchorStates.length > 0 && (
+              <CollapsibleSection
+                title="Anchor & Target States"
+                subtitle={`${anchorStates.length} priority geographies`}
+                icon={Crosshair}
+                accent="magenta"
+                defaultOpen
+              >
+                <div className="insight magenta mb-3">
+                  {anchorStates.slice(0, 3).map((s) => (
+                    <span key={s.state} className="block text-[11px] mb-1">
+                      <strong className="text-text-primary">{s.state}</strong>
+                      {' — '}{PURSUIT_LENS_META[s.pursuit_lens].strategy}
+                    </span>
+                  ))}
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {agencyStatePairs.length > 0 && (
+              <CollapsibleSection
+                title="Buyer × Delivery Geography"
+                subtitle="Heatmap + top agency–state flows"
+                icon={Users}
+                accent="lime"
+                defaultOpen={!!agencyStateHeatmap.agencies.length}
+              >
+                <div className="insight mb-3">
+                  Agencies rarely spend evenly nationwide — darker cells show where a buyer concentrates delivery dollars (USASpending PoP). Use to align regional BD with the customer you are shaping.
+                </div>
+                <RelationshipHeatmap
+                  model={agencyStateHeatmap}
+                  onAgencyClick={(agency) => {
+                    setDashTab('agency')
+                    setAgencySearch(agency.slice(0, 24))
+                  }}
+                  onCellClick={(agency, state, actions) => {
+                    askCoPilot(
+                      `Regional capture for ${agency} with place of performance ${state} in NAICS ${naics}. ${actions} historical actions in slice. Map incumbents, teaming, and SAM reqs by PoP.`,
+                    )
+                  }}
+                />
+                <DataTable
+                  className="mt-3"
+                  data={agencyStatePairs.slice(0, 12)}
+                  rowKey={(r, i) => `${r.agency}-${r.state}-${i}`}
+                  emptyMessage=""
+                  columns={[
+                    { key: 'agency', header: 'Agency', cellClassName: 'max-w-[160px] truncate', render: (r) => <span title={r.agency}>{(r.agency || '').slice(0, 24)}</span> },
+                    { key: 'state', header: 'St', cellClassName: 'font-mono w-10', render: (r) => r.state },
+                    { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (r) => `$${r.millions}M` },
+                    { key: 'actions', header: 'Actions', cellClassName: 'tabular-nums text-text-400 whitespace-nowrap', render: (r) => r.actions?.toLocaleString() ?? '—' },
+                  ]}
+                />
+              </CollapsibleSection>
+            )}
+
+            {expiringByState.length > 0 && (
+              <CollapsibleSection
+                title="Recompete Geography"
+                subtitle={`${expiringByState.length} states · next ${ga?.meta?.months_ahead || 36} months`}
+                icon={Clock}
+                accent="amber"
+                defaultOpen
+                titleGlossaryId="recompete_radar"
+                onGlossaryLearn={openGlossaryInVault}
+              >
+                <div className="insight amber mb-3">
+                  Expiring awards by <strong className="text-text-primary">place of performance</strong> — where delivery teams and regional primes matter on follow-on work. Cross-check incumbents on Competitive Analysis.
+                </div>
+                {recompeteBarStates.length > 0 && (
+                  <div className="chart-panel surface-accent-amber border-0 shadow-none p-0 bg-transparent min-w-0 mb-3">
+                    <div className="text-xs font-medium text-text-500 mb-1">Total vs expiring $M (top states)</div>
+                    <div className="chart-panel-plot" style={{ height: 220 }}>
+                      <Plot
+                        data={[
+                          {
+                            type: 'bar',
+                            name: 'Total PoP $',
+                            x: recompeteBarStates.map((s) => s.state),
+                            y: recompeteBarStates.map((s) => s.millions),
+                            marker: { color: CHART.colors.cyan },
+                            hovertemplate: '%{x}<br>Total $%{y}M<extra></extra>',
+                          },
+                          {
+                            type: 'bar',
+                            name: 'Expiring $',
+                            x: recompeteBarStates.map((s) => s.state),
+                            y: recompeteBarStates.map((s) => s.expiring_millions),
+                            marker: { color: CHART.colors.amber },
+                            hovertemplate: '%{x}<br>Expiring $%{y}M<extra></extra>',
+                          },
+                        ]}
+                        layout={{
+                          barmode: 'group',
+                          margin: { t: 8, l: 40, r: 8, b: 28 },
+                          paper_bgcolor: CHART.transparent,
+                          plot_bgcolor: CHART.transparent,
+                          font: { size: 9, color: CHART.fontColor },
+                          yaxis: { title: '$M' },
+                          legend: { orientation: 'h', y: 1.12, font: { size: 9 } },
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        config={{ displayModeBar: false }}
+                      />
+                    </div>
+                  </div>
+                )}
+                <DataTable
+                  data={expiringByState}
+                  rowKey={(r) => r.state}
+                  emptyMessage=""
+                  columns={[
+                    { key: 'state', header: 'St', cellClassName: 'font-mono w-10', render: (r) => r.state },
+                    { key: 'count', header: 'Awards', cellClassName: 'tabular-nums whitespace-nowrap', render: (r) => r.expiring_count },
+                    { key: 'millions', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (r) => `$${r.expiring_millions}M` },
+                    { key: 'nearest', header: 'Nearest end', cellClassName: 'font-mono text-xs whitespace-nowrap', render: (r) => r.nearest_end?.slice(0, 10) || '—' },
+                    {
+                      key: 'cta',
+                      header: '',
+                      align: 'right',
+                      render: (r) => (
+                        <button
+                          type="button"
+                          className="text-[10px] text-neon-lime hover:underline"
+                          onClick={() => {
+                            setDashTab('opportunities')
+                            askCoPilot(`Surface expiring NAICS ${naics} awards with place of performance ${r.state}. Map incumbents and regional teaming options.`)
+                          }}
+                        >
+                          +pipeline scan
+                        </button>
+                      ),
+                    },
+                  ]}
+                />
+              </CollapsibleSection>
+            )}
+
+            <CollapsibleSection
+              title="Regional Research (MCP)"
+              subtitle="Data pulls for PoP and teaming"
+              icon={Globe}
+              accent="cyan"
+              defaultOpen={false}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {GEO_MCP_STUBS.map((stub) => (
+                  <div key={stub.label} className="surface p-2 rounded-lg border border-border-800/60">
+                    <div className="text-[11px] text-text-primary">{stub.label}</div>
+                    <div className="text-[10px] text-text-500">{stub.mcp} · {stub.status}</div>
+                    <AskCoPilotButton
+                      prompt={`${stub.label} for NAICS ${naics} regional analysis. Top states: ${geoStates.slice(0, 5).map((s) => s.state).join(', ')}. ${regionalPrompt}`}
+                      label="Run"
+                      onAsk={askCoPilot}
+                    />
+                  </div>
+                ))}
+              </div>
             </CollapsibleSection>
           </div>
         )
       }
 
       case 'combo': {
-        const comboRows = comboExpiring.slice(0, 6)
+        const isInVault = (name: string) =>
+          !!findCompetitorBrainEntry(name) || !!findEntityBrainEntry(name, 'agency')
+        const comboMatches = enrichComboWithVault(comboInsights?.matches || [], isInVault)
+        const comboSummary = comboInsights?.summary || {}
+        const signalMix = comboInsights?.signal_mix || []
+        const tierCounts = comboInsights?.tier_counts || {}
+        const comboScatter = buildComboScatterPoints(comboMatches)
+        const tierBarData = (['prime', 'advance', 'monitor', 'track'] as const).map((t) => ({
+          tier: t,
+          count: tierCounts[t] || 0,
+          label: COMBO_TIER_META[t].label,
+        }))
+        const fallbackRows = comboExpiring.slice(0, 6)
+
         return (
           <div className="page-sections">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+              <MetricCard
+                label="Combo matches"
+                value={String(comboSummary.match_count ?? (comboMatches.length || fallbackRows.length))}
+                accent="lime"
+                tooltip={getGlossaryTip('combo_signal')}
+              />
+              <MetricCard
+                label="Prime targets"
+                value={String(comboSummary.prime_count ?? tierCounts.prime ?? 0)}
+                accent="magenta"
+                tooltip={getGlossaryTip('combo_tier')}
+              />
+              <MetricCard
+                label="Hot buyer overlap"
+                value={String(comboSummary.hot_agency_overlap ?? hotRecompeteCount)}
+                accent="cyan"
+                tooltip={getGlossaryTip('hot_agency')}
+              />
+              <MetricCard
+                label="Prime $ (loaded)"
+                value={`$${comboSummary.prime_millions ?? hotRecompeteM.toFixed(1)}M`}
+                accent="amber"
+                tooltip={getGlossaryTip('recompete_radar')}
+              />
+            </div>
+
             <CollapsibleSection
-              title="Hot Recompetes"
-              subtitle="Expiring work in high-intensity agencies"
+              title="Intersection Logic"
+              subtitle="How combo scoring works"
+              icon={Lightbulb}
+              accent="lime"
+              defaultOpen
+              titleGlossaryId="combo_tier"
+              onGlossaryLearn={openGlossaryInVault}
+            >
+              <div className="insight lime mb-3">
+                Combo stacks <strong className="text-text-primary">real intersections</strong> from tabs you already use — expiring timing + hot agency + top incumbent + anchor PoP + flexible pricing. Vault entries add a +10 boost. Not a suitability score (that needs capability profile).
+              </div>
+              {comboInsights?.meta?.scoring_note && (
+                <div className="text-[10px] text-text-500 mb-2">{comboInsights.meta.scoring_note}</div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {(['hot_agency', 'top_incumbent', 'anchor_pop', 'near_term', 'flex_pricing', 'high_value', 'vault_tracked'] as ComboSignal[]).map((sig) => (
+                  <span key={sig} className={`pill text-[10px] ${COMBO_SIGNAL_META[sig].tone}`}>
+                    {COMBO_SIGNAL_META[sig].label}
+                  </span>
+                ))}
+              </div>
+            </CollapsibleSection>
+
+            {comboMatches.length > 0 && (
+              <CollapsibleSection
+                title="Signal & Priority Views"
+                subtitle="Mix · timing vs value scatter"
+                icon={Crosshair}
+                accent="lime"
+                defaultOpen
+              >
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  <div className="chart-panel surface-accent-lime border-0 shadow-none p-3 bg-transparent min-w-0">
+                    <div className="text-xs font-medium text-text-500 mb-1">Signal frequency (loaded matches)</div>
+                    {signalMix.length ? (
+                      <div className="chart-panel-plot" style={{ height: Math.max(160, signalMix.length * 24) }}>
+                        <Plot
+                          data={[{
+                            type: 'bar',
+                            orientation: 'h',
+                            y: signalMix.map((s) => COMBO_SIGNAL_META[s.signal as ComboSignal]?.short || s.signal).reverse(),
+                            x: signalMix.map((s) => s.count).reverse(),
+                            marker: { color: CHART.colors.lime },
+                            hovertemplate: '%{y}<br>%{x} matches<extra></extra>',
+                          }]}
+                          layout={{
+                            margin: { t: 4, l: 88, r: 12, b: 24 },
+                            paper_bgcolor: CHART.transparent,
+                            plot_bgcolor: CHART.transparent,
+                            font: { size: 9, color: CHART.fontColor },
+                            xaxis: { title: 'Matches' },
+                          }}
+                          style={{ width: '100%', height: '100%' }}
+                          config={{ displayModeBar: false }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="chart-module-empty">No signal mix yet.</div>
+                    )}
+                  </div>
+                  <div className="chart-panel surface-accent-magenta border-0 shadow-none p-3 bg-transparent min-w-0">
+                    <div className="text-xs font-medium text-text-500 mb-1">Priority matrix — months to end vs $M</div>
+                    {comboScatter.length ? (
+                      <div className="chart-panel-plot" style={{ height: 260 }}>
+                        <Plot
+                          data={(['prime', 'advance', 'monitor', 'track'] as const).map((tier) => ({
+                            type: 'scatter',
+                            mode: 'markers',
+                            name: COMBO_TIER_META[tier].label,
+                            x: comboScatter.filter((p) => p.tier === tier).map((p) => p.x),
+                            y: comboScatter.filter((p) => p.tier === tier).map((p) => p.y),
+                            text: comboScatter.filter((p) => p.tier === tier).map((p) => p.name),
+                            marker: {
+                              size: comboScatter.filter((p) => p.tier === tier).map((p) => p.z / 12),
+                              color:
+                                tier === 'prime' ? CHART.colors.magenta
+                                  : tier === 'advance' ? CHART.colors.cyan
+                                    : tier === 'monitor' ? CHART.colors.amber
+                                      : '#64748b',
+                              opacity: 0.85,
+                            },
+                            hovertemplate: '%{text}<br>%{x}mo · $%{y}M<extra></extra>',
+                          }))}
+                          layout={{
+                            margin: { t: 8, l: 44, r: 8, b: 32 },
+                            paper_bgcolor: CHART.transparent,
+                            plot_bgcolor: CHART.transparent,
+                            font: { size: 9, color: CHART.fontColor },
+                            xaxis: { title: 'Months to end', autorange: 'reversed' },
+                            yaxis: { title: '$M' },
+                            legend: { orientation: 'h', y: 1.15, font: { size: 9 } },
+                          }}
+                          style={{ width: '100%', height: '100%' }}
+                          config={{ displayModeBar: false }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="chart-module-empty">No combo matches to plot.</div>
+                    )}
+                    <div className="text-[10px] text-text-500 mt-1">Left = sooner. Larger bubble ≈ higher combo score.</div>
+                  </div>
+                </div>
+                {tierBarData.some((t) => t.count > 0) && (
+                  <div className="chart-panel surface-accent-cyan border-0 shadow-none p-0 bg-transparent min-w-0 mt-3">
+                    <div className="text-xs font-medium text-text-500 mb-1">Matches by combo tier</div>
+                    <div className="chart-panel-plot" style={{ height: 140 }}>
+                      <Plot
+                        data={[{
+                          type: 'bar',
+                          x: tierBarData.map((t) => t.label),
+                          y: tierBarData.map((t) => t.count),
+                          marker: {
+                            color: [CHART.colors.magenta, CHART.colors.cyan, CHART.colors.amber, '#64748b'],
+                          },
+                          hovertemplate: '%{x}<br>%{y} matches<extra></extra>',
+                        }]}
+                        layout={{
+                          margin: { t: 8, l: 36, r: 8, b: 40 },
+                          paper_bgcolor: CHART.transparent,
+                          plot_bgcolor: CHART.transparent,
+                          font: { size: 9, color: CHART.fontColor },
+                          yaxis: { title: 'Count' },
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        config={{ displayModeBar: false }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </CollapsibleSection>
+            )}
+
+            <CollapsibleSection
+              title="Ranked Combo Matches"
+              subtitle="Scored intersections · pipeline-ready"
               icon={TrendingUp}
               accent="lime"
               defaultOpen
-              badge={comboRows.length > 0 ? <span className="pill text-[10px]">{comboRows.length} matches</span> : undefined}
+              badge={comboMatches.length > 0 ? <span className="pill text-[10px]">{comboMatches.length}</span> : undefined}
+              titleGlossaryId="combo_tier"
+              onGlossaryLearn={openGlossaryInVault}
             >
               <div className="insight lime mb-3">
-                Highest-leverage early signal — recompetes where the buyer already spends heavily in your NAICS. +pipeline now; map competitors on Competitive Analysis.
+                Highest-leverage crosses — expiring work where buyer intensity, incumbent position, geography, and timing align. +pipeline primes; +brain competitors for vault compounding.
               </div>
-              {comboRows.length ? (
+              {comboMatches.length ? (
                 <>
                   <DataTable
-                    data={comboRows}
+                    data={comboMatches}
                     rowKey={(e, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
-                    rowClassName={() => 'intensity-row-hot'}
+                    rowClassName={(e) => (e.combo_tier === 'prime' ? 'intensity-row-hot' : '')}
+                    onGlossaryLearn={openGlossaryInVault}
                     columns={[
-                      { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs whitespace-nowrap', render: (e) => e.end_date?.slice(0, 10) },
-                      { key: 'recipient', header: 'Recipient', cellClassName: 'max-w-[160px] truncate', render: (e) => <span title={e.recipient}>{e.recipient || '—'}</span> },
-                      { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (e) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M` },
-                      { key: 'agency', header: 'Agency', cellClassName: 'text-neon-lime text-xs max-w-[140px] truncate', render: (e) => <span title={e.agency}>{(e.agency || '').slice(0, 20)} ★</span> },
+                      {
+                        key: 'tier',
+                        header: 'Tier',
+                        headerTip: 'combo_tier',
+                        cellClassName: 'text-[10px] whitespace-nowrap',
+                        render: (e: ComboMatch) => (
+                          <span className={COMBO_TIER_META[e.combo_tier].tone}>
+                            {COMBO_TIER_META[e.combo_tier].label}
+                          </span>
+                        ),
+                      },
+                      {
+                        key: 'score',
+                        header: 'Score',
+                        cellClassName: 'tabular-nums text-xs whitespace-nowrap',
+                        render: (e: ComboMatch) => (
+                          <span className={(e.display_score ?? e.combo_score) >= 55 ? 'text-neon-magenta' : ''}>
+                            {e.display_score ?? e.combo_score}
+                          </span>
+                        ),
+                      },
+                      {
+                        key: 'signals',
+                        header: 'Signals',
+                        headerTip: 'combo_signal',
+                        cellClassName: 'max-w-[140px]',
+                        render: (e: ComboMatch) => (
+                          <div className="flex flex-wrap gap-0.5">
+                            {e.signals.slice(0, 4).map((s) => (
+                              <span key={s} className={`pill text-[9px] ${COMBO_SIGNAL_META[s]?.tone || ''}`}>
+                                {COMBO_SIGNAL_META[s]?.short || s}
+                              </span>
+                            ))}
+                          </div>
+                        ),
+                      },
+                      { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs whitespace-nowrap', render: (e: ComboMatch) => `${e.months_to_end}m · ${e.end_date?.slice(0, 10) || '—'}` },
+                      { key: 'recipient', header: 'Incumbent', cellClassName: 'max-w-[130px] truncate', render: (e: ComboMatch) => <span title={e.recipient}>{(e.recipient || '').slice(0, 18)}</span> },
+                      { key: 'agency', header: 'Buyer', cellClassName: 'text-xs max-w-[120px] truncate', render: (e: ComboMatch) => <span title={e.agency}>{(e.agency || '').slice(0, 16)}</span> },
+                      { key: 'pop', header: 'PoP', cellClassName: 'font-mono text-xs w-8', render: (e: ComboMatch) => e.pop_state || '—' },
+                      { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (e: ComboMatch) => `$${e.obligation_millions}M` },
                       {
                         key: 'actions',
                         header: '',
                         align: 'right',
-                        render: (e) => (
+                        render: (e: ComboMatch) => (
                           <div className="row-actions">
                             <button onClick={() => addToPipeline(e, 'combo')} className="action-btn pipeline text-xs">+ pipeline</button>
-                            <AskCoPilotButton
-                              prompt={`Hot-agency recompete: ${e.recipient} at ${e.agency} ends ${e.end_date} ($${((e.obligation || 0) / 1e6).toFixed(1)}M). Why is this high-value and what should I do in the next 30 days?`}
-                              onAsk={askCoPilot}
-                            />
+                            <button onClick={() => addToBrain(e, e.recipient, 'competitor')} className="action-btn brain text-xs">+ brain</button>
+                            <AskCoPilotButton prompt={buildComboBriefPrompt(e, naics)} onAsk={askCoPilot} />
                           </div>
                         ),
                       },
                     ]}
                   />
                   <button
-                    onClick={() => comboRows.forEach((e) => addToPipeline(e, 'combo'))}
+                    onClick={() => comboMatches.filter((e) => e.combo_tier === 'prime' || e.combo_tier === 'advance').slice(0, 5).forEach((e) => addToPipeline(e, 'combo'))}
                     className="action-btn pipeline text-[10px] mt-2"
                   >
-                    +pipeline all visible
+                    +pipeline prime & advance (top 5)
                   </button>
                 </>
+              ) : fallbackRows.length ? (
+                <DataTable
+                  data={fallbackRows}
+                  rowKey={(e, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
+                  rowClassName={() => 'intensity-row-hot'}
+                  columns={[
+                    { key: 'end', header: 'Ends', cellClassName: 'font-mono text-xs whitespace-nowrap', render: (e) => e.end_date?.slice(0, 10) },
+                    { key: 'recipient', header: 'Recipient', cellClassName: 'max-w-[160px] truncate', render: (e) => <span title={e.recipient}>{e.recipient || '—'}</span> },
+                    { key: 'oblig', header: '$M', cellClassName: 'tabular-nums text-neon-cyan whitespace-nowrap', render: (e) => `$${((e.obligation || 0) / 1e6).toFixed(1)}M` },
+                    { key: 'agency', header: 'Agency', cellClassName: 'text-neon-lime text-xs max-w-[140px] truncate', render: (e) => <span title={e.agency}>{(e.agency || '').slice(0, 20)} ★</span> },
+                    {
+                      key: 'actions',
+                      header: '',
+                      align: 'right',
+                      render: (e) => (
+                        <button onClick={() => addToPipeline(e, 'combo')} className="action-btn pipeline text-xs">+ pipeline</button>
+                      ),
+                    },
+                  ]}
+                />
               ) : (
                 <EmptyState
                   icon={TrendingUp}
-                  title="No hot-agency overlaps yet"
-                  description="Combo matches expiring contracts in high-intensity agencies. Ingest more bulk data or add brain entries to unlock intersections."
+                  title="No combo matches yet"
+                  description="Needs expiring contracts in your NAICS slice intersecting hot agencies. Ingest more years or widen the months window."
                   accent="lime"
                   actions={
-                    <Button variant="soft" onClick={() => { setSidebar('dashboard'); setDashTab('market') }}>Back to Market Overview</Button>
+                    <Button variant="soft" onClick={() => setDashTab('opportunities')}>Future Opportunities</Button>
                   }
                 />
               )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Combo Research (MCP)"
+              subtitle="Turn intersections into capture actions"
+              icon={Globe}
+              accent="cyan"
+              defaultOpen={false}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {COMBO_MCP_STUBS.map((stub) => (
+                  <div key={stub.label} className="surface p-2 rounded-lg border border-border-800/60">
+                    <div className="text-[11px] text-text-primary">{stub.label}</div>
+                    <div className="text-[10px] text-text-500">{stub.mcp} · {stub.status}</div>
+                    <AskCoPilotButton
+                      prompt={`${stub.label} for NAICS ${naics} combo targets. Prime matches: ${comboMatches.filter((m) => m.combo_tier === 'prime').slice(0, 3).map((m) => `${m.recipient}/${m.agency}`).join('; ') || 'none loaded'}.`}
+                      label="Run"
+                      onAsk={askCoPilot}
+                    />
+                  </div>
+                ))}
+              </div>
             </CollapsibleSection>
           </div>
         )
@@ -2259,11 +4802,31 @@ export default function App() {
           </div>
 
           <CollapsibleSection
+            title="Capture Insights Glossary"
+            subtitle="Plain-language definitions for app labels & signals"
+            icon={Lightbulb}
+            accent="amber"
+            defaultOpen
+          >
+            <div className="insight amber mb-3">
+              Every glossaried label in the dashboard has an info icon (hover for quick tip) and a <strong className="text-text-primary">vault</strong> link for deeper education. This page is the canonical reference.
+            </div>
+            <button
+              type="button"
+              onClick={() => openGlossaryInVault('ffp_shaping_radar')}
+              className="action-btn vault text-[10px]"
+            >
+              <BookOpen size={12} /> Open glossary in reader
+            </button>
+            <span className="text-[10px] text-text-500 ml-2 font-mono">{GLOSSARY_VAULT_PATH}</span>
+          </CollapsibleSection>
+
+          <CollapsibleSection
             title="Vault Access"
             subtitle="data/knowledge · Obsidian · schema"
             icon={BookOpen}
             accent="purple"
-            defaultOpen
+            defaultOpen={false}
           >
             <div className="text-sm text-text-300 leading-snug mb-3">
               Domain intel, observations, and capture guidance as native .md. App seeds from USASpending with citations — curate in Obsidian for graph, backlinks, and full editing.
@@ -2594,20 +5157,22 @@ export default function App() {
     }
 
     if (sidebar === 'tools') {
-      const tools = mcpInfo.tools || []
-      const mcpOnline = !!mcpInfo.mcp_available
+      const servers = mcpInfo.servers || []
+      const onlineCount = mcpInfo.online_count ?? servers.filter((s) => s.status === 'online').length
+      const procurement = servers.filter((s) => s.category === 'procurement')
+      const regulatory = servers.filter((s) => s.category === 'regulatory')
       return (
         <div className="page-sections">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
-            <MetricCard label="Tools" value={String(tools.length)} accent="magenta" tooltip="Discovered MCP tool catalog" />
-            <MetricCard label="MCP server" value={mcpOnline ? 'Online' : 'Fallback'} accent={mcpOnline ? 'lime' : 'amber'} tooltip="External MCP vs direct API fallbacks" />
+            <MetricCard label="1102 MCPs" value={String(mcpInfo.server_count ?? (servers.length || 8))} accent="magenta" tooltip="Eight federal-contracting MCP servers from 1102tools" />
+            <MetricCard label="Online now" value={String(onlineCount)} accent={onlineCount > 0 ? 'lime' : 'amber'} tooltip="MCPs with live discovered endpoints" />
             <MetricCard label="Backend" value={health === 'live' ? 'Healthy' : health === 'checking' ? '…' : 'Issue'} accent={health === 'live' ? 'cyan' : 'amber'} />
             <MetricCard label="Chat context" value={useSmartModel ? 'Smart' : 'Fast'} accent="purple" tooltip="Model path used by co-pilot actions" />
           </div>
 
           <CollapsibleSection
-            title="Tool Catalog"
-            subtitle="federal-contracting-mcps · agent-driven only"
+            title="Federal MCP Servers"
+            subtitle="1102tools · pick by data need, not endpoint"
             icon={Wrench}
             accent="magenta"
             defaultOpen
@@ -2622,106 +5187,163 @@ export default function App() {
             }
           >
             <div className="text-[10px] text-text-500 mb-3">
-              Consumers only — we use battle-tested clients from{' '}
+              Eight MCPs from{' '}
               <a href="https://github.com/1102tools/federal-contracting-mcps" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">
                 federal-contracting-mcps
               </a>
-              . You never call MCPs directly; buttons and co-pilot do.
+              . Need contract history → USASpending. Need SAM notices → SAM.gov. Co-pilot and buttons pick endpoints; expand any MCP to see tools for awareness.
             </div>
-            {tools.length === 0 ? (
+            {servers.length === 0 ? (
               <EmptyState
                 icon={Wrench}
-                title="No tools discovered yet"
-                description={mcpInfo.how_to_enable || mcpInfo.note || 'App uses direct API fallbacks for SAM. Run uvx sam-gov-mcp for the richest tool set. Catalog warms up at backend start.'}
+                title="MCP catalog loading…"
+                description={mcpInfo.how_to_enable || mcpInfo.note || 'Catalog lists all eight 1102 MCPs. SAM.gov endpoints appear when the server is reachable.'}
                 accent="magenta"
               />
             ) : (
-              <div className="space-y-2 min-w-0">
-                {tools.map((t, idx) => (
-                  <div key={idx} className="tool-card">
-                    <div className="tool-card-name">{t.name}</div>
-                    {t.description && <div className="tool-card-desc">{t.description}</div>}
+              <>
+                {procurement.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Procurement data</div>
+                    <div className="space-y-2 min-w-0">
+                      {procurement.map((s) => <McpServerCard key={s.id} server={s} />)}
+                    </div>
                   </div>
-                ))}
-              </div>
+                )}
+                {regulatory.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Regulatory & policy</div>
+                    <div className="space-y-2 min-w-0">
+                      {regulatory.map((s) => <McpServerCard key={s.id} server={s} />)}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-            {mcpInfo.note && <div className="text-[10px] text-neon-magenta mt-2">{mcpInfo.note}</div>}
+            {mcpInfo.note && <div className="text-[10px] text-text-500 mt-2">{mcpInfo.note}</div>}
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="How Agents Use Tools"
+            title="How Agents Use MCPs"
             subtitle="Buttons · co-pilot · suggested actions"
             icon={MessageSquare}
             accent="magenta"
             defaultOpen={false}
           >
             <div className="insight mb-2">
-              Contextual buttons (e.g. Monitor smart on expiring rows) and the floating co-pilot invoke these tools under the hood. The catalog is injected into chat so suggestions stay grounded in what is actually available.
+              You choose the <strong className="text-text-primary">MCP</strong> by intent (SAM data, spend data, FAR text). The co-pilot selects the right tool inside that MCP. Contextual buttons and chat never expect you to know endpoint names.
             </div>
-            <div className="text-[10px] text-text-500">Status also appears in /health and the topbar. Warmup runs when the backend starts.</div>
+            <div className="text-[10px] text-text-500">SAM.gov is integrated today; other MCPs show as catalog until wired. Direct API fallbacks still work for core SAM search.</div>
           </CollapsibleSection>
         </div>
       )
     }
 
     if (sidebar === 'skills') {
-      const plannedSkills = [
-        { name: 'Capture brief', status: 'Planned', note: 'Competitive + agency angles from vault + data' },
-        { name: 'SAM monitor builder', status: 'Partial', note: 'Smart monitor buttons on Future Opportunities' },
-        { name: 'Vault synthesizer', status: 'Partial', note: 'Seed + lint/fix via Knowledge Vault' },
-        { name: 'Artifact design', status: 'Planned', note: 'huashu-design style pursuit artifacts' },
-        { name: 'Pipeline packet', status: 'Planned', note: 'Ariadne milestone living packets' },
-      ]
+      const federal1102 = skillsCatalog.federal_1102 || []
+      const theseusCapture = skillsCatalog.theseus_capture || []
+      const marketing = skillsCatalog.marketing || []
+      const partialCount = skillsCatalog.partial_count ?? theseusCapture.filter((s) => s.status === 'partial').length
       return (
         <div className="page-sections">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-1">
-            <MetricCard label="Active skills" value="0" accent="magenta" tooltip="Runnable agent skills — coming soon" />
-            <MetricCard label="Partial" value="2" accent="amber" tooltip="Behaviors already live via buttons elsewhere" />
-            <MetricCard label="Planned" value={String(plannedSkills.length)} accent="cyan" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+            <MetricCard label="Skills catalog" value={String(skillsCatalog.skill_count ?? (federal1102.length + theseusCapture.length + marketing.length))} accent="magenta" tooltip="1102 + Theseus + marketing stubs" />
+            <MetricCard label="1102 official" value={String(federal1102.length)} accent="cyan" tooltip="federal-contracting-skills orchestration" />
+            <MetricCard label="Theseus capture" value={String(theseusCapture.length)} accent="lime" tooltip="Vendored + modified for capture manager" />
+            <MetricCard label="Live partial" value={String(partialCount)} accent="amber" tooltip="Behaviors stubbed via co-pilot + dashboard buttons" />
           </div>
 
           <CollapsibleSection
-            title="Skills Library"
-            subtitle="Capture automations · agent workflows"
-            icon={Layers}
-            accent="magenta"
+            title="How Skills Pair With MCPs"
+            subtitle="Deliverables · not raw API calls"
+            icon={Lightbulb}
+            accent="none"
             defaultOpen
           >
-            <EmptyState
-              icon={Sparkles}
-              title="Skills hub coming soon"
-              description="Focused automations that run with your NAICS slice, vault, and pipeline context — beyond one-off co-pilot prompts."
-              accent="magenta"
-              actions={
-                <Button variant="soft" onClick={() => setSidebar('tools')}>
-                  <Wrench className="w-3.5 h-3.5" /> View MCP Tools
-                </Button>
-              }
-            />
-            <div className="mt-4 space-y-2">
-              {plannedSkills.map((s) => (
-                <div key={s.name} className="tool-card flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="tool-card-name">{s.name}</div>
-                    <div className="tool-card-desc">{s.note}</div>
-                  </div>
-                  <span className={`pill text-[9px] shrink-0 ${s.status === 'Partial' ? 'text-neon-amber border-neon-amber/40' : ''}`}>
-                    {s.status}
-                  </span>
-                </div>
+            <div className="insight mb-2">
+              Eight{' '}
+              <button type="button" onClick={() => setSidebar('tools')} className="text-neon-cyan hover:underline">1102 MCPs</button>
+              {' '}supply deterministic data. Skills orchestrate that data into acquisition and capture deliverables — IGCE, SOW/PWS, PTW, teaming search, RFP reverse engineering.
+            </div>
+            <div className="text-[10px] text-text-500">
+              Stub run invokes co-pilot today; full skill runner will register parameters, citations, and rerun from chat. Sources:{' '}
+              <a href="https://github.com/1102tools/federal-contracting-skills" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">federal-contracting-skills</a>
+              ,{' '}
+              <a href="https://github.com/coreyhaines31/marketingskills" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">marketingskills</a>
+              , Theseus workspace adaptations.
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Theseus Capture Skills"
+            subtitle="BD / capture manager · vendored + modified"
+            icon={Target}
+            accent="lime"
+            defaultOpen
+          >
+            <div className="space-y-2">
+              {theseusCapture.length ? theseusCapture.map((skill) => (
+                <SkillCard
+                  key={skill.id}
+                  skill={skill}
+                  naics={naics}
+                  onAsk={askCoPilot}
+                  onOpenMcp={() => setSidebar('tools')}
+                />
+              )) : (
+                <div className="text-xs text-text-500">Loading catalog…</div>
+              )}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="1102 Acquisition Skills"
+            subtitle="federal-contracting-skills · IGCE · SOW/PWS · OT"
+            icon={Layers}
+            accent="cyan"
+            defaultOpen={false}
+          >
+            <div className="space-y-2">
+              {federal1102.map((skill) => (
+                <SkillCard
+                  key={skill.id}
+                  skill={skill}
+                  naics={naics}
+                  onAsk={askCoPilot}
+                  onOpenMcp={() => setSidebar('tools')}
+                />
+              ))}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Marketing Skills"
+            subtitle="coreyhaines31/marketingskills · stubs"
+            icon={Sparkles}
+            accent="purple"
+            defaultOpen={false}
+          >
+            <div className="space-y-2">
+              {marketing.map((skill) => (
+                <SkillCard
+                  key={skill.id}
+                  skill={skill}
+                  naics={naics}
+                  onAsk={askCoPilot}
+                />
               ))}
             </div>
           </CollapsibleSection>
 
           <CollapsibleSection
             title="Roadmap"
-            subtitle="What ships before full skill runner"
+            subtitle="Skill runner · parameters · vault output"
             icon={Lightbulb}
             accent="none"
             defaultOpen={false}
           >
             <div className="text-[10px] text-text-500 leading-relaxed">
-              Priority order: data foundation → contextual dashboard → Pipeline + Vault accumulators → button-driven agent actions (live today) → registered skills with parameters, citations, and rerun from chat.
+              Next: register skills with NAICS + vault context, wire Teaming Finder and PTW to USASpending MCP, import 1102 SKILL.md files into workspace agents, and emit structured outputs to Knowledge Vault pursuits/.
             </div>
           </CollapsibleSection>
         </div>
@@ -2788,7 +5410,7 @@ export default function App() {
             <div className="space-y-2 text-[10px] text-text-500">
               <p>
                 <span className="text-text-400">MCP:</span>{' '}
-                {mcpInfo.mcp_available ? 'External server connected.' : (mcpInfo.how_to_enable || 'Run uvx sam-gov-mcp for full SAM tool coverage.')}
+                {mcpInfo.mcp_available ? 'At least one 1102 MCP online (SAM.gov).' : (mcpInfo.how_to_enable || 'Eight MCPs in catalog; SAM.gov warms at startup.')}
               </p>
               <p>
                 <span className="text-text-400">SAM live search:</span> Set SAM_API_KEY on the backend for direct API results when MCP is unavailable.
