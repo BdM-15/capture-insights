@@ -1603,10 +1603,10 @@ export default function App() {
                 onGlossaryLearn={openGlossaryInVault}
               />
               <MetricCard
-                label="Needs SAM watch"
+                label="Hot, no SAM search"
                 value={String(oppSummary.no_monitor_hot ?? 0)}
                 accent="amber"
-                glossaryId="sam_live_discovery"
+                glossaryId="sam_search_saved"
                 onGlossaryLearn={openGlossaryInVault}
               />
               <MetricCard
@@ -1705,7 +1705,7 @@ export default function App() {
                         }}
                         className="action-btn pipeline text-xs"
                       >
-                        + SAM watch
+                        + Save SAM search
                       </button>
                       <button
                         onClick={() => {
@@ -1734,7 +1734,9 @@ export default function App() {
                 />
               )}
               <div className="text-[10px] text-text-500 mt-2">
-                <strong className="text-text-primary">+ Track</strong> saves the contract to your Pipeline. Use <strong className="text-text-primary">More</strong> on a row for SAM watch and co-pilot help.
+                <strong className="text-text-primary">+ Track</strong> saves the contract to Pipeline.
+                <strong className="text-text-primary"> + Save SAM search</strong> stores a SAM.gov keyword bookmark for that row (under More).
+                Click <strong className="text-text-primary">+N more reasons</strong> to see every ranking signal.
               </div>
             </CollapsibleSection>
 

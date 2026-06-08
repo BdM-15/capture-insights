@@ -45,6 +45,8 @@ export type GlossaryId =
   | 'match_lens'
   | 'incumbent_holder'
   | 'priority_score'
+  | 'your_tracking_status'
+  | 'sam_search_saved'
 
 export interface GlossaryEntry {
   label: string
@@ -330,6 +332,18 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
     tip: 'A 0–100+ ranking from stacked signals (hot buyer, top incumbent, timing, value, vault overlap). Higher = more reasons to invest capture time now. Tier (Prime/Advance/Monitor) is the plain-English bucket.',
     vaultPath: conceptVaultPath('combo-tier'),
     vaultAnchor: 'combo-tier',
+  },
+  your_tracking_status: {
+    label: 'Your tracking status',
+    tip: 'How this contract relates to your workspace — not a government status. “In vault” = competitor or agency you saved in Knowledge Vault. “SAM search saved” = you stored a SAM.gov keyword search in Pipeline to check for new RFIs and presolicitations. “Not tracked” = no vault entry or saved search yet.',
+    vaultPath: conceptVaultPath('sam-live-discovery'),
+    vaultAnchor: 'sam-live-discovery',
+  },
+  sam_search_saved: {
+    label: 'SAM search saved',
+    tip: 'You saved a SAM.gov search in Pipeline for this contract cycle. It is a bookmarked keyword search (agency + incumbent) so you can revisit SAM.gov for early notices — RFIs, Sources Sought, presolicitations — before the full RFP drops. Not an automatic email alert unless you set that up on SAM.gov.',
+    vaultPath: conceptVaultPath('sam-live-discovery'),
+    vaultAnchor: 'sam-live-discovery',
   },
 }
 
