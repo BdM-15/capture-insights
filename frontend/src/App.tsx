@@ -236,6 +236,7 @@ export default function App() {
   const [oppExpandedKey, setOppExpandedKey] = useState<string | null>(null)
   const [skillWorkspace, setSkillWorkspace] = useState<SkillWorkspaceState | null>(null)
   const [workspaceLoading, setWorkspaceLoading] = useState(false)
+  const [workspaceUseLlm, setWorkspaceUseLlm] = useState(false)
   const [agencySearch, setAgencySearch] = useState('')
   const [competitorSearch, setCompetitorSearch] = useState('')
   const [teamingTarget, setTeamingTarget] = useState('')
@@ -632,6 +633,7 @@ export default function App() {
         briefPath: data.brief_path,
         briefExists: !!data.brief_exists,
         skills: data.skills || [],
+        artifacts: data.artifacts || [],
       })
     } catch {
       showToast('Workspace unreachable — run .\\scripts\\start.ps1 from the project folder', 'error')
@@ -646,7 +648,7 @@ export default function App() {
     try {
       const path = overwrite ? '/user/pursuit/run-skill' : '/user/pursuit/scaffold-brief'
       const body = overwrite
-        ? { skill_id: 'capture-brief', item: skillWorkspace.row, naics, brain, use_llm: false }
+        ? { skill_id: 'capture-brief', item: skillWorkspace.row, naics, brain, use_llm: workspaceUseLlm }
         : { item: skillWorkspace.row, naics, brain }
       const res = await fetch(path, {
         method: 'POST',
@@ -655,8 +657,21 @@ export default function App() {
       })
       const data = await res.json()
       if (data.ok) {
-        setSkillWorkspace((w) => w && { ...w, briefExists: true })
-        showToast(overwrite ? 'Capture brief updated in vault' : 'Capture brief created in vault', 'success')
+        setSkillWorkspace((w) => w && {
+          ...w,
+          briefExists: true,
+          artifacts: data.artifacts || w.artifacts,
+          lastIntel: data.intel_sources ? {
+            sam: data.intel_sources.sam,
+            sam_hits: data.intel_sources.sam_hits,
+            usaspending_rels: data.intel_sources.usaspending_rels,
+            used_llm: data.used_llm,
+          } : w.lastIntel,
+        })
+        const scaffoldMsg = overwrite
+          ? (workspaceUseLlm ? 'Capture brief enriched in vault' : 'Capture brief refreshed from USASpending')
+          : 'Capture brief created in vault'
+        showToast(scaffoldMsg, 'success')
       } else {
         showToast(data.error || 'Brief failed', 'error')
       }
@@ -674,19 +689,46 @@ export default function App() {
       const res = await fetch('/user/pursuit/run-skill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skill_id: skillId, item: skillWorkspace.row, naics, brain, use_llm: false }),
+        body: JSON.stringify({
+          skill_id: skillId,
+          item: skillWorkspace.row,
+          naics,
+          brain,
+          use_llm: skillId === 'capture-brief' && workspaceUseLlm,
+        }),
       })
       const data = await res.json()
       if (!data.ok) {
         showToast(data.error || 'Skill failed', 'error')
         return
       }
+      const intel = data.intel_sources || {}
+      const patchWorkspace = (w: SkillWorkspaceState) => ({
+        ...w,
+        briefExists: skillId === 'capture-brief' ? true : w.briefExists,
+        artifacts: data.artifacts || w.artifacts,
+        lastIntel: {
+          sam: intel.sam,
+          sam_hits: intel.sam_hits,
+          usaspending_rels: intel.usaspending_rels ?? intel.usaspending_flows,
+          used_llm: data.used_llm,
+        },
+      })
       if (skillId === 'sam-monitor-builder') {
         await syncAccumulators()
+        setSkillWorkspace((w) => w && patchWorkspace(w))
         showToast('SAM search saved to Pipeline', 'success')
       } else if (skillId === 'capture-brief') {
-        setSkillWorkspace((w) => w && { ...w, briefExists: true })
-        showToast('Capture brief written to vault', 'success')
+        setSkillWorkspace((w) => w && patchWorkspace(w))
+        const verb = data.used_llm ? 'enriched' : 'updated'
+        const llmNote = data.used_llm ? ' · LLM narrative added' : ''
+        showToast(`Capture brief ${verb}${llmNote} · SAM: ${intel.sam_hits ?? 0} hits`, 'success')
+      } else if (skillId === 'sam-scan') {
+        setSkillWorkspace((w) => w && patchWorkspace(w))
+        showToast(`SAM scan saved · ${intel.sam_hits ?? 0} notice(s) via ${intel.sam || 'API'}`, 'success')
+      } else if (skillId === 'competitive-snapshot') {
+        setSkillWorkspace((w) => w && patchWorkspace(w))
+        showToast(`Competitive snapshot saved · ${intel.usaspending_rels ?? 0} relationships`, 'success')
       }
     } catch {
       showToast('Skill run failed', 'error')
@@ -5837,10 +5879,13 @@ export default function App() {
         <SkillWorkspacePanel
           workspace={skillWorkspace}
           loading={workspaceLoading}
+          useLlm={workspaceUseLlm}
+          onUseLlmChange={setWorkspaceUseLlm}
           onClose={() => setSkillWorkspace(null)}
           onScaffoldBrief={() => scaffoldPursuitBrief(!!skillWorkspace.briefExists)}
           onRunSkill={runPursuitSkill}
           onOpenVault={() => openVaultPath(skillWorkspace.briefPath, skillWorkspace.slug)}
+          onOpenArtifact={(path, label) => openVaultPath(path, label)}
           onTrack={() => {
             addToPipeline(skillWorkspace.row, 'expiring')
             showToast('Added to Pipeline', 'success')

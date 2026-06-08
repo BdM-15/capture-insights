@@ -48,6 +48,9 @@ export type GlossaryId =
   | 'your_tracking_status'
   | 'sam_search_saved'
   | 'track_pipeline'
+  | 'pursuit_workspace'
+  | 'capture_brief_enrich'
+  | 'vault_artifacts'
 
 export interface GlossaryEntry {
   label: string
@@ -351,6 +354,24 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
     tip: 'Adds this contract to your Pipeline sidebar — your personal shortlist of pursuits you are actively watching. It does not register with the government or send alerts; it keeps the row handy for SAM searches, vault briefs, and co-pilot questions.',
     vaultPath: conceptVaultPath('recompete-radar'),
     vaultAnchor: 'recompete-radar',
+  },
+  pursuit_workspace: {
+    label: 'Pursuit workspace',
+    tip: 'A slide-over panel for one recompete row. Run skills to pull SAM.gov notices and USASpending relationships into your Knowledge Vault under pursuits/<slug>/. Create brief = USASpending snapshot only; Run + enrich = live intel + optional LLM narrative.',
+    vaultPath: conceptVaultPath('recompete-radar'),
+    vaultAnchor: 'recompete-radar',
+  },
+  capture_brief_enrich: {
+    label: 'Enrich capture brief',
+    tip: 'Runs SAM scan + competitive snapshot, then rewrites capture_brief.md with a Live intel section. Check “Add LLM narrative” to append a short capture-manager read (Ollama). Without LLM you still get vault artifacts and structured data.',
+    vaultPath: conceptVaultPath('capture-brief'),
+    vaultAnchor: 'capture-brief',
+  },
+  vault_artifacts: {
+    label: 'Vault artifacts',
+    tip: 'Markdown files saved under pursuits/<slug>/ in your Knowledge Vault: capture brief (strategy), SAM scan (live notices), competitive snapshot (award relationships). Open any file in-app or in Obsidian.',
+    vaultPath: conceptVaultPath('capture-brief'),
+    vaultAnchor: 'capture-brief',
   },
 }
 

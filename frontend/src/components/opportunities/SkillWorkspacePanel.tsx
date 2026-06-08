@@ -3,12 +3,22 @@ import { getGlossaryTip } from '../../constants/captureGlossary'
 import { COMBO_TIER_META } from '../../utils/comboIntel'
 import type { OpportunityRow } from '../../utils/opportunitiesIntel'
 import { Button } from '../ui/Button'
+import { FieldTip } from '../ui/FieldTip'
 
 export interface WorkspaceSkill {
   id: string
   name: string
   status: string
   use_when: string
+  supports_llm?: boolean
+}
+
+export interface WorkspaceArtifact {
+  id: string
+  label: string
+  path: string
+  exists: boolean
+  bytes?: number
 }
 
 export interface SkillWorkspaceState {
@@ -17,25 +27,38 @@ export interface SkillWorkspaceState {
   briefPath: string
   briefExists: boolean
   skills: WorkspaceSkill[]
+  artifacts?: WorkspaceArtifact[]
+  lastIntel?: {
+    sam?: string
+    sam_hits?: number
+    usaspending_rels?: number
+    used_llm?: boolean
+  }
 }
 
 interface SkillWorkspacePanelProps {
   workspace: SkillWorkspaceState
   loading?: boolean
+  useLlm: boolean
+  onUseLlmChange: (v: boolean) => void
   onClose: () => void
   onScaffoldBrief: () => void
   onRunSkill: (skillId: string) => void
   onOpenVault: () => void
+  onOpenArtifact: (path: string, label: string) => void
   onTrack: () => void
 }
 
 export function SkillWorkspacePanel({
   workspace,
   loading,
+  useLlm,
+  onUseLlmChange,
   onClose,
   onScaffoldBrief,
   onRunSkill,
   onOpenVault,
+  onOpenArtifact,
   onTrack,
 }: SkillWorkspacePanelProps) {
   const row = workspace.row
@@ -48,7 +71,10 @@ export function SkillWorkspacePanel({
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles className="w-4 h-4 text-neon-magenta shrink-0" />
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-text-primary truncate">Pursuit workspace</div>
+            <div className="text-sm font-semibold text-text-primary truncate flex items-center gap-1">
+              Pursuit workspace
+              <FieldTip termId="pursuit_workspace" label="workspace" showLearnLink={false} />
+            </div>
             <div className="text-[10px] text-text-500 font-mono truncate">{workspace.slug}</div>
           </div>
         </div>
@@ -59,8 +85,17 @@ export function SkillWorkspacePanel({
 
       <div className="skill-workspace-body overflow-auto flex-1 p-4 space-y-4">
         <div className="insight magenta">
-          One place to scaffold vault artifacts and run capture skills for this contract — without leaving the recompete list.
+          Run skills to pull SAM.gov + USASpending intel into your vault. Enable LLM for a short capture-manager narrative (requires Ollama).
         </div>
+
+        {workspace.lastIntel && (
+          <div className="text-[10px] text-text-500 surface p-2 rounded-lg">
+            Last run: SAM via <span className="text-neon-cyan">{workspace.lastIntel.sam || '—'}</span>
+            {workspace.lastIntel.sam_hits != null && ` · ${workspace.lastIntel.sam_hits} notice(s)`}
+            {workspace.lastIntel.usaspending_rels != null && ` · ${workspace.lastIntel.usaspending_rels} USASpending rel(s)`}
+            {workspace.lastIntel.used_llm && <span className="text-neon-lime"> · LLM narrative added</span>}
+          </div>
+        )}
 
         <div className="surface p-3 rounded-xl space-y-2 text-xs">
           <div className="text-[10px] uppercase tracking-wide text-text-500 font-semibold">Contract snapshot</div>
@@ -93,6 +128,47 @@ export function SkillWorkspacePanel({
           </Button>
         </div>
 
+        {(workspace.artifacts?.length ?? 0) > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-text-500 font-semibold mb-2 flex items-center gap-1">
+              Vault artifacts
+              <FieldTip termId="vault_artifacts" label="artifacts" showLearnLink={false} />
+            </div>
+            <div className="space-y-1">
+              {workspace.artifacts!.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className={a.exists ? 'text-text-primary' : 'text-text-500'}>
+                    {a.label}
+                    {a.exists ? <span className="text-neon-lime ml-1">✓</span> : <span className="text-text-500 ml-1">—</span>}
+                  </span>
+                  {a.exists && (
+                    <button
+                      type="button"
+                      className="text-[10px] text-neon-cyan hover:underline shrink-0"
+                      onClick={() => onOpenArtifact(a.path, a.label)}
+                    >
+                      Open
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <label className="flex items-center gap-2 text-[10px] text-text-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={useLlm}
+            onChange={(e) => onUseLlmChange(e.target.checked)}
+            className="accent-neon-magenta"
+          />
+          <span className="inline-flex items-center gap-1">
+            Add LLM narrative on Capture Brief (Ollama — skips if offline)
+            <FieldTip termId="capture_brief_enrich" label="enrich" showLearnLink={false} />
+          </span>
+        </label>
+
         <div>
           <div className="text-[10px] uppercase tracking-wide text-text-500 font-semibold mb-2">Skills</div>
           <div className="space-y-2">
@@ -100,15 +176,17 @@ export function SkillWorkspacePanel({
               <div key={skill.id} className="tool-card">
                 <div className="tool-card-name">{skill.name}</div>
                 <div className="tool-card-desc mt-1">{skill.use_when}</div>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="pill text-[9px] text-neon-amber">{skill.status}</span>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className={`pill text-[9px] ${skill.status === 'active' ? 'text-neon-lime' : 'text-neon-amber'}`}>
+                    {skill.status}
+                  </span>
                   <button
                     type="button"
                     className="action-btn pipeline text-xs"
                     disabled={loading}
                     onClick={() => onRunSkill(skill.id)}
                   >
-                    Run
+                    Run{skill.id === 'capture-brief' && useLlm ? ' + enrich' : ''}
                   </button>
                 </div>
               </div>
@@ -117,8 +195,7 @@ export function SkillWorkspacePanel({
         </div>
 
         <div className="text-[10px] text-text-500">
-          Vault path: <span className="font-mono text-text-400">{workspace.briefPath}</span>
-          {workspace.briefExists ? ' · brief on disk' : ' · brief not created yet'}
+          Folder: <span className="font-mono text-text-400">pursuits/{workspace.slug}/</span>
         </div>
       </div>
     </div>

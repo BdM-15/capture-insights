@@ -19,3 +19,24 @@ def pursuit_slug(row: Dict[str, Any]) -> str:
 
 def pursuit_brief_path(slug: str) -> str:
     return f"pursuits/{slug}/01_capture/strategy/capture_brief.md"
+
+
+def pursuit_sam_scan_path(slug: str) -> str:
+    return f"pursuits/{slug}/02_intel/sam_scan.md"
+
+
+def pursuit_competitive_path(slug: str) -> str:
+    return f"pursuits/{slug}/02_intel/competitive_snapshot.md"
+
+
+def pursuit_readme_path(slug: str) -> str:
+    return f"pursuits/{slug}/README.md"
+
+
+def pursuit_artifact_paths(slug: str) -> Dict[str, str]:
+    return {
+        "brief": pursuit_brief_path(slug),
+        "sam_scan": pursuit_sam_scan_path(slug),
+        "competitive": pursuit_competitive_path(slug),
+        "readme": pursuit_readme_path(slug),
+    }

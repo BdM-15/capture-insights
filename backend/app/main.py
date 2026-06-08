@@ -788,7 +788,7 @@ async def pursuit_run_skill(req: PursuitSkillRequest):
     from .pursuit_workspace import run_pursuit_skill
 
     brain_names = [str(b.get("name", "")) for b in (req.brain or []) if b.get("name")]
-    return run_pursuit_skill(
+    return await run_pursuit_skill(
         req.skill_id,
         req.item or {},
         req.naics,
