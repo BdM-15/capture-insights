@@ -359,7 +359,7 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
   },
   pursuit_workspace: {
     label: 'Pursuit workspace',
-    tip: 'A slide-over panel for one recompete row. Run skills to save drafts under pursuits/<slug>/ (Artifacts page). Create brief = USASpending snapshot; Run + enrich = SAM + competitive intel + optional LLM. Curated knowledge stays in Knowledge Vault (+brain).',
+    tip: 'A slide-over panel for one recompete row. Run skills to save drafts under pursuits/<slug>/ (Studio page). Create brief = USASpending snapshot; Run + enrich = SAM + competitive intel + optional LLM. Curated knowledge stays in Knowledge Vault (+brain).',
     vaultPath: conceptVaultPath('recompete-radar'),
     vaultAnchor: 'recompete-radar',
   },
@@ -371,7 +371,7 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
   },
   vault_artifacts: {
     label: 'Vault artifacts',
-    tip: 'Skill-generated markdown under pursuits/<slug>/ — browse on Workflow → Artifacts, not Knowledge Vault. Includes capture brief, SAM scan, battlecard, etc. Delete test folders anytime; promote only curated intel to brain/ or global/.',
+    tip: 'Skill-generated markdown under pursuits/<slug>/ — browse on Workflow → Studio, not Knowledge Vault. Includes capture brief, SAM scan, battlecard, etc. Delete test folders anytime; promote only curated intel to brain/ or global/.',
     vaultPath: conceptVaultPath('capture-brief'),
     vaultAnchor: 'capture-brief',
   },

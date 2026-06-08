@@ -43,7 +43,7 @@ export function DocumentPreviewPanel({
   const isArtifact = (doc.path || '').replace(/\\/g, '/').startsWith('pursuits/')
   const accent = isArtifact ? 'artifacts' : 'vault'
   const Icon = isArtifact ? FileStack : BookOpen
-  const label = isArtifact ? 'Artifact preview' : 'Vault preview'
+  const label = isArtifact ? 'Studio preview' : 'Vault preview'
 
   const rightOffset = stackWithWorkspace ? WORKSPACE_WIDTH : 0
   const maxWidth = Math.max(

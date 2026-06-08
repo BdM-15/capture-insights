@@ -5258,7 +5258,7 @@ export default function App() {
           )}
 
           <CollapsibleSection
-            title="Pursuit artifacts"
+            title="Pursuit outputs"
             subtitle="From Future Opportunities → Workspace skills"
             icon={FolderOpen}
             accent="magenta"
@@ -5288,7 +5288,7 @@ export default function App() {
       return (
         <div className="page-sections">
           <div className="insight purple mb-3">
-            <strong className="text-text-primary">Foundational curated knowledge</strong> — global wiki concepts, brain entries (competitors, agencies), and glossary education. Skill-generated pursuit drafts live under <button type="button" onClick={() => setSidebar('artifacts')} className="text-neon-cyan hover:underline">Artifacts</button>, not here.
+            <strong className="text-text-primary">Foundational curated knowledge</strong> — global wiki concepts, brain entries (competitors, agencies), and glossary education. Skill-generated pursuit drafts live under <button type="button" onClick={() => setSidebar('artifacts')} className="text-neon-cyan hover:underline">Studio</button>, not here.
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
@@ -5686,8 +5686,8 @@ export default function App() {
       return (
         <div className="page-sections">
           <div className="insight mb-3">
-            Skill catalog and co-pilot stubs. Pursuit outputs from Workspace land in{' '}
-            <button type="button" onClick={() => setSidebar('artifacts')} className="text-neon-cyan hover:underline">Artifacts</button>
+            Agent skill catalog and co-pilot stubs. Pursuit outputs from Workspace land in{' '}
+            <button type="button" onClick={() => setSidebar('artifacts')} className="text-neon-cyan hover:underline">Studio</button>
             {' '}— curated knowledge stays in{' '}
             <button type="button" onClick={() => setSidebar('vault')} className="text-neon-cyan hover:underline">Knowledge Vault</button>.
           </div>

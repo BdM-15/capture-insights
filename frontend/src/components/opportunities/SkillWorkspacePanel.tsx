@@ -119,7 +119,7 @@ export function SkillWorkspacePanel({
           >
             + Track
           </Button>
-          <Button variant="soft" onClick={onOpenVault} disabled={!workspace.briefExists} title="Opens capture brief in Artifacts reader">
+          <Button variant="soft" onClick={onOpenVault} disabled={!workspace.briefExists} title="Opens capture brief in Studio preview">
             <BookOpen className="w-3.5 h-3.5" /> Open brief
           </Button>
           <Button variant="soft" onClick={onScaffoldBrief} disabled={loading}>

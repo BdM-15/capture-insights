@@ -43,7 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: 'magenta',
     items: [
       { id: 'pipeline', label: 'Pipeline', icon: Briefcase, accent: 'magenta' },
-      { id: 'artifacts', label: 'Artifacts', icon: FileStack, accent: 'magenta' },
+      { id: 'artifacts', label: 'Studio', icon: FileStack, accent: 'magenta' },
       { id: 'vault', label: 'Knowledge Vault', icon: BookOpen, accent: 'purple' },
     ],
   },
@@ -52,7 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: 'magenta',
     items: [
       { id: 'tools', label: 'MCP Tools', icon: Wrench, accent: 'magenta' },
-      { id: 'skills', label: 'Studio', icon: Layers, accent: 'magenta' },
+      { id: 'skills', label: 'Agent Skills', icon: Layers, accent: 'magenta' },
     ],
   },
   {
@@ -105,9 +105,9 @@ export const VIEW_META: Record<SidebarId, ViewMetaEntry> = {
     accent: 'magenta',
   },
   artifacts: {
-    title: 'Artifacts',
+    title: 'Studio',
     subtitle: (ctx) =>
-      `${ctx.artifactCount ?? 0} pursuit folder${(ctx.artifactCount ?? 0) === 1 ? '' : 's'} · skill-generated drafts under pursuits/ (not foundational wiki)`,
+      `${ctx.artifactCount ?? 0} pursuit folder${(ctx.artifactCount ?? 0) === 1 ? '' : 's'} · skill outputs and previews under pursuits/`,
     icon: FileStack,
     accent: 'magenta',
   },
@@ -125,8 +125,8 @@ export const VIEW_META: Record<SidebarId, ViewMetaEntry> = {
     accent: 'magenta',
   },
   skills: {
-    title: 'Studio',
-    subtitle: 'Skill catalog · run capture and acquisition automations from the dashboard',
+    title: 'Agent Skills',
+    subtitle: '1102 + capture skill catalog · pairs with MCP Tools for live agent actions',
     icon: Layers,
     accent: 'magenta',
   },
