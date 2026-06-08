@@ -20,6 +20,7 @@ import { DataTable } from './components/lists/DataTable'
 import { ReadinessStrip } from './components/opportunities/ReadinessStrip'
 import { RecompeteRadarTable } from './components/opportunities/RecompeteRadarTable'
 import { PursuitArtifactsList, type PursuitFolder } from './components/opportunities/PursuitArtifactsList'
+import { DocumentPreviewPanel } from './components/shell/DocumentPreviewPanel'
 import { SkillWorkspacePanel, type SkillWorkspaceState } from './components/opportunities/SkillWorkspacePanel'
 import { EntryRow } from './components/lists/EntryRow'
 import { BrainEntryCard } from './components/lists/BrainEntryCard'
@@ -269,7 +270,7 @@ export default function App() {
   const [pursuitFolders, setPursuitFolders] = useState<PursuitFolder[]>([])
   const [vaultAudit, setVaultAudit] = useState<{ ok: boolean; message: string; pursuit_slugs?: string[] } | null>(null)
 
-  const isPursuitPath = (path: string) => (path || '').replace(/\\/g, '/').startsWith('pursuits/')
+
   // Phase 3 vault maintenance (lint + index). These are the exact schema chores you want the LLM/agent to run for you.
   // Buttons below let you trigger them from inside the app instead of terminal.
   const [lintReport, setLintReport] = useState<any>(null)
@@ -285,12 +286,14 @@ export default function App() {
     relPath: string,
     title: string | undefined,
     target: 'vault' | 'artifacts',
-    options?: { closeWorkspace?: boolean },
+    options?: { closeWorkspace?: boolean; navigate?: boolean },
   ) {
-    if (options?.closeWorkspace !== false) {
+    if (options?.closeWorkspace) {
       setSkillWorkspace(null)
     }
-    setSidebar(target)
+    if (options?.navigate !== false) {
+      setSidebar(target)
+    }
     const normPath = relPath.replace(/\\/g, '/')
     try {
       const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(normPath)}`)
@@ -304,13 +307,6 @@ export default function App() {
             content: d.content,
             excerpt: d.content.slice(0, 600),
           })
-          requestAnimationFrame(() => {
-            document.querySelector('.main-panel')?.scrollTo({ top: 0, behavior: 'smooth' })
-          })
-          showToast(
-            `Opened ${title || 'file'} in ${target === 'artifacts' ? 'Artifacts' : 'Knowledge Vault'}`,
-            'success',
-          )
           return true
         }
       }
@@ -321,34 +317,40 @@ export default function App() {
     return false
   }
 
-  /** Open pursuit skill outputs (pursuits/<slug>/). */
-  async function openArtifactPath(artifactPath: string, title?: string, options?: { closeWorkspace?: boolean }) {
+  async function reloadPreviewDoc() {
+    if (!viewedWiki?.path) return
+    try {
+      const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(viewedWiki.path.replace(/\\/g, '/'))}`)
+      const d = await r.json()
+      if (d.ok && d.content) {
+        setViewedWiki({
+          ...viewedWiki,
+          content: d.content,
+          path: (d.path || viewedWiki.path).replace(/\\/g, '/'),
+        })
+      }
+    } catch {
+      showToast('Reload failed', 'error')
+    }
+  }
+
+  /** Open pursuit skill outputs (pursuits/<slug>/) in side preview panel. */
+  async function openArtifactPath(artifactPath: string, title?: string, options?: { closeWorkspace?: boolean; navigate?: boolean }) {
     return loadKnowledgeDoc(artifactPath, title, 'artifacts', options)
   }
 
-  /** Open atomic concept page in Knowledge Vault reader (always loads full file). */
+  /** Open curated vault page in side preview panel. */
+  async function openVaultPreview(vaultPath: string, title?: string, options?: { navigate?: boolean }) {
+    return loadKnowledgeDoc(vaultPath, title, 'vault', options)
+  }
+
+  /** Open atomic concept page in side preview (Knowledge Vault context). */
   async function openGlossaryInVault(termId: GlossaryId) {
     const entry = CAPTURE_GLOSSARY[termId]
     if (!entry) return
-    setSidebar('vault')
-    const normPath = entry.vaultPath.replace(/\\/g, '/')
-    try {
-      const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(normPath)}`)
-      if (r.ok) {
-        const d = await r.json()
-        if (d.ok && d.content) {
-          setViewedWiki({
-            name: entry.vaultTitle || entry.label,
-            path: normPath,
-            content: d.content,
-            excerpt: d.content.slice(0, 600),
-          })
-          return
-        }
-      }
+    const ok = await openVaultPreview(entry.vaultPath, entry.vaultTitle || entry.label)
+    if (!ok) {
       showToast('Concept page not found — run: python scripts/seed_capture_concepts.py', 'error')
-    } catch {
-      showToast('Could not load concept from vault', 'error')
     }
   }
 
@@ -5243,7 +5245,7 @@ export default function App() {
           </div>
 
           <div className="insight magenta mb-3">
-            <strong className="text-text-primary">Skill-generated drafts</strong> — not the curated Knowledge Vault. Today these are structured templates from USASpending + SAM; richer deliverables come as skills and agents mature. Promote only curated intel into Vault via +brain or manual Obsidian edits.
+            <strong className="text-text-primary">Skill-generated drafts</strong> — not the curated Knowledge Vault. Click <strong className="text-text-primary">Open</strong> to preview in the side panel (same pattern as Workspace). Richer deliverables come as skills and agents mature.
           </div>
 
           {vaultAudit && (
@@ -5253,34 +5255,6 @@ export default function App() {
                 <span className="text-text-500"> · On disk: {vaultAudit.pursuit_slugs!.join(', ')}</span>
               )}
             </div>
-          )}
-
-          {viewedWiki && isPursuitPath(viewedWiki.path) && (
-            <CollapsibleSection
-              title={viewedWiki.name || 'Artifact'}
-              subtitle={viewedWiki.path || 'In-app reader'}
-              icon={Eye}
-              accent="magenta"
-              defaultOpen
-              badge={
-                <button
-                  type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewedWiki(null) }}
-                  className="text-[10px] px-2 py-0.5 border border-edge rounded hover:bg-ink-card shrink-0"
-                >
-                  Close
-                </button>
-              }
-            >
-              <div className="wiki-viewer-body">
-                {(viewedWiki.content || viewedWiki.excerpt || '(no preview)')}
-              </div>
-              <div className="action-group mt-2">
-                <button onClick={() => { try { navigator.clipboard.writeText(viewedWiki.path || '') } catch {} }} className="action-btn vault text-[10px]">
-                  Copy path
-                </button>
-              </div>
-            </CollapsibleSection>
           )}
 
           <CollapsibleSection
@@ -5323,64 +5297,6 @@ export default function App() {
             <MetricCard label="Native .md" value={String(brainWiki.length)} accent="purple" tooltip="Synthesized files on disk in brain/" />
             <MetricCard label="NAICS slice" value={naics} accent="cyan" tooltip="Current dashboard filter feeding seeds" />
           </div>
-
-          {viewedWiki && !isPursuitPath(viewedWiki.path) && (
-            <CollapsibleSection
-              title={viewedWiki.name || 'Wiki page'}
-              subtitle={viewedWiki.path || 'In-app reader'}
-              icon={Eye}
-              accent="purple"
-              defaultOpen
-              badge={
-                <button
-                  type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewedWiki(null) }}
-                  className="text-[10px] px-2 py-0.5 border border-edge rounded hover:bg-ink-card shrink-0"
-                >
-                  Close
-                </button>
-              }
-            >
-              <div className="wiki-viewer-body">
-                {(viewedWiki.content || viewedWiki.excerpt || '(no preview — click Load complete file)')}
-              </div>
-              <div className="action-group mt-2">
-                <button
-                  onClick={() => {
-                    const txt = viewedWiki.content || viewedWiki.excerpt || ''
-                    try { navigator.clipboard.writeText(txt) } catch {}
-                  }}
-                  className="action-btn vault text-[10px]"
-                >
-                  Copy text
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent((viewedWiki.path || '').replace(/\\/g, '/'))}`)
-                      const d = await r.json()
-                      if (d.ok && d.content) setViewedWiki({ ...viewedWiki, content: d.content, path: (d.path || viewedWiki.path).replace(/\\/g, '/') })
-                    } catch {}
-                  }}
-                  className="action-btn vault text-[10px]"
-                >
-                  Load complete file
-                </button>
-                <button onClick={() => { try { navigator.clipboard.writeText(viewedWiki.path || '') } catch {} }} className="action-btn vault text-[10px]">
-                  Copy path
-                </button>
-                <button
-                  onClick={() => {
-                    const help = `cd C:\\Users\\benma\\capture-insights\n# In Obsidian: Open folder as vault → data/knowledge\n# Then quick switcher or file tree to: ${viewedWiki.path}`
-                    try { navigator.clipboard.writeText(help) } catch {}
-                  }}
-                  className="action-btn vault text-[10px]"
-                >
-                  Obsidian jump
-                </button>
-              </div>
-            </CollapsibleSection>
-          )}
 
           <CollapsibleSection
             title="Capture Insights Glossary"
@@ -5545,10 +5461,10 @@ export default function App() {
                     type={g.type || 'global'}
                     excerpt={(g.excerpt || '').slice(0, 160)}
                     path={g.path}
-                    onClick={() => setViewedWiki(g)}
+                    onClick={() => openVaultPreview(g.path, g.name, { navigate: false })}
                     actions={
                       <>
-                        <button onClick={() => setViewedWiki(g)} className="action-btn vault text-[10px]">
+                        <button onClick={() => openVaultPreview(g.path, g.name, { navigate: false })} className="action-btn vault text-[10px]">
                           <Eye size={11}/> View
                         </button>
                         <button onClick={() => { try { navigator.clipboard.writeText(g.path || '') } catch {} }} className="action-btn vault text-[10px]">
@@ -5582,10 +5498,10 @@ export default function App() {
                   type={w.type}
                   excerpt={(w.excerpt || w.content || '').slice(0, 160)}
                   path={w.path}
-                  onClick={() => setViewedWiki(w)}
+                  onClick={() => openVaultPreview(w.path, w.name, { navigate: false })}
                   actions={
                     <>
-                      <button onClick={() => setViewedWiki(w)} className="action-btn vault text-[10px]">
+                      <button onClick={() => openVaultPreview(w.path, w.name, { navigate: false })} className="action-btn vault text-[10px]">
                         <Eye size={11}/> View
                       </button>
                       <button onClick={() => { try { navigator.clipboard.writeText(w.path || '') } catch {} }} className="action-btn vault text-[10px]">
@@ -6035,6 +5951,15 @@ export default function App() {
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
 
+      {viewedWiki && (
+        <DocumentPreviewPanel
+          doc={viewedWiki}
+          stackWithWorkspace={!!skillWorkspace}
+          onClose={() => setViewedWiki(null)}
+          onReload={reloadPreviewDoc}
+        />
+      )}
+
       {skillWorkspace && (
         <SkillWorkspacePanel
           workspace={skillWorkspace}
@@ -6044,8 +5969,8 @@ export default function App() {
           onClose={() => setSkillWorkspace(null)}
           onScaffoldBrief={() => scaffoldPursuitBrief(!!skillWorkspace.briefExists)}
           onRunSkill={runPursuitSkill}
-          onOpenVault={() => openArtifactPath(skillWorkspace.briefPath, skillWorkspace.slug)}
-          onOpenArtifact={(path, label) => openArtifactPath(path, label)}
+          onOpenVault={() => openArtifactPath(skillWorkspace.briefPath, skillWorkspace.slug, { navigate: false })}
+          onOpenArtifact={(path, label) => openArtifactPath(path, label, { navigate: false })}
           onTrack={() => {
             addToPipeline(skillWorkspace.row, 'expiring')
             showToast('Added to Pipeline', 'success')

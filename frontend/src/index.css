@@ -457,6 +457,46 @@ body {
   min-height: 0;
 }
 
+/* Theseus-style document preview (Artifacts + Knowledge Vault) */
+.document-preview-pane {
+  background: rgba(5, 7, 13, 0.98);
+  backdrop-filter: blur(20px);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.55);
+}
+
+.document-preview-pane--artifacts {
+  border-left: 1px solid rgba(255, 0, 170, 0.28);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 0, 170, 0.08);
+}
+
+.document-preview-pane--vault {
+  border-left: 1px solid rgba(168, 85, 247, 0.28);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.55), 0 0 24px rgba(168, 85, 247, 0.08);
+}
+
+.document-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--edge);
+  flex-shrink: 0;
+}
+
+.document-preview-body {
+  min-height: 0;
+}
+
+.document-preview-content {
+  @apply bg-ink-950/80 border border-edge rounded-lg p-3 min-w-0;
+}
+
+.document-preview-footer {
+  flex-shrink: 0;
+  background: rgba(5, 7, 13, 0.6);
+}
+
 .resize-handle {
   position: absolute;
   left: -4px;

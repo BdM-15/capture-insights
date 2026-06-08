@@ -85,7 +85,7 @@ export function SkillWorkspacePanel({
 
       <div className="skill-workspace-body overflow-auto flex-1 p-4 space-y-4">
         <div className="insight magenta">
-          Run skills to save drafts under <span className="font-mono">pursuits/{workspace.slug}/</span>. Open links go to <strong className="text-text-primary">Artifacts</strong> — not the curated Knowledge Vault.
+          Run skills to save drafts under <span className="font-mono">pursuits/{workspace.slug}/</span>. <strong className="text-text-primary">Open</strong> previews in the side panel (Workspace stays open).
         </div>
 
         {workspace.lastIntel && (
