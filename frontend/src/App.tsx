@@ -17,6 +17,8 @@ import { Button } from './components/ui/Button'
 import { EmptyState } from './components/ui/EmptyState'
 import { Toast, type ToastState, type ToastTone } from './components/ui/Toast'
 import { DataTable } from './components/lists/DataTable'
+import { RecompeteRowCard } from './components/lists/RecompeteRowCard'
+import { ReadinessStrip } from './components/opportunities/ReadinessStrip'
 import { EntryRow } from './components/lists/EntryRow'
 import { BrainEntryCard } from './components/lists/BrainEntryCard'
 import { AskCoPilotButton } from './components/ui/AskCoPilotButton'
@@ -121,11 +123,11 @@ import {
   type ComboInsightsData,
   type ComboMatch,
   type ComboSignal,
+  type ComboTier,
 } from './utils/comboIntel'
 import {
   buildClientOpportunitiesIntel,
   parseOpportunitiesIntel,
-  signalChips,
   type OpportunitiesIntelData,
   type OpportunityRow,
   type WorkstationReadiness,
@@ -229,6 +231,8 @@ export default function App() {
   const [topRecipients, setTopRecipients] = useState<any[]>([])
   const [marketPotential, setMarketPotential] = useState<MarketPotentialData | null>(null)
   const [oppSearch, setOppSearch] = useState('')
+  const [oppTierFilter, setOppTierFilter] = useState<'all' | ComboTier>('all')
+  const [oppExpandedKey, setOppExpandedKey] = useState<string | null>(null)
   const [agencySearch, setAgencySearch] = useState('')
   const [competitorSearch, setCompetitorSearch] = useState('')
   const [teamingTarget, setTeamingTarget] = useState('')
@@ -1555,83 +1559,68 @@ export default function App() {
         const oppRows = resolvedOpp.rows || []
         const oppSummary = resolvedOpp.summary || {}
         const oppFromFallback = !opportunitiesIntel?.rows?.length && oppRows.length > 0
-        const samBudget = readiness?.sam_budget || resolvedOpp.readiness?.sam_budget
-        const filteredOpp = oppRows.filter((e: OpportunityRow) =>
-          !oppSearch ||
-          (e.recipient || '').toLowerCase().includes(oppSearch.toLowerCase()) ||
-          (e.agency || '').toLowerCase().includes(oppSearch.toLowerCase())
-        )
+        const oppRowKey = (e: OpportunityRow, i: number) =>
+          e.award_key || `${e.recipient}-${e.end_date}-${i}`
+        const filteredOpp = oppRows.filter((e: OpportunityRow) => {
+          const matchesSearch =
+            !oppSearch ||
+            (e.recipient || '').toLowerCase().includes(oppSearch.toLowerCase()) ||
+            (e.agency || '').toLowerCase().includes(oppSearch.toLowerCase())
+          const matchesTier = oppTierFilter === 'all' || e.combo_tier === oppTierFilter
+          return matchesSearch && matchesTier
+        })
         const samMonitorCount = pipeline.filter((p: { type?: string }) => p.type === 'sam-monitor').length
-        const readinessChecks = readiness?.checks || {}
+        const tierFilters: { id: 'all' | ComboTier; label: string }[] = [
+          { id: 'all', label: 'All' },
+          { id: 'prime', label: 'Prime' },
+          { id: 'advance', label: 'Advance' },
+          { id: 'monitor', label: 'Monitor' },
+        ]
         return (
           <div className="page-sections">
-            <CollapsibleSection
-              title="Workstation Readiness"
-              subtitle="SAM budget · MCP · data · keys"
-              icon={Settings}
-              accent="cyan"
-              defaultOpen={readiness?.status === 'degraded'}
-            >
-              <div className="flex flex-wrap gap-2 mb-2">
-                <span className={`pill text-[10px] ${readiness?.status === 'ready' ? 'text-neon-lime' : 'text-neon-amber'}`}>
-                  {readiness?.status === 'ready' ? '● Ready' : '● Degraded'}
-                </span>
-                <span className={`pill text-[10px] ${readinessChecks.duckdb ? 'text-neon-lime' : 'text-neon-amber'}`}>
-                  DuckDB {readinessChecks.duckdb ? '✓' : '✗'}
-                </span>
-                <span className={`pill text-[10px] ${readiness?.sam_api_configured ? 'text-neon-lime' : 'text-text-500'}`}>
-                  SAM key {readiness?.sam_api_configured ? '✓' : '—'}
-                </span>
-                <span className={`pill text-[10px] ${readinessChecks.mcp ? 'text-neon-lime' : 'text-text-500'}`}>
-                  MCP {readiness?.mcp_tools_count ? `${readiness.mcp_tools_count} tools` : 'off'}
-                </span>
-                {samBudget && (
-                  <span className="pill text-[10px] text-neon-cyan">
-                    SAM budget {samBudget.remaining}/{samBudget.limit} today
-                  </span>
-                )}
-              </div>
-              <div className="text-[10px] text-text-500">
-                Proactive SAM scans top 3 scored rows when budget allows. Deterministic monitors work without API calls.
-              </div>
-            </CollapsibleSection>
+            <ReadinessStrip readiness={readiness} />
 
-            <div className="flex flex-wrap gap-2 mb-1">
-              <StatChip
+            <div className="opp-summary-grid">
+              <MetricCard
                 label="Scored rows"
                 value={String(oppSummary.row_count ?? filteredOpp.length)}
-                termId="recompete_radar"
-                onLearnMore={openGlossaryInVault}
+                accent="magenta"
+                glossaryId="recompete_radar"
+                onGlossaryLearn={openGlossaryInVault}
               />
-              <StatChip
+              <MetricCard
                 label="Hot agency"
                 value={String(oppSummary.hot_agency_count ?? 0)}
-                termId="hot_agency"
-                onLearnMore={openGlossaryInVault}
+                accent="magenta"
+                glossaryId="hot_agency"
+                onGlossaryLearn={openGlossaryInVault}
               />
-              <StatChip
+              <MetricCard
                 label="Brain overlap"
                 value={String(oppSummary.brain_overlap ?? 0)}
-                termId="customer_position"
-                onLearnMore={openGlossaryInVault}
+                accent="lime"
+                glossaryId="customer_position"
+                onGlossaryLearn={openGlossaryInVault}
               />
-              <StatChip
+              <MetricCard
                 label="Hot, no monitor"
                 value={String(oppSummary.no_monitor_hot ?? 0)}
-                termId="sam_live_discovery"
-                onLearnMore={openGlossaryInVault}
+                accent="amber"
+                glossaryId="sam_live_discovery"
+                onGlossaryLearn={openGlossaryInVault}
               />
-              <StatChip
+              <MetricCard
                 label="Prime $"
                 value={`$${Number(oppSummary.prime_millions ?? 0).toFixed(1)}M`}
-                termId="combo_tier"
-                onLearnMore={openGlossaryInVault}
+                accent="cyan"
+                glossaryId="combo_tier"
+                onGlossaryLearn={openGlossaryInVault}
               />
             </div>
 
             <CollapsibleSection
               title="Recompete Radar"
-              subtitle={`${filteredOpp.length} of ${oppRows.length} scored · PoP ends in 36 months`}
+              subtitle={`${filteredOpp.length} shown · ${oppRows.length} scored · 36mo horizon`}
               icon={Radar}
               accent="magenta"
               defaultOpen
@@ -1646,230 +1635,132 @@ export default function App() {
                 </button>
               }
             >
-              <div className="insight magenta mb-3">
-                Scored recompetes from USASpending intersections — deterministic ranking before any LLM. Prioritize prime/advance tiers, hot agencies, and Brain overlap; create SAM monitors for rows without coverage.
-              </div>
-              {(resolvedOpp.meta?.scoring_note) && (
-                <div className={`text-[10px] mb-2 ${oppFromFallback ? 'text-neon-amber' : 'text-text-500'}`}>
-                  {resolvedOpp.meta.scoring_note}
-                  {oppFromFallback && ' Restart backend for proactive SAM hits + budget tracking.'}
-                </div>
-              )}
-              {resolvedOpp.meta?.proactive_sam?.enabled && (
-                <div className="text-[10px] text-neon-lime mb-2">
-                  Proactive SAM: live hits loaded for top {resolvedOpp.meta.proactive_sam.rows_targeted} rows.
-                </div>
-              )}
-              {resolvedOpp.meta?.proactive_sam?.reason && !resolvedOpp.meta.proactive_sam.enabled && (
-                <div className="text-[10px] text-text-500 mb-2">
-                  Proactive SAM skipped: {resolvedOpp.meta.proactive_sam.reason}
-                </div>
-              )}
-              <div className="text-[10px] text-neon-lime mb-2">Monitor (deterministic) seeds keywords from agency + incumbent. Monitor (smart) uses LLM + MCP when enabled.</div>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
                 <input
                   value={oppSearch}
                   onChange={(e) => setOppSearch(e.target.value)}
-                  placeholder="Filter by recipient or agency name..."
-                  className="input-field flex-1 min-w-[200px]"
+                  placeholder="Filter recipient or agency…"
+                  className="input-field flex-1 min-w-[180px]"
                 />
-                {oppSearch && (
+                <div className="flex flex-wrap gap-1">
+                  {tierFilters.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setOppTierFilter(t.id)}
+                      className={`filter-pill ${oppTierFilter === t.id ? 'filter-pill-active' : ''}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {(oppSearch || oppTierFilter !== 'all') && (
                   <button
                     type="button"
-                    onClick={() => setOppSearch('')}
+                    onClick={() => { setOppSearch(''); setOppTierFilter('all') }}
                     className="pill text-[10px] text-neon-cyan hover:border-neon-cyan/50"
                   >
-                    Clear filter ×
+                    Clear
                   </button>
                 )}
               </div>
-              {oppSearch && (
-                <div className="text-[10px] text-text-500 mb-2">
-                  Linked from Agency Intelligence — showing matches for <span className="text-neon-cyan">{oppSearch}</span>
+              {(resolvedOpp.meta?.proactive_sam?.enabled || oppFromFallback) && (
+                <div className={`text-[10px] mb-2 ${oppFromFallback ? 'text-neon-amber' : 'text-text-500'}`}>
+                  {resolvedOpp.meta?.proactive_sam?.enabled
+                    ? `Live SAM hits on top ${resolvedOpp.meta.proactive_sam.rows_targeted} rows.`
+                    : resolvedOpp.meta?.scoring_note}
                 </div>
               )}
-              <DataTable
-                data={filteredOpp.slice(0, 15)}
-                rowKey={(e: OpportunityRow, i) => e.award_key || `${e.recipient}-${e.end_date}-${i}`}
-                rowClassName={(e: OpportunityRow) => hotAgencies.has(e.agency || '') ? 'intensity-row-hot' : ''}
-                emptyMessage="No scored recompetes in current slice."
-                onGlossaryLearn={openGlossaryInVault}
-                columns={[
-                  {
-                    key: 'score',
-                    header: 'Score',
-                    headerTip: 'combo_signal',
-                    cellClassName: 'tabular-nums text-neon-lime text-xs font-medium',
-                    render: (e: OpportunityRow) => e.display_score ?? e.combo_score ?? '—',
-                  },
-                  {
-                    key: 'tier',
-                    header: 'Tier',
-                    headerTip: 'combo_tier',
-                    cellClassName: 'text-xs',
-                    render: (e: OpportunityRow) => (
-                      <span className={COMBO_TIER_META[e.combo_tier]?.tone || 'text-text-500'}>
-                        {e.tier_label || COMBO_TIER_META[e.combo_tier]?.label || e.combo_tier}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'end',
-                    header: 'Ends',
-                    cellClassName: 'font-mono text-xs',
-                    render: (e: OpportunityRow) => (
-                      <span title={`${e.months_to_end ?? '?'}mo`}>{e.end_date?.slice?.(0, 7) || e.end_date || '—'}</span>
-                    ),
-                  },
-                  {
-                    key: 'recipient',
-                    header: 'Recipient',
-                    render: (e: OpportunityRow) => (
-                      <span className="truncate max-w-[160px] block" title={e.recipient}>
-                        {e.recipient || '—'}
-                        {e.award_key && <span className="cite-chip ml-1">{String(e.award_key).slice(0, 10)}</span>}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'oblig',
-                    header: '$M',
-                    cellClassName: 'tabular-nums text-neon-cyan',
-                    render: (e: OpportunityRow) => `$${(e.obligation_millions ?? (e.obligation || 0) / 1e6).toFixed(1)}M`,
-                  },
-                  {
-                    key: 'agency',
-                    header: 'Agency',
-                    cellClassName: 'text-neon-cyan text-xs',
-                    render: (e: OpportunityRow) => (e.agency || '').slice(0, 20),
-                  },
-                  {
-                    key: 'signals',
-                    header: 'Signals',
-                    headerTip: 'combo_signal',
-                    render: (e: OpportunityRow) => (
-                      <span className="flex flex-wrap gap-0.5">
-                        {signalChips(e.signals).slice(0, 4).map((s) => (
-                          <span key={s.key} className={`text-[9px] ${s.tone}`} title={getGlossaryTip(s.key as GlossaryId)}>
-                            {s.label}
-                          </span>
-                        ))}
-                        {e.has_monitor && <span className="text-[9px] text-neon-cyan" title="Pipeline monitor exists">📡</span>}
-                        {e.in_brain && <span className="text-[9px] text-neon-lime" title={getGlossaryTip('customer_position')}>🧠</span>}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'sam',
-                    header: 'SAM',
-                    headerTip: 'sam_live_discovery',
-                    render: (e: OpportunityRow) => {
-                      const hits = e.live_sam_hits || []
-                      if (hits.length > 0) {
-                        return (
-                          <span className="text-[9px] text-neon-lime" title={hits.map((h) => h.title).join(' · ')}>
-                            {hits.length} live
-                          </span>
-                        )
-                      }
-                      return (
-                        <span className="text-[9px] text-text-500 truncate max-w-[80px] block" title={e.suggested_sam_keywords}>
-                          {e.suggested_sam_keywords?.slice(0, 18) || '—'}
-                        </span>
-                      )
-                    },
-                  },
-                  {
-                    key: 'actions',
-                    header: '',
-                    align: 'right',
-                    render: (e: OpportunityRow) => (
-                      <div className="row-actions">
-                        <button onClick={() => addToPipeline(e, 'expiring')} className="action-btn pipeline text-xs">+ pipeline</button>
-                        <AskCoPilotButton
-                          prompt={`Scored recompete (${e.tier_label || e.combo_tier}, score ${e.display_score}): ${e.recipient || 'unknown'} at ${e.agency || 'unknown'} ends ${e.end_date} ($${(e.obligation_millions ?? 0).toFixed(1)}M). Signals: ${(e.signals || []).join(', ')}. Suggested SAM keywords: ${e.suggested_sam_keywords || 'n/a'}. What capture moves and notices should I prioritize?`}
-                          onAsk={askCoPilot}
-                        />
-                        <button
-                          onClick={() => {
-                            setSamKeywords(e.suggested_sam_keywords || e.agency || e.recipient || '')
-                            setSamNoticeTypes(e.suggested_notice_types || 'RFI,Sources Sought,Special Notice,Presolicitation')
-                            searchSamLive()
-                          }}
-                          className="action-btn ghost text-xs"
-                        >
-                          Search SAM
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              setLoading(true)
-                              const res = await fetch('/user/actions/create-sam-monitor', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ item: e, naics, brain, use_llm: false }),
-                              })
-                              if (res.ok) {
-                                const data = await res.json()
-                                await syncAccumulators()
-                                showToast(`Deterministic monitor: ${data.entry?.title || 'monitor'}`, 'success')
-                              } else {
-                                const q = encodeURIComponent(e.suggested_sam_keywords || e.agency || e.recipient || '')
-                                const nt = e.suggested_notice_types ? `&noticeType=${encodeURIComponent(e.suggested_notice_types)}` : ''
-                                const monitorUrl = `https://sam.gov/search/?index=opp&q=${q}&naics=${naics}${nt}`
-                                addToPipeline({ ...e, title: `SAM Monitor: ${e.agency || e.recipient}`, monitorUrl, type: 'sam-monitor', keywords: e.suggested_sam_keywords }, 'sam-monitor')
-                              }
-                            } catch {
-                              const q = encodeURIComponent(e.suggested_sam_keywords || e.agency || e.recipient || '')
-                              addToPipeline({ ...e, title: `SAM Monitor: ${e.agency || e.recipient}`, monitorUrl: `https://sam.gov/search/?index=opp&q=${q}&naics=${naics}`, type: 'sam-monitor' }, 'sam-monitor')
-                            } finally {
-                              setLoading(false)
-                            }
-                          }}
-                          className="action-btn pipeline text-xs"
-                          title="Deterministic monitor from agency + incumbent (no LLM)"
-                        >
-                          Monitor
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              setLoading(true)
-                              const res = await fetch('/user/actions/create-sam-monitor', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ item: e, naics, brain, use_llm: useSmartModel }),
-                              })
-                              if (res.ok) {
-                                const data = await res.json()
-                                await syncAccumulators()
-                                showToast(`Smart monitor: ${data.entry?.title || 'monitor'}`, 'success')
-                                setChatHistory(h => [...h, { role: 'assistant', content: `Agent created smart SAM monitor: ${data.entry?.title || 'monitor'}. ${data.rationale || ''}` }])
-                              }
-                            } finally {
-                              setLoading(false)
-                            }
-                          }}
-                          className="action-btn ghost text-xs"
-                          title="LLM + MCP smart monitor"
-                        >
-                          Smart
-                        </button>
-                        {e.pursuit_brief_path && (
-                          <button
-                            onClick={() => openVaultPath(e.pursuit_brief_path!, e.pursuit_slug)}
-                            className="action-btn ghost text-xs"
-                            title="Open pursuit brief stub in vault"
-                          >
-                            Vault
-                          </button>
+              {filteredOpp.length === 0 ? (
+                <div className="chart-module-empty">No recompetes match your filter.</div>
+              ) : (
+                <div className="recompete-list">
+                  {filteredOpp.slice(0, 12).map((e: OpportunityRow, i: number) => {
+                    const key = oppRowKey(e, i)
+                    const expanded = oppExpandedKey === key
+                    return (
+                      <RecompeteRowCard
+                        key={key}
+                        row={e}
+                        expanded={expanded}
+                        isHot={hotAgencies.has(e.agency || '')}
+                        onToggle={() => setOppExpandedKey(expanded ? null : key)}
+                        onTrack={() => addToPipeline(e, 'expiring')}
+                        expandedActions={(
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  setLoading(true)
+                                  const res = await fetch('/user/actions/create-sam-monitor', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ item: e, naics, brain, use_llm: false }),
+                                  })
+                                  if (res.ok) {
+                                    const data = await res.json()
+                                    await syncAccumulators()
+                                    showToast(`Monitor: ${data.entry?.title || 'created'}`, 'success')
+                                  }
+                                } finally {
+                                  setLoading(false)
+                                }
+                              }}
+                              className="action-btn pipeline text-xs"
+                            >
+                              + Monitor
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSamKeywords(e.suggested_sam_keywords || e.agency || e.recipient || '')
+                                setSamNoticeTypes(e.suggested_notice_types || 'RFI,Sources Sought,Special Notice,Presolicitation')
+                                searchSamLive()
+                              }}
+                              className="action-btn ghost text-xs"
+                            >
+                              Search SAM
+                            </button>
+                            <AskCoPilotButton
+                              prompt={`Scored recompete (${e.tier_label || e.combo_tier}, score ${e.display_score}): ${e.recipient || 'unknown'} at ${e.agency || 'unknown'} ends ${e.end_date} ($${(e.obligation_millions ?? 0).toFixed(1)}M). What capture moves should I prioritize?`}
+                              onAsk={askCoPilot}
+                            />
+                            {e.pursuit_brief_path && (
+                              <button
+                                onClick={() => openVaultPath(e.pursuit_brief_path!, e.pursuit_slug)}
+                                className="action-btn ghost text-xs"
+                              >
+                                Vault
+                              </button>
+                            )}
+                          </>
                         )}
-                      </div>
-                    ),
-                  },
-                ]}
-              />
-              <div className="text-[10px] text-text-500 mt-2">+pipeline tracks pursuit. Monitor seeds deterministic SAM URLs. Smart uses agent when Ollama/MCP available.</div>
+                      />
+                    )
+                  })}
+                </div>
+              )}
+              <div className="text-[10px] text-text-500 mt-2">
+                Scan the list — expand a row for SAM and co-pilot actions. One click <strong className="text-text-primary">+ Track</strong> adds to pipeline.
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="How scoring works"
+              subtitle="Deterministic ranking · no LLM required"
+              icon={Lightbulb}
+              accent="none"
+              defaultOpen={false}
+              titleGlossaryId="combo_tier"
+              onGlossaryLearn={openGlossaryInVault}
+            >
+              <div className="insight magenta mb-2">
+                Rows rank by USASpending intersections (hot agency, incumbent, timing, value). Brain overlap and existing monitors adjust priority. SAM monitors seed from agency + incumbent without an API call.
+              </div>
+              {(resolvedOpp.meta?.scoring_note) && (
+                <div className={`text-[10px] ${oppFromFallback ? 'text-neon-amber' : 'text-text-500'}`}>
+                  {resolvedOpp.meta.scoring_note}
+                </div>
+              )}
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -1877,7 +1768,7 @@ export default function App() {
               subtitle="RFIs · Sources Sought · emerging work"
               icon={Search}
               accent="cyan"
-              defaultOpen
+              defaultOpen={false}
               titleGlossaryId="sam_live_discovery"
               onGlossaryLearn={openGlossaryInVault}
             >

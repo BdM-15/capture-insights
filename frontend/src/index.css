@@ -1028,7 +1028,230 @@ body {
 }
 
 .page-sections {
-  @apply space-y-3 min-w-0;
+  @apply space-y-3 min-w-0 w-full;
+}
+
+.opp-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .opp-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .opp-summary-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.opp-summary-grid .metric-card {
+  min-width: 0;
+  width: 100%;
+}
+
+.readiness-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--edge);
+  background: rgba(5, 7, 13, 0.45);
+  font-size: 10px;
+  color: var(--text-500);
+}
+
+.readiness-strip.is-degraded {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.04);
+}
+
+.readiness-strip-status {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.readiness-strip-item {
+  white-space: nowrap;
+}
+
+.recompete-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.recompete-row-card {
+  width: 100%;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: rgba(5, 7, 13, 0.45);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.recompete-row-card.is-hot {
+  border-left: 3px solid var(--neon-magenta);
+}
+
+.recompete-row-card.is-expanded {
+  border-color: rgba(255, 0, 170, 0.28);
+}
+
+.recompete-row-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 0.65rem 1rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.recompete-row-priority {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 4.5rem;
+}
+
+.recompete-tier-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.recompete-score {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--neon-lime);
+}
+
+.recompete-row-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.recompete-row-sep {
+  color: var(--text-500);
+  flex-shrink: 0;
+}
+
+.recompete-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.recompete-signal,
+.recompete-status {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--edge);
+}
+
+.recompete-row-timing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 10px;
+  min-width: 3.5rem;
+}
+
+.recompete-end {
+  font-family: ui-monospace, monospace;
+  color: var(--text-primary);
+}
+
+.recompete-months {
+  color: var(--text-500);
+  font-size: 9px;
+}
+
+.recompete-row-value {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 3.5rem;
+  text-align: right;
+}
+
+.recompete-chevron {
+  color: var(--text-500);
+  transition: transform 0.15s ease;
+}
+
+.recompete-row-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem 0.65rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  margin-top: -0.15rem;
+}
+
+.recompete-row-detail {
+  padding: 0.65rem 1rem 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.recompete-row-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .recompete-row-main {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+  }
+
+  .recompete-row-value {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .recompete-chevron {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+  }
+
+  .recompete-row-timing {
+    grid-column: 2;
+    grid-row: 2;
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
 }
 
 /* Chart panels — shared chrome for Recharts/Plotly */
