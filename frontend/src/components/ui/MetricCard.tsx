@@ -1,10 +1,14 @@
-import { Info } from 'lucide-react'
+import type { GlossaryId } from '../../constants/captureGlossary'
 import type { SurfaceAccent } from './Surface'
+import { FieldTip } from './FieldTip'
+import { Info } from 'lucide-react'
 
 interface MetricCardProps {
   label: string
   value: string
   tooltip?: string
+  glossaryId?: GlossaryId
+  onGlossaryLearn?: (termId: GlossaryId) => void
   accent?: SurfaceAccent
   stub?: boolean
   valueClass?: string
@@ -14,6 +18,8 @@ export function MetricCard({
   label,
   value,
   tooltip,
+  glossaryId,
+  onGlossaryLearn,
   accent = 'cyan',
   stub,
   valueClass = '',
@@ -29,12 +35,18 @@ export function MetricCard({
 
   return (
     <div className={`metric-card surface-accent-${accent}`}>
-      <div className="metric-card-label">
-        {label}
-        {tooltip && (
-          <span title={tooltip} className="info-icon ml-1 inline-flex">
-            <Info size={10} />
-          </span>
+      <div className="metric-card-label flex items-center flex-wrap gap-0.5">
+        {glossaryId ? (
+          <FieldTip termId={glossaryId} label={label} onLearnMore={onGlossaryLearn} />
+        ) : (
+          <>
+            {label}
+            {tooltip && (
+              <span title={tooltip} className="info-icon ml-0.5 inline-flex">
+                <Info size={10} />
+              </span>
+            )}
+          </>
         )}
         {stub && <span className="metric-stub ml-1">vision</span>}
       </div>

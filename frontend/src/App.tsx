@@ -11,6 +11,7 @@ import Plot from 'react-plotly.js'
 import { AppShell } from './components/shell/AppShell'
 import type { HealthState } from './components/shell/Topbar'
 import { MetricCard } from './components/ui/MetricCard'
+import { StatChip } from './components/ui/StatChip'
 import { TabBar } from './components/ui/TabBar'
 import { Button } from './components/ui/Button'
 import { EmptyState } from './components/ui/EmptyState'
@@ -257,34 +258,29 @@ export default function App() {
     setToast({ message, tone })
   }
 
-  /** Open glossary term in Knowledge Vault reader (in-app education). */
+  /** Open atomic concept page in Knowledge Vault reader (always loads full file). */
   async function openGlossaryInVault(termId: GlossaryId) {
     const entry = CAPTURE_GLOSSARY[termId]
     if (!entry) return
     setSidebar('vault')
     const normPath = entry.vaultPath.replace(/\\/g, '/')
-    const existing = globalFiles.find((g: { path?: string }) => {
-      const p = (g.path || '').replace(/\\/g, '/')
-      return p.includes(normPath) || p.endsWith('capture-insights-glossary.md')
-    })
-    if (existing) {
-      setViewedWiki(existing)
-      return
-    }
     try {
-      const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(entry.vaultPath)}`)
+      const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(normPath)}`)
       if (r.ok) {
         const d = await r.json()
-        const content = d.content || ''
-        setViewedWiki({
-          name: entry.vaultTitle || 'Capture Insights Glossary',
-          path: entry.vaultPath,
-          content,
-          excerpt: content.slice(0, 600),
-        })
+        if (d.ok && d.content) {
+          setViewedWiki({
+            name: entry.vaultTitle || entry.label,
+            path: normPath,
+            content: d.content,
+            excerpt: d.content.slice(0, 600),
+          })
+          return
+        }
       }
+      showToast('Concept page not found — run: python scripts/seed_capture_concepts.py', 'error')
     } catch {
-      showToast('Could not load glossary from vault', 'error')
+      showToast('Could not load concept from vault', 'error')
     }
   }
 
@@ -958,22 +954,31 @@ export default function App() {
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                <div className="market-stat-chip" title={getGlossaryTip('market_tam')}>
-                  <div className="label">Total Market (TAM)</div>
-                  <div className="value">{fmtObl(kpis.total_obligations_m)}</div>
-                </div>
-                <div className="market-stat-chip" title={getGlossaryTip('market_concentration')}>
-                  <div className="label">Competitive Field</div>
-                  <div className="value">{(marketPotential?.unique_competitors || 0).toLocaleString()} primes</div>
-                </div>
-                <div className="market-stat-chip">
-                  <div className="label">Momentum</div>
-                  <div className="value text-neon-magenta text-base">{marketPotential?.trend || '—'}</div>
-                </div>
-                <div className="market-stat-chip" title={getGlossaryTip('recompete_radar')}>
-                  <div className="label">Recompete Radar (24m)</div>
-                  <div className="value">{fmtNum(kpis.expiring_24m || 0)} ending</div>
-                </div>
+                <StatChip
+                  label="Total Market (TAM)"
+                  termId="market_tam"
+                  onLearnMore={openGlossaryInVault}
+                  value={fmtObl(kpis.total_obligations_m)}
+                />
+                <StatChip
+                  label="Competitive Field"
+                  termId="market_concentration"
+                  onLearnMore={openGlossaryInVault}
+                  value={`${(marketPotential?.unique_competitors || 0).toLocaleString()} primes`}
+                />
+                <StatChip
+                  label="Momentum"
+                  termId="market_momentum"
+                  onLearnMore={openGlossaryInVault}
+                  value={marketPotential?.trend || '—'}
+                  valueClassName="text-neon-magenta text-base"
+                />
+                <StatChip
+                  label="Recompete Radar (24m)"
+                  termId="recompete_radar"
+                  onLearnMore={openGlossaryInVault}
+                  value={`${fmtNum(kpis.expiring_24m || 0)} ending`}
+                />
               </div>
             </div>
 
@@ -981,24 +986,26 @@ export default function App() {
             <div>
               <div className="text-[9px] uppercase tracking-[1.5px] text-text-500 mb-1.5 px-0.5">Executive Summary — Glanceable for Capture Managers</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} tooltip={getGlossaryTip('market_tam')} accent="amber" />
-                <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} tooltip="Contract action volume in slice — high count often means active or fragmented buying." accent="cyan" />
-                <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} tooltip="Typical deal size for bid/no-bid thresholds and team sizing." accent="lime" />
-                <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} tooltip="Awards with performance period still open — incumbent landscape signal." accent="cyan" />
-                <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} tooltip={getGlossaryTip('recompete_radar')} accent="magenta" />
+                <MetricCard label="Total Obligations" value={fmtObl(kpis.total_obligations_m)} glossaryId="market_tam" onGlossaryLearn={openGlossaryInVault} accent="amber" />
+                <MetricCard label="Total Actions" value={fmtNum(kpis.total_actions)} glossaryId="capture_intensity" onGlossaryLearn={openGlossaryInVault} accent="cyan" />
+                <MetricCard label="Avg Award Value" value={fmtAvg(kpis.avg_award_value_k)} glossaryId="market_tam" onGlossaryLearn={openGlossaryInVault} accent="lime" />
+                <MetricCard label="Active (Approx)" value={fmtNum(kpis.active_contracts_approx)} glossaryId="recompete_radar" onGlossaryLearn={openGlossaryInVault} accent="cyan" />
+                <MetricCard label="Expiring (24m)" value={fmtNum(kpis.expiring_24m || 0)} glossaryId="recompete_radar" onGlossaryLearn={openGlossaryInVault} accent="magenta" />
                 <MetricCard
                   label="Suitability"
                   value={`${kpis.suitability_pct}%`}
                   stub
                   accent="amber"
-                  tooltip={getGlossaryTip('suitability_stub')}
+                  glossaryId="suitability_stub"
+                  onGlossaryLearn={openGlossaryInVault}
                 />
                 <MetricCard
                   label="Synergy"
                   value={`${kpis.synergy_pct}%`}
                   stub
                   accent="magenta"
-                  tooltip={getGlossaryTip('synergy_stub')}
+                  glossaryId="synergy_stub"
+                  onGlossaryLearn={openGlossaryInVault}
                 />
               </div>
             </div>
@@ -1018,26 +1025,37 @@ export default function App() {
                 <button onClick={() => setDashTab('opportunities')} className="action-btn pipeline text-[10px]">Full recompete radar →</button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <div className="market-stat-chip" title={getGlossaryTip('future_funding')}>
-                  <div className="label">24-Month Funding at Risk</div>
-                  <div className="value text-neon-magenta">{fmtObl(kpis.future_funding_potential_24m_m || 0)}</div>
-                  <div className="text-[9px] text-text-500 mt-0.5">{fmtNum(kpis.expiring_24m || 0)} contracts</div>
-                </div>
-                <div className="market-stat-chip" title={getGlossaryTip('future_funding')}>
-                  <div className="label">36-Month Funding at Risk</div>
-                  <div className="value text-neon-magenta">{fmtObl(kpis.future_funding_potential_36m_m || 0)}</div>
-                  <div className="text-[9px] text-text-500 mt-0.5">{fmtNum(kpis.expiring_36m || 0)} contracts</div>
-                </div>
-                <div className="market-stat-chip" title={`${getGlossaryTip('hot_agency')} ${getGlossaryTip('recompete_radar')}`}>
-                  <div className="label">Hot-Agency Recompetes</div>
-                  <div className="value">{fmtObl(hotRecompeteM)}</div>
-                  <div className="text-[9px] text-text-500 mt-0.5">{hotRecompeteCount} in focus agencies</div>
-                </div>
-                <div className="market-stat-chip" title={`${getGlossaryTip('suitability_stub')} ${getGlossaryTip('synergy_stub')}`}>
-                  <div className="label">Match Lens (Future)</div>
-                  <div className="value text-base text-neon-amber">{kpis.suitability_pct}% / {kpis.synergy_pct}%</div>
-                  <div className="text-[9px] text-text-500 mt-0.5">suitability • synergy when wiki live</div>
-                </div>
+                <StatChip
+                  label="24-Month Funding at Risk"
+                  termId="future_funding"
+                  onLearnMore={openGlossaryInVault}
+                  value={fmtObl(kpis.future_funding_potential_24m_m || 0)}
+                  valueClassName="text-neon-magenta"
+                  sublabel={`${fmtNum(kpis.expiring_24m || 0)} contracts`}
+                />
+                <StatChip
+                  label="36-Month Funding at Risk"
+                  termId="future_funding"
+                  onLearnMore={openGlossaryInVault}
+                  value={fmtObl(kpis.future_funding_potential_36m_m || 0)}
+                  valueClassName="text-neon-magenta"
+                  sublabel={`${fmtNum(kpis.expiring_36m || 0)} contracts`}
+                />
+                <StatChip
+                  label="Hot-Agency Recompetes"
+                  termId="hot_agency_recompete"
+                  onLearnMore={openGlossaryInVault}
+                  value={fmtObl(hotRecompeteM)}
+                  sublabel={`${hotRecompeteCount} in focus agencies`}
+                />
+                <StatChip
+                  label="Match Lens (Future)"
+                  termId="match_lens"
+                  onLearnMore={openGlossaryInVault}
+                  value={`${kpis.suitability_pct}% / ${kpis.synergy_pct}%`}
+                  valueClassName="text-base text-neon-amber"
+                  sublabel="suitability • synergy when wiki live"
+                />
               </div>
             </div>
             </CollapsibleSection>
@@ -1939,10 +1957,10 @@ export default function App() {
         return (
           <div className="page-sections">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
-              <MetricCard label="Hot agencies" value={String(hotAgencyList.length)} accent="magenta" tooltip={getGlossaryTip('hot_agency')} />
-              <MetricCard label="In vault" value={String(trackedCount)} accent="purple" tooltip={getGlossaryTip('customer_position')} />
-              <MetricCard label="Hot recompetes" value={String(comboExpiring.length)} accent="lime" tooltip={getGlossaryTip('recompete_radar')} />
-              <MetricCard label="Top agency share" value={`${topAgencyShare}%`} accent="cyan" tooltip={getGlossaryTip('market_concentration')} />
+              <MetricCard label="Hot agencies" value={String(hotAgencyList.length)} accent="magenta" glossaryId="hot_agency" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="In vault" value={String(trackedCount)} accent="purple" glossaryId="customer_position" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="Hot recompetes" value={String(comboExpiring.length)} accent="lime" glossaryId="hot_agency_recompete" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="Top agency share" value={`${topAgencyShare}%`} accent="cyan" glossaryId="market_concentration" onGlossaryLearn={openGlossaryInVault} />
             </div>
 
             <CollapsibleSection
@@ -2565,10 +2583,10 @@ export default function App() {
         return (
           <div className="page-sections">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
-              <MetricCard label="Top 3 share" value={`${top3Pct}%`} accent="magenta" tooltip={getGlossaryTip('market_concentration')} />
-              <MetricCard label="In vault" value={String(trackedCompetitors)} accent="purple" tooltip={getGlossaryTip('customer_position')} />
-              <MetricCard label="Primes in slice" value={String(topRecipients.length)} accent="cyan" tooltip="Distinct recipients with obligated awards in this NAICS filter." />
-              <MetricCard label="Incumbent recompetes" value={String(incumbentRecompetes.length)} accent="lime" tooltip={getGlossaryTip('recompete_radar')} />
+              <MetricCard label="Top 3 share" value={`${top3Pct}%`} accent="magenta" glossaryId="market_concentration" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="In vault" value={String(trackedCompetitors)} accent="purple" glossaryId="customer_position" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="Primes in slice" value={String(topRecipients.length)} accent="cyan" glossaryId="competitor_posture" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="Incumbent recompetes" value={String(incumbentRecompetes.length)} accent="lime" glossaryId="recompete_radar" onGlossaryLearn={openGlossaryInVault} />
             </div>
 
             <CollapsibleSection
@@ -3340,10 +3358,10 @@ export default function App() {
         return (
           <div className="page-sections">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
-              <MetricCard label="IDIQ / TO share" value={`${vSummary.idv_pct ?? '—'}%`} accent="cyan" tooltip={getGlossaryTip('idiq_task_order')} />
-              <MetricCard label="Top vehicle" value={(vSummary.top_vehicle || '—').slice(0, 22)} accent="lime" tooltip={getGlossaryTip('buying_posture')} />
-              <MetricCard label="Top pricing" value={(vSummary.top_pricing || '—').slice(0, 22)} accent="amber" tooltip={getGlossaryTip('pricing_bucket')} />
-              <MetricCard label="Top 3 vehicles" value={`${vSummary.top3_vehicle_pct ?? '—'}%`} accent="magenta" tooltip={getGlossaryTip('top3_vehicle_share')} />
+              <MetricCard label="IDIQ / TO share" value={`${vSummary.idv_pct ?? '—'}%`} accent="cyan" glossaryId="idiq_task_order" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="Top vehicle" value={(vSummary.top_vehicle || '—').slice(0, 22)} accent="lime" glossaryId="buying_posture" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="Top pricing" value={(vSummary.top_pricing || '—').slice(0, 22)} accent="amber" glossaryId="pricing_bucket" onGlossaryLearn={openGlossaryInVault} />
+              <MetricCard label="Top 3 vehicles" value={`${vSummary.top3_vehicle_pct ?? '—'}%`} accent="magenta" glossaryId="top3_vehicle_share" onGlossaryLearn={openGlossaryInVault} />
             </div>
 
             <CollapsibleSection
