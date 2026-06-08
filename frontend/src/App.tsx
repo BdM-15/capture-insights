@@ -614,7 +614,17 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item: row, naics, brain }),
       })
-      if (!res.ok) throw new Error('workspace failed')
+      const ct = res.headers.get('content-type') || ''
+      if (!res.ok || !ct.includes('application/json')) {
+        const stale = res.status === 404 || res.status === 405
+        showToast(
+          stale
+            ? 'Workspace needs a backend restart — close the server and run .\\scripts\\start.ps1, then hard refresh this page'
+            : `Workspace unavailable (${res.status})`,
+          'error',
+        )
+        return
+      }
       const data = await res.json()
       setSkillWorkspace({
         row: (data.row as OpportunityRow) || row,
@@ -624,7 +634,7 @@ export default function App() {
         skills: data.skills || [],
       })
     } catch {
-      showToast('Could not open workspace — restart backend with latest code', 'error')
+      showToast('Workspace unreachable — run .\\scripts\\start.ps1 from the project folder', 'error')
     } finally {
       setWorkspaceLoading(false)
     }
