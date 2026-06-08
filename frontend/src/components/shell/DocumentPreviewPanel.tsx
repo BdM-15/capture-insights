@@ -1,10 +1,24 @@
-import { BookOpen, Copy, FileStack, RefreshCw, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { BookOpen, Copy, FileStack, Maximize2, RefreshCw, X } from 'lucide-react'
 
 export interface PreviewDocument {
   name: string
   path: string
   content: string
   excerpt?: string
+}
+
+const WORKSPACE_WIDTH = 420
+const DEFAULT_WIDTH = 560
+const MIN_WIDTH = 360
+const STORAGE_KEY = 'ci_preview_panel_width'
+
+function readStoredWidth(): number {
+  try {
+    const n = Number(localStorage.getItem(STORAGE_KEY))
+    if (n >= MIN_WIDTH && n <= 1400) return n
+  } catch {}
+  return DEFAULT_WIDTH
 }
 
 interface DocumentPreviewPanelProps {
@@ -21,21 +35,67 @@ export function DocumentPreviewPanel({
   onClose,
   onReload,
 }: DocumentPreviewPanelProps) {
+  const [width, setWidth] = useState(readStoredWidth)
+  const [isResizing, setIsResizing] = useState(false)
+  const widthRef = useRef(width)
+  widthRef.current = width
+
   const isArtifact = (doc.path || '').replace(/\\/g, '/').startsWith('pursuits/')
   const accent = isArtifact ? 'artifacts' : 'vault'
   const Icon = isArtifact ? FileStack : BookOpen
   const label = isArtifact ? 'Artifact preview' : 'Vault preview'
 
-  const rightOffset = stackWithWorkspace ? 'min(420px, 100vw)' : '0px'
-  const width = stackWithWorkspace
-    ? 'min(560px, calc(100vw - min(420px, 100vw)))'
-    : 'min(560px, 100vw)'
+  const rightOffset = stackWithWorkspace ? WORKSPACE_WIDTH : 0
+  const maxWidth = Math.max(
+    MIN_WIDTH,
+    Math.min(1100, window.innerWidth - rightOffset - 96),
+  )
+
+  useEffect(() => {
+    if (!isResizing) return
+    const onMove = (ev: MouseEvent) => {
+      const next = window.innerWidth - rightOffset - ev.clientX
+      setWidth(Math.max(MIN_WIDTH, Math.min(maxWidth, next)))
+    }
+    const onUp = () => {
+      setIsResizing(false)
+      try {
+        localStorage.setItem(STORAGE_KEY, String(widthRef.current))
+      } catch {}
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [isResizing, maxWidth, rightOffset])
+
+  useEffect(() => {
+    setWidth((w) => Math.max(MIN_WIDTH, Math.min(maxWidth, w)))
+  }, [maxWidth])
+
+  function startResize(e: React.MouseEvent) {
+    setIsResizing(true)
+    e.preventDefault()
+  }
+
+  function toggleWide() {
+    setWidth((w) => (w >= maxWidth * 0.85 ? DEFAULT_WIDTH : Math.min(maxWidth, 820)))
+  }
 
   return (
     <div
       className={`document-preview-pane document-preview-pane--${accent} fixed top-14 bottom-0 z-[63] flex flex-col overflow-hidden rounded-l-3xl`}
       style={{ right: rightOffset, width }}
     >
+      <div
+        className={`resize-handle ${isResizing ? 'active' : ''}`}
+        onMouseDown={startResize}
+        title="Drag to resize preview width"
+        aria-label="Resize preview panel"
+      />
+
       <div className="document-preview-header">
         <div className="flex items-center gap-2 min-w-0">
           <Icon className={`w-4 h-4 shrink-0 ${isArtifact ? 'text-neon-magenta' : 'text-accent-purple'}`} />
@@ -44,9 +104,20 @@ export function DocumentPreviewPanel({
             <div className="text-[10px] text-text-500 font-mono truncate">{doc.path}</div>
           </div>
         </div>
-        <button type="button" onClick={onClose} className="chat-icon-btn" aria-label="Close preview">
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={toggleWide}
+            className="chat-icon-btn"
+            title="Toggle wider reading width"
+            aria-label="Toggle preview width"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+          <button type="button" onClick={onClose} className="chat-icon-btn" aria-label="Close preview">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="document-preview-body flex-1 overflow-auto p-4">
