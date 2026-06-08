@@ -29,6 +29,14 @@ def pursuit_competitive_path(slug: str) -> str:
     return f"pursuits/{slug}/02_intel/competitive_snapshot.md"
 
 
+def pursuit_sam_monitor_path(slug: str) -> str:
+    return f"pursuits/{slug}/02_intel/sam_monitor.md"
+
+
+def pursuit_battlecard_path(slug: str) -> str:
+    return f"pursuits/{slug}/03_capture/competitive_battlecard.md"
+
+
 def pursuit_readme_path(slug: str) -> str:
     return f"pursuits/{slug}/README.md"
 
@@ -38,5 +46,7 @@ def pursuit_artifact_paths(slug: str) -> Dict[str, str]:
         "brief": pursuit_brief_path(slug),
         "sam_scan": pursuit_sam_scan_path(slug),
         "competitive": pursuit_competitive_path(slug),
+        "sam_monitor": pursuit_sam_monitor_path(slug),
+        "battlecard": pursuit_battlecard_path(slug),
         "readme": pursuit_readme_path(slug),
     }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -9,9 +10,11 @@ from typing import Any, Dict, List, Optional
 from .deterministic.opportunity_score import enrich_opportunity_row
 from .deterministic.pursuit_paths import (
     pursuit_artifact_paths,
+    pursuit_battlecard_path,
     pursuit_brief_path,
     pursuit_competitive_path,
     pursuit_readme_path,
+    pursuit_sam_monitor_path,
     pursuit_sam_scan_path,
     pursuit_slug,
 )
@@ -46,10 +49,17 @@ WORKSPACE_SKILLS = [
         "supports_llm": False,
     },
     {
+        "id": "competitive-battlecard",
+        "name": "Competitive Battlecard",
+        "status": "active",
+        "use_when": "Displace / team / ghost talk tracks for the incumbent on this recompete",
+        "supports_llm": True,
+    },
+    {
         "id": "sam-monitor-builder",
         "name": "SAM Monitor Builder",
-        "status": "partial",
-        "use_when": "Save a SAM.gov keyword search to Pipeline for this cycle",
+        "status": "active",
+        "use_when": "Save SAM search to Pipeline + sam_monitor.md in vault",
         "supports_llm": False,
     },
 ]
@@ -58,7 +68,39 @@ ARTIFACT_LABELS = {
     "brief": "Capture brief",
     "sam_scan": "SAM scan",
     "competitive": "Competitive snapshot",
+    "sam_monitor": "SAM monitor",
+    "battlecard": "Competitive battlecard",
     "readme": "Pursuit index",
+}
+
+STRATEGY_LABELS = {
+    "displace": "Displace",
+    "team": "Team",
+    "ghost": "Ghost",
+    "monitor": "Monitor",
+}
+
+TALK_TRACKS: Dict[str, List[str]] = {
+    "displace": [
+        "Contract ends {end_date} — customer must re-compete; incumbent continuity is not guaranteed.",
+        "Lead with differentiated past performance and lower transition risk than a straight renewal.",
+        "Shape evaluation criteria early (RFI / industry day) before the incumbent locks requirements.",
+        "Map contracting office + program office; incumbent strength may not equal buyer preference.",
+    ],
+    "team": [
+        "Incumbent holds strong agency position — pursue subcontract or JV before head-to-head bid.",
+        "Offer niche capability the prime lacks (set-aside cert, clearance, regional PoP, tool stack).",
+        "Use USASpending flows to identify where the incumbent teams today.",
+    ],
+    "ghost": [
+        "Incumbent is tracked in your vault — refine ghosting angles without naming them in early customer touchpoints.",
+        "Highlight weaknesses in transition, staffing, or pricing model without direct attacks.",
+        "Build trusted advisor status with the buyer before RFP drops.",
+    ],
+    "monitor": [
+        "Insufficient signal yet — watch SAM notices and add competitor to brain when patterns firm up.",
+        "Revisit battlecard after competitive snapshot + customer meetings.",
+    ],
 }
 
 
@@ -318,6 +360,197 @@ def build_capture_brief_markdown(
     return "\n".join(parts)
 
 
+def _brain_has_name(name: str, brain_names: Optional[List[str]]) -> bool:
+    n = (name or "").lower()[:18]
+    if not n:
+        return False
+    return any(
+        bn and (bn.lower()[:18] in n or n in bn.lower()[:18])
+        for bn in (brain_names or [])
+    )
+
+
+def _compete_strategy(row: Dict[str, Any], brain_names: Optional[List[str]]) -> str:
+    recipient = str(row.get("recipient") or "")
+    if _brain_has_name(recipient, brain_names):
+        return "ghost"
+    oblig_m = row.get("obligation_millions")
+    if oblig_m is None:
+        oblig_m = (row.get("obligation") or 0) / 1e6
+    if float(oblig_m or 0) >= 10:
+        return "displace"
+    months = row.get("months_to_end")
+    if months is not None and int(months) <= 18:
+        return "displace"
+    return "monitor"
+
+
+def _alternative_primes(intel: Dict[str, Any], incumbent: str, *, limit: int = 5) -> List[str]:
+    usa = intel.get("usaspending") or {}
+    inc = (incumbent or "").lower()[:18]
+    seen: List[str] = []
+    for bucket in (usa.get("relationships") or [], usa.get("flows") or []):
+        for row in bucket:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("recipient") or "")
+            short = name.lower()[:18]
+            if not name or (inc and (inc in short or short in inc)):
+                continue
+            if name not in seen:
+                seen.append(name)
+            if len(seen) >= limit:
+                return seen
+    return seen
+
+
+def build_sam_monitor_markdown(row: Dict[str, Any], entry: Dict[str, Any], naics: str) -> str:
+    slug = row.get("pursuit_slug") or pursuit_slug(row)
+    lines = [
+        "---",
+        f"id: pursuit-{slug}-sam-monitor",
+        "type: pursuit-intel",
+        "artifact: sam_monitor",
+        f"naics: {naics}",
+        f"updated: {_utc_now()}",
+        "tags: [sam, monitor, pursuit]",
+        "---",
+        "",
+        f"# SAM Monitor — {row.get('recipient') or row.get('agency') or slug}",
+        "",
+        f"**Keywords:** `{entry.get('keywords') or ''}`",
+        f"**Notice types:** `{entry.get('notice_types') or ''}`",
+        f"**NAICS:** {naics}",
+        "",
+        "## Search link",
+        f"- [Open SAM.gov search]({entry.get('monitorUrl') or ''})",
+        "",
+        "## Notes",
+        entry.get("notes") or "_Saved from workspace SAM Monitor Builder._",
+        "",
+        "## Cadence",
+        f"- Check weekly while contract is in the {row.get('months_to_end') or '?'}mo recompete window.",
+        "- Also saved to **Pipeline** sidebar for quick access.",
+        "",
+        f"_Citation: {entry.get('citation') or 'workspace-skill'}_",
+    ]
+    return "\n".join(lines)
+
+
+def build_battlecard_markdown(
+    row: Dict[str, Any],
+    intel: Dict[str, Any],
+    naics: str,
+    *,
+    brain_names: Optional[List[str]] = None,
+    llm_section: Optional[str] = None,
+) -> str:
+    slug = row.get("pursuit_slug") or pursuit_slug(row)
+    recipient = row.get("recipient") or "Unknown incumbent"
+    agency = row.get("agency") or "Unknown agency"
+    strategy = _compete_strategy(row, brain_names)
+    strategy_label = STRATEGY_LABELS.get(strategy, strategy)
+    usa = intel.get("usaspending") or {}
+    rels = usa.get("relationships") or []
+    alt_primes = _alternative_primes(intel, recipient)
+    tracks = [
+        t.format(
+            end_date=row.get("end_date") or "TBD",
+            agency=agency,
+            incumbent=recipient,
+        )
+        for t in TALK_TRACKS.get(strategy, TALK_TRACKS["monitor"])
+    ]
+
+    lines = [
+        "---",
+        f"id: pursuit-{slug}-battlecard",
+        "type: pursuit-battlecard",
+        f"slug: {slug}",
+        f"naics: {naics}",
+        f"target: \"{recipient}\"",
+        f"strategy: {strategy}",
+        f"updated: {_utc_now()}",
+        "tags: [battlecard, competitive, pursuit]",
+        "---",
+        "",
+        f"# Competitive Battlecard — {recipient}",
+        "",
+        "## Target profile",
+        f"- **Incumbent (holder):** {recipient}",
+        f"- **Customer agency:** {agency}",
+        f"- **Contract ends:** {row.get('end_date') or '—'} ({row.get('months_to_end') if row.get('months_to_end') is not None else '?'} mo)",
+        f"- **Posture:** Incumbent on expiring award",
+        f"- **Recommended approach:** **{strategy_label}**",
+        "",
+        "## Incumbent at this agency (USASpending)",
+    ]
+    rel_hits = [
+        r for r in rels
+        if isinstance(r, dict) and (recipient.lower()[:14] in str(r.get("recipient") or "").lower())
+    ][:4]
+    if rel_hits:
+        for r in rel_hits:
+            lines.append(
+                f"- {r.get('recipient', '—')} @ {r.get('agency', '—')}: "
+                f"{r.get('actions', '?')} awards · ${r.get('millions', '?')}M"
+            )
+    else:
+        lines.append("_No close relationship match in current slice — run Competitive Snapshot first._")
+
+    lines.extend(["", "## Other primes at this buyer"])
+    if alt_primes:
+        for name in alt_primes:
+            lines.append(f"- {name}")
+    else:
+        lines.append("_No alternates surfaced — expand competitive snapshot or brain entries._")
+
+    lines.extend(["", f"## Talk tracks ({strategy_label})"])
+    for t in tracks:
+        lines.append(f"- {t}")
+
+    if llm_section:
+        lines.extend(["", "## Customer-facing angles (LLM)", llm_section.strip()])
+
+    lines.extend([
+        "",
+        "## Next moves",
+        "1. Validate strategy with capture lead — displace vs team vs ghost.",
+        "2. Update brain/ vault with any new competitor intel from customer meetings.",
+        "3. Align with capture brief and SAM monitor cadence.",
+        "",
+        "## Citations",
+        f"- USASpending · NAICS {naics} · award `{row.get('award_key') or 'n/a'}`",
+        f"- Generated competitive-battlecard · {_utc_now()}",
+    ])
+    return "\n".join(lines)
+
+
+def _llm_battlecard_tracks(row: Dict[str, Any], intel: Dict[str, Any], naics: str, strategy: str) -> tuple[str, bool]:
+    if not llm_client:
+        return "", False
+    alts = _alternative_primes(intel, str(row.get("recipient") or ""), limit=3)
+    prompt = (
+        "You are a federal capture manager writing a competitive battlecard.\n"
+        "Write 4-5 bullet points ONLY — plain English talk tracks for customer conversations.\n"
+        f"Strategy: {strategy}. NAICS: {naics}.\n"
+        f"Incumbent: {row.get('recipient')}. Agency: {row.get('agency')}.\n"
+        f"Ends: {row.get('end_date')} ({row.get('months_to_end')}mo). "
+        f"Obligation: ${row.get('obligation_millions')}M.\n"
+        f"Alternate primes at agency: {alts or 'unknown'}.\n"
+        "Do not invent contract details not listed. End with one ghosting tip if strategy is displace or ghost."
+    )
+    text = llm_client.call_llm(
+        prompt,
+        system="Concise bullets only. No markdown headers.",
+        temperature=0.3,
+        max_tokens=400,
+    )
+    if text.startswith("[LLM call failed"):
+        return "", False
+    return text, True
+
+
 def _llm_capture_read(row: Dict[str, Any], intel: Dict[str, Any], naics: str) -> tuple[str, bool]:
     if not llm_client:
         return "", False
@@ -368,6 +601,8 @@ updated: {_utc_now()}
 | Capture brief | [[{paths['brief']}]] |
 | SAM scan | [[{paths['sam_scan']}]] |
 | Competitive snapshot | [[{paths['competitive']}]] |
+| SAM monitor | [[{paths['sam_monitor']}]] |
+| Battlecard | [[{paths['battlecard']}]] |
 
 _Auto-maintained by pursuit workspace skills._
 """
@@ -513,19 +748,65 @@ async def run_pursuit_skill(
             "artifacts": _artifact_status(slug),
         }
 
+    if skill_id == "competitive-battlecard":
+        intel = await gather_pursuit_intel(row, naics)
+        strategy = _compete_strategy(row, brain_names)
+        llm_text, used_llm = ("", False)
+        if use_llm:
+            llm_text, used_llm = _llm_battlecard_tracks(row, intel, naics, strategy)
+        path = pursuit_battlecard_path(slug)
+        content = build_battlecard_markdown(
+            row, intel, naics, brain_names=brain_names, llm_section=llm_text or None
+        )
+        write_knowledge_file(path, content)
+        _write_readme_index(slug, row)
+        return {
+            "ok": True,
+            "skill_id": skill_id,
+            "path": path,
+            "slug": slug,
+            "bytes": len(content),
+            "used_llm": used_llm,
+            "strategy": strategy,
+            "intel_sources": {
+                "usaspending_rels": len((intel.get("usaspending") or {}).get("relationships") or []),
+            },
+            "artifacts": _artifact_status(slug),
+        }
+
     if skill_id == "sam-monitor-builder":
         from .deterministic.sam_monitor import build_monitor_entry
         from .user_data import add_to_pipeline
 
         entry = build_monitor_entry(item, naics, source="workspace-skill")
         saved = add_to_pipeline(entry)
+        monitor_path = pursuit_sam_monitor_path(slug)
+        monitor_md = build_sam_monitor_markdown(row, entry, naics)
+        write_knowledge_file(monitor_path, monitor_md)
+        _write_readme_index(slug, row)
         return {
             "ok": True,
             "skill_id": skill_id,
+            "path": monitor_path,
+            "slug": slug,
+            "bytes": len(monitor_md),
             "pipeline_entry": entry,
+            "monitor_url": entry.get("monitorUrl"),
             "accumulators": saved,
             "used_llm": False,
             "artifacts": _artifact_status(slug),
         }
 
     return {"ok": False, "error": f"unknown skill: {skill_id}"}
+
+
+def delete_pursuit_folder(slug: str) -> Dict[str, Any]:
+    """Remove pursuits/<slug>/ from disk (test cleanup — never touches global/)."""
+    if not slug or slug in (".", "..", "README"):
+        return {"ok": False, "error": "invalid slug"}
+    base = (Path("data") / "knowledge" / "pursuits").resolve()
+    target = (base / slug).resolve()
+    if not str(target).startswith(str(base)) or not target.is_dir():
+        return {"ok": False, "error": "pursuit folder not found"}
+    shutil.rmtree(target)
+    return {"ok": True, "slug": slug, "message": f"Removed pursuits/{slug}/"}

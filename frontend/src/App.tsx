@@ -343,6 +343,23 @@ export default function App() {
   // Real on-disk persistence via backend (data/user_accumulators.json).
   // This replaces the earlier pure localStorage slice. Adds/deletes/notes now go through the server
   // so the brain/wiki compounds reliably and is the durable source for future features (search by competitor, chat context, skills, etc.).
+  async function deletePursuitFolder(slug: string) {
+    if (!confirm(`Delete pursuits/${slug}/ from disk?\n\nGlobal wiki and brain entries are not touched.`)) return
+    try {
+      const res = await fetch(`/user/pursuits/${encodeURIComponent(slug)}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.ok) {
+        if (skillWorkspace?.slug === slug) setSkillWorkspace(null)
+        await loadUserAccumulators()
+        showToast(`Removed pursuit folder ${slug}`, 'success')
+      } else {
+        showToast(data.error || 'Delete failed', 'error')
+      }
+    } catch {
+      showToast('Delete failed', 'error')
+    }
+  }
+
   async function loadUserAccumulators() {
     try {
       const res = await fetch('/user/accumulators')
@@ -717,7 +734,7 @@ export default function App() {
           item: skillWorkspace.row,
           naics,
           brain,
-          use_llm: skillId === 'capture-brief' && workspaceUseLlm,
+          use_llm: workspaceUseLlm && (skillId === 'capture-brief' || skillId === 'competitive-battlecard'),
         }),
       })
       const data = await res.json()
@@ -739,9 +756,15 @@ export default function App() {
       })
       if (skillId === 'sam-monitor-builder') {
         await syncAccumulators()
+        await loadUserAccumulators()
         setSkillWorkspace((w) => w && patchWorkspace(w))
-        showToast('SAM search saved to Pipeline', 'success')
-      } else if (skillId === 'capture-brief' || skillId === 'sam-scan' || skillId === 'competitive-snapshot') {
+        showToast('SAM monitor saved to Pipeline + vault', 'success')
+      } else if (
+        skillId === 'capture-brief'
+        || skillId === 'sam-scan'
+        || skillId === 'competitive-snapshot'
+        || skillId === 'competitive-battlecard'
+      ) {
         await loadUserAccumulators()
       }
       if (skillId === 'capture-brief') {
@@ -755,6 +778,11 @@ export default function App() {
       } else if (skillId === 'competitive-snapshot') {
         setSkillWorkspace((w) => w && patchWorkspace(w))
         showToast(`Competitive snapshot saved · ${intel.usaspending_rels ?? 0} relationships`, 'success')
+      } else if (skillId === 'competitive-battlecard') {
+        setSkillWorkspace((w) => w && patchWorkspace(w))
+        const llmNote = data.used_llm ? ' · LLM angles added' : ''
+        const strat = data.strategy ? ` · ${data.strategy}` : ''
+        showToast(`Battlecard saved${strat}${llmNote}`, 'success')
       }
     } catch {
       showToast('Skill run failed', 'error')
@@ -5700,6 +5728,7 @@ export default function App() {
             <PursuitArtifactsList
               pursuits={pursuitFolders}
               onOpen={(path, title) => openVaultPath(path, title, { sidebar: 'skills' })}
+              onDelete={deletePursuitFolder}
             />
           </CollapsibleSection>
 

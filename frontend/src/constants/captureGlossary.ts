@@ -51,6 +51,8 @@ export type GlossaryId =
   | 'pursuit_workspace'
   | 'capture_brief_enrich'
   | 'vault_artifacts'
+  | 'competitive_battlecard'
+  | 'sam_monitor_artifact'
 
 export interface GlossaryEntry {
   label: string
@@ -372,6 +374,18 @@ export const CAPTURE_GLOSSARY: Record<GlossaryId, GlossaryEntry> = {
     tip: 'Markdown files saved under pursuits/<slug>/ only — not in global/ foundational wiki. Includes capture brief, SAM scan, and competitive snapshot. Open in Knowledge Vault reader or Studio; edit in Obsidian at data/knowledge/pursuits/.',
     vaultPath: conceptVaultPath('capture-brief'),
     vaultAnchor: 'capture-brief',
+  },
+  competitive_battlecard: {
+    label: 'Competitive battlecard',
+    tip: 'Per-pursuit displace / team / ghost talk tracks for the incumbent on a recompete. Uses USASpending relationships plus optional LLM customer-facing angles. Saved to 03_capture/competitive_battlecard.md — not global wiki.',
+    vaultPath: conceptVaultPath('top-incumbent'),
+    vaultAnchor: 'top-incumbent',
+  },
+  sam_monitor_artifact: {
+    label: 'SAM monitor',
+    tip: 'Bookmarked SAM.gov keyword search for this contract cycle. Saved to Pipeline and pursuits/<slug>/02_intel/sam_monitor.md with a one-click SAM search link. Not a government email alert.',
+    vaultPath: conceptVaultPath('sam-live-discovery'),
+    vaultAnchor: 'sam-live-discovery',
   },
 }
 

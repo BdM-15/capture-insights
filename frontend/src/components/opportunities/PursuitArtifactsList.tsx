@@ -1,4 +1,4 @@
-import { Eye } from 'lucide-react'
+import { Eye, Trash2 } from 'lucide-react'
 import { EntryRow } from '../lists/EntryRow'
 
 export interface PursuitArtifact {
@@ -20,12 +20,14 @@ export interface PursuitFolder {
 interface PursuitArtifactsListProps {
   pursuits: PursuitFolder[]
   onOpen: (path: string, title: string) => void
+  onDelete?: (slug: string) => void
   emptyMessage?: string
 }
 
 export function PursuitArtifactsList({
   pursuits,
   onOpen,
+  onDelete,
   emptyMessage = 'No pursuit artifacts yet — run skills from Future Opportunities → Workspace on a recompete row.',
 }: PursuitArtifactsListProps) {
   if (!pursuits.length) {
@@ -43,15 +45,27 @@ export function PursuitArtifactsList({
                 <div className="text-xs font-semibold text-text-primary truncate">{p.slug}</div>
                 <div className="text-[10px] text-text-500 font-mono truncate">{p.vault_root}/</div>
               </div>
-              {p.brief_exists && (
-                <button
-                  type="button"
-                  className="action-btn vault text-[10px] shrink-0"
-                  onClick={() => onOpen(p.brief_path, `Brief — ${p.slug}`)}
-                >
-                  <Eye size={11} /> Open brief
-                </button>
-              )}
+              <div className="flex items-center gap-1 shrink-0">
+                {p.brief_exists && (
+                  <button
+                    type="button"
+                    className="action-btn vault text-[10px]"
+                    onClick={() => onOpen(p.brief_path, `Brief — ${p.slug}`)}
+                  >
+                    <Eye size={11} /> Open brief
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    type="button"
+                    className="action-btn destructive text-[10px]"
+                    title="Delete this pursuit folder (does not touch global wiki)"
+                    onClick={() => onDelete(p.slug)}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="space-y-1">
               {existing.map((a) => (

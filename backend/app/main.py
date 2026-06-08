@@ -628,6 +628,14 @@ async def user_pursuits_list():
     return {"pursuits": pursuits, "count": len(pursuits)}
 
 
+@app.delete("/user/pursuits/{slug}", tags=["user", "vault", "pursuit"])
+async def user_pursuit_delete(slug: str):
+    """Delete pursuits/<slug>/ (test cleanup — does not touch global/ or brain/)."""
+    from .pursuit_workspace import delete_pursuit_folder
+
+    return delete_pursuit_folder(slug)
+
+
 @app.get("/user/knowledge/read", tags=["user", "vault"])
 async def user_knowledge_read(path: str = Query(..., description="relative path e.g. global/global_wiki/capture/xxx.md or brain/agencies/foo.md")):
     """Read the full content of any vault .md for the in-app wiki viewer.

@@ -164,8 +164,8 @@ export function SkillWorkspacePanel({
             className="accent-neon-magenta"
           />
           <span className="inline-flex items-center gap-1">
-            Add LLM narrative on Capture Brief (Ollama — skips if offline)
-            <FieldTip termId="capture_brief_enrich" label="enrich" showLearnLink={false} />
+            Add LLM narrative on Capture Brief or Battlecard (Ollama — skips if offline)
+            <FieldTip termId="capture_brief_enrich" showLearnLink={false} />
           </span>
         </label>
 
@@ -186,7 +186,7 @@ export function SkillWorkspacePanel({
                     disabled={loading}
                     onClick={() => onRunSkill(skill.id)}
                   >
-                    Run{skill.id === 'capture-brief' && useLlm ? ' + enrich' : ''}
+                    Run{useLlm && skill.supports_llm ? ' + LLM' : ''}
                   </button>
                 </div>
               </div>

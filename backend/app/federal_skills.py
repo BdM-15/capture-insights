@@ -116,7 +116,7 @@ THESEUS_CAPTURE_SKILLS: List[Dict[str, Any]] = [
         "category": "capture",
         "use_when": "Smart monitors from expiring contracts and brain entries",
         "mcp_deps": ["sam-gov-mcp"],
-        "status": "partial",
+        "status": "active",
     },
     {
         "id": "vault-synthesizer",
@@ -143,7 +143,7 @@ THESEUS_CAPTURE_SKILLS: List[Dict[str, Any]] = [
         "category": "capture",
         "use_when": "Ghost / team / displace talk tracks from competitive intel tab",
         "mcp_deps": ["usaspending-gov-mcp"],
-        "status": "partial",
+        "status": "active",
     },
 ]
 
