@@ -1,10 +1,10 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  BarChart3, Briefcase, BookOpen, Wrench, Layers, Settings,
+  BarChart3, Briefcase, BookOpen, Wrench, Layers, Settings, FileStack,
   Clock, Users, Target, Truck, MapPin, TrendingUp,
 } from 'lucide-react'
 
-export type SidebarId = 'dashboard' | 'pipeline' | 'vault' | 'tools' | 'skills' | 'settings'
+export type SidebarId = 'dashboard' | 'pipeline' | 'artifacts' | 'vault' | 'tools' | 'skills' | 'settings'
 export type AccentColor = 'cyan' | 'magenta' | 'purple' | 'lime' | 'amber'
 
 export interface ViewContext {
@@ -14,6 +14,7 @@ export interface ViewContext {
   pipelineCount: number
   brainCount: number
   expiringCount: number
+  artifactCount?: number
 }
 
 export interface NavItem {
@@ -42,6 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: 'magenta',
     items: [
       { id: 'pipeline', label: 'Pipeline', icon: Briefcase, accent: 'magenta' },
+      { id: 'artifacts', label: 'Artifacts', icon: FileStack, accent: 'magenta' },
       { id: 'vault', label: 'Knowledge Vault', icon: BookOpen, accent: 'purple' },
     ],
   },
@@ -102,10 +104,17 @@ export const VIEW_META: Record<SidebarId, ViewMetaEntry> = {
     icon: Briefcase,
     accent: 'magenta',
   },
+  artifacts: {
+    title: 'Artifacts',
+    subtitle: (ctx) =>
+      `${ctx.artifactCount ?? 0} pursuit folder${(ctx.artifactCount ?? 0) === 1 ? '' : 's'} · skill-generated drafts under pursuits/ (not foundational wiki)`,
+    icon: FileStack,
+    accent: 'magenta',
+  },
   vault: {
     title: 'Knowledge Vault',
     subtitle: (ctx) =>
-      `${ctx.brainCount} brain entr${ctx.brainCount === 1 ? 'y' : 'ies'} · domain intel, global wiki, native .md source of truth`,
+      `${ctx.brainCount} brain entr${ctx.brainCount === 1 ? 'y' : 'ies'} · curated global wiki, competitors, agencies — source of truth`,
     icon: BookOpen,
     accent: 'purple',
   },
@@ -117,7 +126,7 @@ export const VIEW_META: Record<SidebarId, ViewMetaEntry> = {
   },
   skills: {
     title: 'Studio',
-    subtitle: 'Pursuit artifacts from workspace skills · skill catalog · vault outputs',
+    subtitle: 'Skill catalog · run capture and acquisition automations from the dashboard',
     icon: Layers,
     accent: 'magenta',
   },

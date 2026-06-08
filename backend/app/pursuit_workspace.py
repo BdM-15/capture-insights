@@ -800,6 +800,37 @@ async def run_pursuit_skill(
     return {"ok": False, "error": f"unknown skill: {skill_id}"}
 
 
+def audit_vault_separation() -> Dict[str, Any]:
+    """Confirm pursuit workspace files stay out of global/ foundational wiki."""
+    knowledge = Path("data/knowledge")
+    global_base = knowledge / "global"
+    leaks: List[str] = []
+    markers = ("type: pursuit", "artifact: sam_scan", "artifact: competitive_snapshot", "type: pursuit-brief", "type: pursuit-battlecard")
+    if global_base.exists():
+        for md in global_base.rglob("*.md"):
+            if md.name == "README.md":
+                continue
+            try:
+                head = md.read_text(encoding="utf-8")[:1200].lower()
+                if any(m in head for m in markers):
+                    leaks.append(str(md.relative_to(knowledge)).replace("\\", "/"))
+            except Exception:
+                pass
+    pursuits = list_all_pursuits()
+    clean = len(leaks) == 0
+    return {
+        "ok": clean,
+        "global_pursuit_leaks": leaks,
+        "pursuit_folder_count": len(pursuits),
+        "pursuit_slugs": [p["slug"] for p in pursuits],
+        "message": (
+            "Global wiki is clean — no pursuit skill outputs in global/."
+            if clean
+            else f"Found {len(leaks)} pursuit-like file(s) in global/ — review before curating."
+        ),
+    }
+
+
 def delete_pursuit_folder(slug: str) -> Dict[str, Any]:
     """Remove pursuits/<slug>/ from disk (test cleanup — never touches global/)."""
     if not slug or slug in (".", "..", "README"):

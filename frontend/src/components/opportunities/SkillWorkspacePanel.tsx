@@ -85,7 +85,7 @@ export function SkillWorkspacePanel({
 
       <div className="skill-workspace-body overflow-auto flex-1 p-4 space-y-4">
         <div className="insight magenta">
-          Run skills to save files under <span className="font-mono">pursuits/{workspace.slug}/</span> — separate from the global wiki. Use Open links to view in Knowledge Vault or Studio.
+          Run skills to save drafts under <span className="font-mono">pursuits/{workspace.slug}/</span>. Open links go to <strong className="text-text-primary">Artifacts</strong> — not the curated Knowledge Vault.
         </div>
 
         {workspace.lastIntel && (
@@ -119,7 +119,7 @@ export function SkillWorkspacePanel({
           >
             + Track
           </Button>
-          <Button variant="soft" onClick={onOpenVault} disabled={!workspace.briefExists} title="Opens capture brief in Knowledge Vault reader">
+          <Button variant="soft" onClick={onOpenVault} disabled={!workspace.briefExists} title="Opens capture brief in Artifacts reader">
             <BookOpen className="w-3.5 h-3.5" /> Open brief
           </Button>
           <Button variant="soft" onClick={onScaffoldBrief} disabled={loading}>

@@ -619,6 +619,14 @@ async def user_global_list():
     return {"global_files": list_global_files()}
 
 
+@app.get("/user/vault/audit", tags=["user", "vault"])
+async def user_vault_audit():
+    """Verify pursuit artifacts are not mixed into global/ foundational wiki."""
+    from .pursuit_workspace import audit_vault_separation
+
+    return audit_vault_separation()
+
+
 @app.get("/user/pursuits/list", tags=["user", "vault", "pursuit"])
 async def user_pursuits_list():
     """Pursuit workspace outputs under data/knowledge/pursuits/ (separate from global/ wiki)."""

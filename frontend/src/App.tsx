@@ -267,6 +267,9 @@ export default function App() {
   // Click View on any global or native .md row -> this opens a focused reader with full(ish) text + copy actions.
   const [viewedWiki, setViewedWiki] = useState<any>(null)
   const [pursuitFolders, setPursuitFolders] = useState<PursuitFolder[]>([])
+  const [vaultAudit, setVaultAudit] = useState<{ ok: boolean; message: string; pursuit_slugs?: string[] } | null>(null)
+
+  const isPursuitPath = (path: string) => (path || '').replace(/\\/g, '/').startsWith('pursuits/')
   // Phase 3 vault maintenance (lint + index). These are the exact schema chores you want the LLM/agent to run for you.
   // Buttons below let you trigger them from inside the app instead of terminal.
   const [lintReport, setLintReport] = useState<any>(null)
@@ -278,17 +281,17 @@ export default function App() {
     setToast({ message, tone })
   }
 
-  /** Open any vault markdown path in the Knowledge Vault reader. */
-  async function openVaultPath(
-    vaultPath: string,
-    title?: string,
-    options?: { closeWorkspace?: boolean; sidebar?: 'vault' | 'skills' },
+  async function loadKnowledgeDoc(
+    relPath: string,
+    title: string | undefined,
+    target: 'vault' | 'artifacts',
+    options?: { closeWorkspace?: boolean },
   ) {
     if (options?.closeWorkspace !== false) {
       setSkillWorkspace(null)
     }
-    setSidebar(options?.sidebar ?? 'vault')
-    const normPath = vaultPath.replace(/\\/g, '/')
+    setSidebar(target)
+    const normPath = relPath.replace(/\\/g, '/')
     try {
       const r = await fetch(`/user/knowledge/read?path=${encodeURIComponent(normPath)}`)
       if (r.ok) {
@@ -296,7 +299,7 @@ export default function App() {
         const contentPath = (d.path || normPath).replace(/\\/g, '/')
         if (d.ok && d.content) {
           setViewedWiki({
-            name: title || contentPath.split('/').pop() || 'Vault',
+            name: title || contentPath.split('/').pop() || 'Document',
             path: contentPath,
             content: d.content,
             excerpt: d.content.slice(0, 600),
@@ -304,14 +307,23 @@ export default function App() {
           requestAnimationFrame(() => {
             document.querySelector('.main-panel')?.scrollTo({ top: 0, behavior: 'smooth' })
           })
-          showToast(`Opened ${title || 'artifact'} in ${options?.sidebar === 'skills' ? 'Studio' : 'Knowledge Vault'}`, 'success')
-          return
+          showToast(
+            `Opened ${title || 'file'} in ${target === 'artifacts' ? 'Artifacts' : 'Knowledge Vault'}`,
+            'success',
+          )
+          return true
         }
       }
       showToast('File not found — run the skill again from Workspace', 'error')
     } catch {
-      showToast('Could not load vault file', 'error')
+      showToast('Could not load file', 'error')
     }
+    return false
+  }
+
+  /** Open pursuit skill outputs (pursuits/<slug>/). */
+  async function openArtifactPath(artifactPath: string, title?: string, options?: { closeWorkspace?: boolean }) {
+    return loadKnowledgeDoc(artifactPath, title, 'artifacts', options)
   }
 
   /** Open atomic concept page in Knowledge Vault reader (always loads full file). */
@@ -392,6 +404,10 @@ export default function App() {
         const pdata = await pres.json()
         if (Array.isArray(pdata.pursuits)) setPursuitFolders(pdata.pursuits)
       }
+    } catch {}
+    try {
+      const ares = await fetch('/user/vault/audit')
+      if (ares.ok) setVaultAudit(await ares.json())
     } catch {}
     // Last-resort fallback for very old browser state
     try {
@@ -1912,7 +1928,7 @@ export default function App() {
                       />
                       {e.pursuit_brief_path && (
                         <button
-                          onClick={() => openVaultPath(e.pursuit_brief_path!, e.pursuit_slug)}
+                          onClick={() => openArtifactPath(e.pursuit_brief_path!, e.pursuit_slug)}
                           className="action-btn ghost text-xs"
                         >
                           Open vault brief
@@ -5216,17 +5232,99 @@ export default function App() {
       )
     }
 
-    if (sidebar === 'vault') {
+    if (sidebar === 'artifacts') {
       return (
         <div className="page-sections">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
+            <MetricCard label="Pursuit folders" value={String(pursuitFolders.length)} accent="magenta" tooltip="Skill outputs under data/knowledge/pursuits/" />
+            <MetricCard label="Global wiki clean" value={vaultAudit?.ok ? 'Yes' : vaultAudit ? 'Check' : '—'} accent={vaultAudit?.ok ? 'lime' : 'amber'} tooltip="Pursuit files must not appear in global/" />
+            <MetricCard label="Pipeline" value={String(pipeline.length)} accent="magenta" tooltip="Tracked pursuits and SAM monitors" />
+            <MetricCard label="NAICS slice" value={naics} accent="cyan" tooltip="Current dashboard filter" />
+          </div>
+
+          <div className="insight magenta mb-3">
+            <strong className="text-text-primary">Skill-generated drafts</strong> — not the curated Knowledge Vault. Today these are structured templates from USASpending + SAM; richer deliverables come as skills and agents mature. Promote only curated intel into Vault via +brain or manual Obsidian edits.
+          </div>
+
+          {vaultAudit && (
+            <div className={`text-[10px] mb-3 surface p-2 rounded-lg ${vaultAudit.ok ? 'text-neon-lime' : 'text-neon-amber'}`}>
+              {vaultAudit.message}
+              {(vaultAudit.pursuit_slugs?.length ?? 0) > 0 && (
+                <span className="text-text-500"> · On disk: {vaultAudit.pursuit_slugs!.join(', ')}</span>
+              )}
+            </div>
+          )}
+
+          {viewedWiki && isPursuitPath(viewedWiki.path) && (
+            <CollapsibleSection
+              title={viewedWiki.name || 'Artifact'}
+              subtitle={viewedWiki.path || 'In-app reader'}
+              icon={Eye}
+              accent="magenta"
+              defaultOpen
+              badge={
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewedWiki(null) }}
+                  className="text-[10px] px-2 py-0.5 border border-edge rounded hover:bg-ink-card shrink-0"
+                >
+                  Close
+                </button>
+              }
+            >
+              <div className="wiki-viewer-body">
+                {(viewedWiki.content || viewedWiki.excerpt || '(no preview)')}
+              </div>
+              <div className="action-group mt-2">
+                <button onClick={() => { try { navigator.clipboard.writeText(viewedWiki.path || '') } catch {} }} className="action-btn vault text-[10px]">
+                  Copy path
+                </button>
+              </div>
+            </CollapsibleSection>
+          )}
+
+          <CollapsibleSection
+            title="Pursuit artifacts"
+            subtitle="From Future Opportunities → Workspace skills"
+            icon={FolderOpen}
+            accent="magenta"
+            defaultOpen
+            badge={pursuitFolders.length > 0 ? <span className="pill text-[10px]">{pursuitFolders.length}</span> : undefined}
+          >
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button onClick={async () => { await loadUserAccumulators() }} className="action-btn vault text-xs">
+                Refresh
+              </button>
+              <button type="button" onClick={() => { setSidebar('dashboard'); setDashTab('opportunities') }} className="action-btn pipeline text-xs">
+                Open Future Opportunities
+              </button>
+            </div>
+            <PursuitArtifactsList
+              pursuits={pursuitFolders}
+              onOpen={(path, title) => openArtifactPath(path, title)}
+              onDelete={deletePursuitFolder}
+              emptyMessage="No artifacts yet — open Workspace on a recompete row and run a skill (Capture Brief, SAM Scan, Battlecard, etc.)."
+            />
+          </CollapsibleSection>
+        </div>
+      )
+    }
+
+    if (sidebar === 'vault') {
+      return (
+        <div className="page-sections">
+          <div className="insight purple mb-3">
+            <strong className="text-text-primary">Foundational curated knowledge</strong> — global wiki concepts, brain entries (competitors, agencies), and glossary education. Skill-generated pursuit drafts live under <button type="button" onClick={() => setSidebar('artifacts')} className="text-neon-cyan hover:underline">Artifacts</button>, not here.
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
             <MetricCard label="Brain entries" value={String(brain.length)} accent="purple" tooltip="Data-tied accumulator entries" />
             <MetricCard label="Global wiki" value={String(globalFiles.length)} accent="purple" tooltip="Evergreen capture knowledge pages" />
-            <MetricCard label="Pursuit artifacts" value={String(pursuitFolders.length)} accent="magenta" tooltip="Workspace skill outputs under pursuits/" />
+            <MetricCard label="Native .md" value={String(brainWiki.length)} accent="purple" tooltip="Synthesized files on disk in brain/" />
             <MetricCard label="NAICS slice" value={naics} accent="cyan" tooltip="Current dashboard filter feeding seeds" />
           </div>
 
-          {viewedWiki && (
+          {viewedWiki && !isPursuitPath(viewedWiki.path) && (
             <CollapsibleSection
               title={viewedWiki.name || 'Wiki page'}
               subtitle={viewedWiki.path || 'In-app reader'}
@@ -5283,23 +5381,6 @@ export default function App() {
               </div>
             </CollapsibleSection>
           )}
-
-          <CollapsibleSection
-            title="Pursuit artifacts"
-            subtitle="Workspace outputs · pursuits/ only (not global wiki)"
-            icon={FolderOpen}
-            accent="magenta"
-            defaultOpen={pursuitFolders.length > 0}
-            badge={pursuitFolders.length > 0 ? <span className="pill text-[10px]">{pursuitFolders.length}</span> : undefined}
-          >
-            <div className="insight magenta mb-3">
-              Files from Future Opportunities → Workspace skills live under <span className="font-mono">data/knowledge/pursuits/</span>. They do <strong className="text-text-primary">not</strong> modify the foundational <span className="font-mono">global/</span> wiki. Also browse in <button type="button" onClick={() => setSidebar('skills')} className="text-neon-cyan hover:underline">Studio</button>.
-            </div>
-            <button onClick={async () => { await loadUserAccumulators() }} className="action-btn vault text-xs mb-2">
-              Refresh pursuits
-            </button>
-            <PursuitArtifactsList pursuits={pursuitFolders} onOpen={(path, title) => openVaultPath(path, title)} />
-          </CollapsibleSection>
 
           <CollapsibleSection
             title="Capture Insights Glossary"
@@ -5688,49 +5769,12 @@ export default function App() {
       const partialCount = skillsCatalog.partial_count ?? theseusCapture.filter((s) => s.status === 'partial').length
       return (
         <div className="page-sections">
-          {viewedWiki && sidebar === 'skills' && (
-            <CollapsibleSection
-              title={viewedWiki.name || 'Artifact'}
-              subtitle={viewedWiki.path || 'In-app reader'}
-              icon={Eye}
-              accent="magenta"
-              defaultOpen
-              badge={
-                <button
-                  type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewedWiki(null) }}
-                  className="text-[10px] px-2 py-0.5 border border-edge rounded hover:bg-ink-card shrink-0"
-                >
-                  Close
-                </button>
-              }
-            >
-              <div className="wiki-viewer-body">
-                {(viewedWiki.content || viewedWiki.excerpt || '(no preview)')}
-              </div>
-            </CollapsibleSection>
-          )}
-
-          <CollapsibleSection
-            title="Pursuit Studio"
-            subtitle="Workspace skill outputs · Karpathy vault under pursuits/"
-            icon={FolderOpen}
-            accent="magenta"
-            defaultOpen
-            badge={pursuitFolders.length > 0 ? <span className="pill text-[10px]">{pursuitFolders.length}</span> : undefined}
-          >
-            <div className="insight magenta mb-3">
-              This is where pursuit briefs, SAM scans, and competitive snapshots land after you run skills in Future Opportunities → Workspace. Separate from <span className="font-mono">global/</span> foundational wiki — safe to delete test folders under <span className="font-mono">pursuits/</span> anytime.
-            </div>
-            <button onClick={async () => { await loadUserAccumulators() }} className="action-btn vault text-xs mb-2">
-              Refresh pursuits
-            </button>
-            <PursuitArtifactsList
-              pursuits={pursuitFolders}
-              onOpen={(path, title) => openVaultPath(path, title, { sidebar: 'skills' })}
-              onDelete={deletePursuitFolder}
-            />
-          </CollapsibleSection>
+          <div className="insight mb-3">
+            Skill catalog and co-pilot stubs. Pursuit outputs from Workspace land in{' '}
+            <button type="button" onClick={() => setSidebar('artifacts')} className="text-neon-cyan hover:underline">Artifacts</button>
+            {' '}— curated knowledge stays in{' '}
+            <button type="button" onClick={() => setSidebar('vault')} className="text-neon-cyan hover:underline">Knowledge Vault</button>.
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
             <MetricCard label="Skills catalog" value={String(skillsCatalog.skill_count ?? (federal1102.length + theseusCapture.length + marketing.length))} accent="magenta" tooltip="1102 + Theseus + marketing stubs" />
@@ -5963,6 +6007,7 @@ export default function App() {
     pipelineCount: pipeline.length,
     brainCount: brain.length,
     expiringCount: expiring.length,
+    artifactCount: pursuitFolders.length,
   }
 
   return (
@@ -5999,8 +6044,8 @@ export default function App() {
           onClose={() => setSkillWorkspace(null)}
           onScaffoldBrief={() => scaffoldPursuitBrief(!!skillWorkspace.briefExists)}
           onRunSkill={runPursuitSkill}
-          onOpenVault={() => openVaultPath(skillWorkspace.briefPath, skillWorkspace.slug)}
-          onOpenArtifact={(path, label) => openVaultPath(path, label)}
+          onOpenVault={() => openArtifactPath(skillWorkspace.briefPath, skillWorkspace.slug)}
+          onOpenArtifact={(path, label) => openArtifactPath(path, label)}
           onTrack={() => {
             addToPipeline(skillWorkspace.row, 'expiring')
             showToast('Added to Pipeline', 'success')
