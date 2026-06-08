@@ -100,6 +100,13 @@ class HealthResponse(BaseModel):
     mcp_servers: list[str] = []
 
 
+@app.get("/ready", tags=["system"])
+async def ready() -> dict[str, Any]:
+    """Structured workstation readiness for Future Opportunities strip + Settings."""
+    from .readiness import get_readiness
+    return await get_readiness()
+
+
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 async def health() -> dict[str, Any]:
     """Basic health + readiness for local dev and monitoring.
@@ -347,6 +354,58 @@ async def data_combo_insights(
     return get_combo_insights(naics_list or None, months_ahead=months, limit=limit)
 
 
+@app.get("/data/opportunities-intel", tags=["data", "opportunities"])
+async def data_opportunities_intel(
+    naics: str = "561210",
+    months: int = 36,
+    limit: int = 40,
+    proactive_sam: int = 1,
+    brain: str = "",
+):
+    """Future Opportunities intel — scored recompetes, SAM seeds, optional proactive live hits."""
+    from .opportunities_intel import get_opportunities_intel
+    from .sam_search import search_sam_opportunities
+    from .user_data import get_accumulators
+
+    naics_list = [n.strip() for n in naics.split(",") if n.strip()]
+    brain_names: list[str] = []
+    if brain:
+        try:
+            parsed = json.loads(brain)
+            if isinstance(parsed, list):
+                brain_names = [str(b.get("name", "")) for b in parsed if isinstance(b, dict) and b.get("name")]
+        except Exception:
+            pass
+
+    acc = get_accumulators()
+    pipeline = acc.get("pipeline") or []
+
+    result = get_opportunities_intel(
+        naics_list or None,
+        months_ahead=months,
+        limit=limit,
+        brain_names=brain_names,
+        pipeline=pipeline,
+        include_proactive_sam=bool(proactive_sam),
+    )
+
+    if result.get("meta", {}).get("proactive_sam", {}).get("enabled"):
+        primary = naics_list[0] if naics_list else "561210"
+        for row in (result.get("rows") or [])[:3]:
+            sam_pack = await search_sam_opportunities(
+                naics=primary,
+                keywords=row.get("suggested_sam_keywords") or "",
+                notice_types=row.get("suggested_notice_types") or "",
+                limit=3,
+            )
+            row["live_sam_hits"] = sam_pack.get("results") or []
+            row["live_sam_source"] = sam_pack.get("source")
+
+    from .deterministic.sam_budget import get_budget_status
+    result["readiness"]["sam_budget"] = get_budget_status()
+    return result
+
+
 @app.get("/data/geographic-analysis", tags=["data"])
 async def data_geographic_analysis(
     naics: str = "561210",
@@ -418,74 +477,15 @@ async def sam_opportunities(
     notice_types: str = "",
     limit: int = 10,
 ):
-    """Live SAM.gov opportunities search (direct API, MCP-ready).
-
-    Complements USASpending historical recompetes:
-    - Use historical to know the cycles and get ahead.
-    - Use SAM to catch the actual RFIs, Sources Sought, Special Notices, solicitations for those cycles, plus brand new requirements (CSOs, OTAs, open solicitations, traditional FAR new work).
-
-    Set SAM_API_KEY in .env for real results (free key from api.data.gov).
-    """
-    from .config import settings
-    import httpx
-
-    # Try MCP first for rich tools (when sam-gov-mcp server is running locally)
-    # See backend/app/mcp.py and docs for how to run: uvx sam-gov-mcp (from https://github.com/1102tools/federal-contracting-mcps)
-    from .mcp import search_sam_opportunities_mcp
-    mcp_results = await search_sam_opportunities_mcp(naics=naics, keywords=keywords, notice_types=notice_types, limit=limit)
-    if mcp_results:
-        # Tag so frontend can show "sourced from live MCP" vs direct API fallback
-        for item in mcp_results:
-            if isinstance(item, dict):
-                item.setdefault("_source", "mcp:sam-gov-mcp")
-        return mcp_results
-
-    if not settings.sam_api_key or settings.sam_api_key.startswith("SAM-7fa8ffb7") or len(settings.sam_api_key) < 20:
-        return [
-            {
-                "title": "SAM.gov search requires a real SAM_API_KEY in .env",
-                "agency": "Get free key at https://api.data.gov/signup/ (SAM.gov section)",
-                "link": "https://api.data.gov/signup/",
-                "noticeType": "info",
-            }
-        ]
-
-    params: dict = {
-        "api_key": settings.sam_api_key,
-        "limit": limit,
-        "index": "opp",
-    }
-    if naics:
-        params["naicsCode"] = naics
-    if keywords:
-        params["q"] = keywords
-    if notice_types:
-        # e.g. "RFI,Sources Sought,Special Notice,Presolicitation,Solicitation"
-        params["noticeType"] = notice_types
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.get(settings.sam_api_base_url, params=params)
-            r.raise_for_status()
-            data = r.json()
-    except Exception as e:
-        return [{"title": f"SAM search error: {str(e)}", "agency": "Check key / network", "link": ""}]
-
-    opps = data.get("opportunitiesData") or data.get("_embedded", {}).get("opportunities", []) or []
-    results = []
-    for o in opps[:limit]:
-        opp_id = o.get("opportunityId") or o.get("id")
-        link = o.get("link") or (f"https://sam.gov/opp/{opp_id}/view" if opp_id else "https://sam.gov")
-        results.append({
-            "title": o.get("title") or o.get("opportunityTitle") or "Untitled",
-            "noticeType": o.get("noticeType") or o.get("type") or "",
-            "responseDeadLine": o.get("responseDeadLine") or o.get("endDate") or "",
-            "agency": o.get("agency") or o.get("organizationName") or o.get("department") or "",
-            "link": link,
-            "description": (o.get("description") or o.get("synopsis") or "")[:300],
-            "_source": "direct:sam-gov-api",
-        })
-    return results
+    """Live SAM.gov search with MCP-first hybrid, response cache, and 1000/day budget."""
+    from .sam_search import search_sam_opportunities
+    pack = await search_sam_opportunities(
+        naics=naics,
+        keywords=keywords,
+        notice_types=notice_types,
+        limit=limit,
+    )
+    return pack.get("results") or []
 
 
 @app.get("/mcp/tools", tags=["mcp"])
@@ -682,56 +682,63 @@ async def create_sam_monitor(req: CreateSamMonitorRequest):
     suggested_notice = "RFI,Sources Sought,Special Notice,Presolicitation"
     rationale = f"Derived from {'expiring ' + award_key if award_key else 'SAM result'} for {recipient or agency}."
 
-    if req.use_llm:
-        brain_names = ", ".join([b.get("name", "") for b in brain[:3] if b.get("name")])
-        prompt = (
-            "You are helping a capture professional create a recurring SAM.gov search monitor.\n"
-            f"Context: NAICS {naics}. Trigger item: recipient={recipient}, agency={agency}, end={end_date}, key={award_key}.\n"
-            f"User's Brain (tracked competitors/agencies): {brain_names or 'none'}.\n"
-            "Suggest 3-8 good keywords (comma or space separated) and 1-4 notice types (comma sep from: RFI,Sources Sought,Special Notice,Presolicitation,Solicitation,CSO,OTA).\n"
-            "Also one-sentence rationale citing the trigger item. Keep keywords focused and high-signal.\n"
-            "Return exactly: KEYWORDS: ...\nNOTICE_TYPES: ...\nRATIONALE: ..."
-        )
-        text = llm_client.call_llm(prompt, temperature=0.2, max_tokens=120)
-        # very light parse
-        for line in text.splitlines():
-            l = line.strip()
-            if l.upper().startswith("KEYWORDS:"):
-                suggested_keywords = l.split(":", 1)[1].strip() or suggested_keywords
-            elif l.upper().startswith("NOTICE_TYPES:") or l.upper().startswith("NOTICE:"):
-                suggested_notice = l.split(":", 1)[1].strip() or suggested_notice
-            elif l.upper().startswith("RATIONALE:"):
-                rationale = l.split(":", 1)[1].strip() or rationale
+    from .deterministic.sam_monitor import build_monitor_entry, seed_sam_search
 
-    # 3. Optional MCP validation / enrichment (if server warm or will spawn)
+    if not req.use_llm:
+        entry = build_monitor_entry(item, naics, source="deterministic-button")
+        saved = add_to_pipeline(entry)
+        return {
+            "ok": True,
+            "entry": entry,
+            "accumulators": saved,
+            "rationale": entry.get("notes", ""),
+            "used_llm": False,
+        }
+
+    seed = seed_sam_search(item, naics)
+    suggested_keywords = seed["keywords"]
+    suggested_notice = seed["notice_types"]
+    brain_names = ", ".join([b.get("name", "") for b in brain[:3] if b.get("name")])
+    prompt = (
+        "You are helping a capture professional create a recurring SAM.gov search monitor.\n"
+        f"Context: NAICS {naics}. Trigger item: recipient={recipient}, agency={agency}, end={end_date}, key={award_key}.\n"
+        f"User's Brain (tracked competitors/agencies): {brain_names or 'none'}.\n"
+        f"Deterministic seed keywords: {suggested_keywords}. Notice types: {suggested_notice}.\n"
+        "Refine keywords if needed (3-8 words) and notice types (comma sep). One-sentence rationale.\n"
+        "Return exactly: KEYWORDS: ...\nNOTICE_TYPES: ...\nRATIONALE: ..."
+    )
+    text = llm_client.call_llm(prompt, temperature=0.2, max_tokens=120)
+    for line in text.splitlines():
+        l = line.strip()
+        if l.upper().startswith("KEYWORDS:"):
+            suggested_keywords = l.split(":", 1)[1].strip() or suggested_keywords
+        elif l.upper().startswith("NOTICE_TYPES:") or l.upper().startswith("NOTICE:"):
+            suggested_notice = l.split(":", 1)[1].strip() or suggested_notice
+        elif l.upper().startswith("RATIONALE:"):
+            rationale = l.split(":", 1)[1].strip() or rationale
+
     mcp_note = ""
     try:
         hits = await search_sam_opportunities_mcp(naics=naics, keywords=suggested_keywords[:80], notice_types=suggested_notice, limit=2)
         if hits:
             mcp_note = " (validated via MCP)"
-            # could append a sample title if useful
     except Exception:
         pass
 
-    # 4. Build the monitor entry (reuse/enhance the existing URL builder pattern)
-    q = f"q={urllib.parse.quote(suggested_keywords)}&naics={naics}"
-    if suggested_notice:
-        q += f"&noticeType={urllib.parse.quote(suggested_notice)}"
-    monitor_url = f"https://sam.gov/search/?index=opp&{q}"
-
-    entry = {
-        "title": f"SAM Monitor: {recipient or agency or suggested_keywords[:40]}",
-        "agency": agency or "Multiple",
-        "recipient": recipient,
-        "naics": naics,
-        "keywords": suggested_keywords,
-        "notice_types": suggested_notice,
-        "monitorUrl": monitor_url,
-        "notes": f"{rationale}{mcp_note}. Created via agent button from {'expiring ' + award_key if award_key else 'SAM result'}.",
-        "citation": f"trigger:{award_key or 'sam-result'} • naics:{naics} • {end_date}",
-        "type": "sam-monitor",
-        "source": "agent-button-llm",
-    }
+    entry = build_monitor_entry(
+        {**item, "agency": agency, "recipient": recipient, "award_key": award_key, "end_date": end_date},
+        naics,
+        source="agent-button-llm",
+    )
+    entry["keywords"] = suggested_keywords
+    entry["notice_types"] = suggested_notice
+    entry["notes"] = f"{rationale}{mcp_note}. Created via smart monitor from {'expiring ' + award_key if award_key else 'SAM result'}."
+    entry["monitorUrl"] = entry["monitorUrl"].replace(
+        urllib.parse.quote(seed["keywords"]),
+        urllib.parse.quote(suggested_keywords),
+    ) if suggested_keywords != seed["keywords"] else entry["monitorUrl"]
+    from .deterministic.sam_monitor import build_monitor_url
+    entry["monitorUrl"] = build_monitor_url(suggested_keywords, naics, suggested_notice)
 
     saved = add_to_pipeline(entry)
     return {
@@ -739,7 +746,7 @@ async def create_sam_monitor(req: CreateSamMonitorRequest):
         "entry": entry,
         "accumulators": saved,
         "rationale": rationale,
-        "used_llm": bool(req.use_llm),
+        "used_llm": True,
     }
 
 

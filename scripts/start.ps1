@@ -5,6 +5,21 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
+# Readiness preflight (Future Opportunities + SAM budget)
+$envFile = Join-Path $Root ".env"
+$duckPath = Join-Path $Root "data\usaspending.duckdb"
+Write-Host "`n--- Workstation readiness ---"
+if (Test-Path $envFile) {
+    $envText = Get-Content $envFile -Raw
+    $hasSam = $envText -match 'SAM_API_KEY\s*=\s*\S+' -and $envText -notmatch 'SAM_API_KEY\s*=\s*SAM-7fa8ffb7'
+    Write-Host ("  .env: found | SAM_API_KEY: " + $(if ($hasSam) { "configured" } else { "missing or placeholder" }))
+} else {
+    Write-Host "  .env: missing (copy .env.example)"
+}
+Write-Host ("  DuckDB: " + $(if (Test-Path $duckPath) { "ready ($duckPath)" } else { "NOT FOUND — run ingest first" }))
+Write-Host "  SAM budget: tracked at data/sam_budget.json (1000 calls/day)"
+Write-Host "  Live checks: GET /ready after server starts`n"
+
 $distIndex = Join-Path $Root "frontend\dist\index.html"
 $srcApp = Join-Path $Root "frontend\src\App.tsx"
 $needsBuild = -not (Test-Path $distIndex)
