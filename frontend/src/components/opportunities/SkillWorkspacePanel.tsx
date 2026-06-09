@@ -41,6 +41,7 @@ interface SkillWorkspacePanelProps {
   loading?: boolean
   useLlm: boolean
   onUseLlmChange: (v: boolean) => void
+  stackRightOffset?: number
   onClose: () => void
   onScaffoldBrief: () => void
   onRunSkill: (skillId: string) => void
@@ -54,6 +55,7 @@ export function SkillWorkspacePanel({
   loading,
   useLlm,
   onUseLlmChange,
+  stackRightOffset = 0,
   onClose,
   onScaffoldBrief,
   onRunSkill,
@@ -66,7 +68,10 @@ export function SkillWorkspacePanel({
   const millions = row.obligation_millions ?? (row.obligation || 0) / 1e6
 
   return (
-    <div className="skill-workspace-pane fixed top-14 bottom-0 right-0 z-[62] flex flex-col overflow-hidden rounded-l-3xl w-[min(420px,100vw)]">
+    <div
+      className="skill-workspace-pane fixed top-14 bottom-0 z-[62] flex flex-col overflow-hidden rounded-l-3xl w-[min(420px,100vw)]"
+      style={{ right: stackRightOffset }}
+    >
       <div className="skill-workspace-header">
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles className="w-4 h-4 text-neon-magenta shrink-0" />

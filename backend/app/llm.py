@@ -13,7 +13,8 @@ Warmup helpers called from lifespan for "app start warms everything".
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from enum import Enum
+from typing import Any, Dict, Iterator, List, Optional
 
 try:
     import ollama
@@ -35,7 +36,7 @@ except ImportError:
 def get_configured_model() -> str:
     if app_settings and hasattr(app_settings, "ollama_model"):
         return app_settings.ollama_model
-    return "qwen2.5:7b"
+    return "qwen3.5:9b"
 
 
 def list_available_models() -> List[str]:
@@ -122,6 +123,237 @@ def call_llm(
         return text or "[LLM returned empty response]"
     except Exception as e:
         return f"[LLM call failed: {type(e).__name__}. Using placeholder. Error: {str(e)[:100]}]"
+
+
+def chat_messages(
+    messages: List[Dict[str, str]],
+    *,
+    model: str | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 800,
+    timeout_seconds: float | None = None,
+) -> str:
+    """Multi-turn chat for tools-mode skills."""
+    if OLLAMA_LIB_AVAILABLE and ollama is not None:
+        try:
+            chosen = pick_best_model(model)
+            kwargs: Dict[str, Any] = {}
+            if timeout_seconds is not None and timeout_seconds > 0:
+                # ollama python client forwards unknown kwargs to the HTTP client
+                kwargs["timeout"] = timeout_seconds
+            resp = ollama.chat(
+                model=chosen,
+                messages=messages,
+                options={"temperature": temperature, "num_predict": max_tokens},
+                **kwargs,
+            )
+            text = (resp.get("message", {}).get("content") or "").strip()
+            return text or "[LLM returned empty response]"
+        except Exception as e:
+            return f"[LLM call failed: {type(e).__name__}. Error: {str(e)[:100]}]"
+    # Fallback: flatten to single prompt
+    parts = []
+    for m in messages:
+        role = m.get("role", "user")
+        parts.append(f"{role.upper()}: {m.get('content', '')}")
+    return call_llm("\n\n".join(parts), model=model, temperature=temperature, max_tokens=max_tokens)
+
+
+class LlmProvider(str, Enum):
+    FAST = "fast"
+    OLLAMA = "ollama"
+    XAI = "xai"
+
+
+def default_xai_model() -> str:
+    return "grok-3-mini"
+
+
+def chat_messages_multi_provider(
+    messages: List[Dict[str, str]],
+    *,
+    provider: str | LlmProvider = LlmProvider.OLLAMA,
+    model: str | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 1200,
+    timeout_seconds: float | None = 45.0,
+) -> tuple[str, str]:
+    """Returns (text, model_label)."""
+    prov = provider.value if isinstance(provider, LlmProvider) else str(provider)
+    if prov == LlmProvider.XAI.value:
+        return _chat_xai(messages, model=model or default_xai_model(), temperature=temperature, max_tokens=max_tokens, timeout=timeout_seconds), model or default_xai_model()
+    return chat_messages(messages, model=model, temperature=temperature, max_tokens=max_tokens, timeout_seconds=timeout_seconds), pick_best_model(model)
+
+
+def iter_stream_chat_messages_multi_provider(
+    messages: List[Dict[str, str]],
+    *,
+    provider: str | LlmProvider = LlmProvider.OLLAMA,
+    model: str | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 1200,
+    timeout_seconds: float | None = 90.0,
+) -> Iterator[str]:
+    """Yield assistant text chunks for SSE streaming."""
+    prov = provider.value if isinstance(provider, LlmProvider) else str(provider)
+    if prov == LlmProvider.XAI.value:
+        yield from _stream_xai(
+            messages,
+            model=model or default_xai_model(),
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout_seconds,
+        )
+        return
+    yield from _stream_ollama(
+        messages,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _stream_ollama(
+    messages: List[Dict[str, str]],
+    *,
+    model: str | None,
+    temperature: float,
+    max_tokens: int,
+    timeout_seconds: float | None,
+) -> Iterator[str]:
+    chosen = pick_best_model(model)
+    if OLLAMA_LIB_AVAILABLE and ollama is not None:
+        try:
+            kwargs: Dict[str, Any] = {}
+            if timeout_seconds is not None and timeout_seconds > 0:
+                kwargs["timeout"] = timeout_seconds
+            stream = ollama.chat(
+                model=chosen,
+                messages=messages,
+                stream=True,
+                options={"temperature": temperature, "num_predict": max_tokens},
+                **kwargs,
+            )
+            for chunk in stream:
+                text = (chunk.get("message") or {}).get("content") or ""
+                if text:
+                    yield text
+            return
+        except Exception as exc:
+            yield f"[LLM stream failed: {type(exc).__name__}: {str(exc)[:100]}]"
+            return
+    yield from _iter_chars(call_llm(
+        "\n\n".join(f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in messages),
+        model=chosen,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    ))
+
+
+def _iter_chars(text: str) -> Iterator[str]:
+    step = 24
+    for i in range(0, len(text), step):
+        yield text[i : i + step]
+
+
+def _stream_xai(
+    messages: List[Dict[str, str]],
+    *,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    timeout: float | None,
+) -> Iterator[str]:
+    from .api_keys import is_xai_key_configured
+
+    if not is_xai_key_configured():
+        yield "[xAI not configured — set XAI_API_KEY in .env and test in Settings]"
+        return
+
+    base = (app_settings.xai_base_url if app_settings else "https://api.x.ai/v1").rstrip("/")
+    key = app_settings.xai_api_key if app_settings else ""
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+    try:
+        import httpx
+
+        with httpx.Client(timeout=timeout or 90) as client:
+            with client.stream(
+                "POST",
+                f"{base}/chat/completions",
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {key}",
+                },
+            ) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        parsed = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = parsed.get("choices") or []
+                    if not choices:
+                        continue
+                    delta = (choices[0].get("delta") or {}).get("content") or ""
+                    if delta:
+                        yield delta
+    except Exception as exc:
+        yield f"[xAI stream failed: {type(exc).__name__}: {str(exc)[:160]}]"
+
+
+def _chat_xai(
+    messages: List[Dict[str, str]],
+    *,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    timeout: float | None,
+) -> str:
+    from .api_keys import is_xai_key_configured
+
+    if not is_xai_key_configured():
+        return "[xAI not configured — set XAI_API_KEY in .env and test in Settings]"
+
+    base = (app_settings.xai_base_url if app_settings else "https://api.x.ai/v1").rstrip("/")
+    key = app_settings.xai_api_key if app_settings else ""
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    req = urllib.request.Request(
+        f"{base}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout or 45) as resp:
+            data = json.loads(resp.read())
+        choices = data.get("choices") or []
+        if choices:
+            text = (choices[0].get("message") or {}).get("content") or ""
+            return text.strip() or "[xAI returned empty response]"
+        return "[xAI returned no choices]"
+    except Exception as exc:
+        return f"[xAI call failed: {type(exc).__name__}: {str(exc)[:160]}]"
 
 
 async def warmup_ollama() -> Dict[str, Any]:

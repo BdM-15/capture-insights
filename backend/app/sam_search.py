@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 import httpx
 
+from .api_keys import is_sam_key_configured
 from .config import settings
 from .deterministic.sam_budget import (
     cache_get,
@@ -18,8 +19,7 @@ from .deterministic.sam_budget import (
 
 
 def _sam_key_configured() -> bool:
-    key = settings.sam_api_key or ""
-    return bool(key) and not key.startswith("SAM-7fa8ffb7") and len(key) >= 20
+    return is_sam_key_configured()
 
 
 async def search_sam_opportunities(

@@ -94,50 +94,9 @@ async def list_sam_mcp_tools(force_refresh: bool = False) -> List[Dict[str, Any]
     uvx stdio spawns when the external MCP server is not running (the normal case).
     Call /mcp/tools? or pass force_refresh in dev when you just started the server.
     """
-    import time
-    global _mcp_tools_cache, _mcp_tools_cache_ts
+    from .mcp_client import list_mcp_tools_for_server
 
-    if not settings.enable_live_mcps or not MCP_AVAILABLE:
-        return []
-
-    now = time.time()
-    if not force_refresh and _mcp_tools_cache is not None and (now - _mcp_tools_cache_ts) < _MCP_CACHE_TTL:
-        return _mcp_tools_cache
-
-    server_env = os.environ.copy()
-    for key in ("SAM_API_KEY", "DATA_GOV_API_KEY"):
-        if hasattr(settings, key.lower()) and getattr(settings, key.lower()):
-            server_env[key] = getattr(settings, key.lower())
-
-    server_params = StdioServerParameters(
-        command="uvx",
-        args=["sam-gov-mcp"],
-        env=server_env,
-    )
-
-    tools: List[Dict[str, Any]] = []
-    try:
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools_result = await session.list_tools()
-                for t in getattr(tools_result, "tools", []) or []:
-                    tools.append({
-                        "name": getattr(t, "name", str(t)),
-                        "description": getattr(t, "description", ""),
-                        "input_schema": getattr(t, "inputSchema", None) or getattr(t, "input_schema", None),
-                        "server_id": "sam-gov-mcp",
-                        "server_name": "SAM.gov",
-                    })
-        _mcp_tools_cache = tools
-        _mcp_tools_cache_ts = now
-        return tools
-    except Exception as e:
-        print(f"[mcp] list_sam_mcp_tools: server not reachable or error (cached empty for TTL): {e}")
-        # Cache the empty to avoid hammering on every health/chat until TTL expires
-        _mcp_tools_cache = []
-        _mcp_tools_cache_ts = now
-        return []
+    return await list_mcp_tools_for_server("sam-gov-mcp", force_refresh=force_refresh)
 
 
 async def search_sam_opportunities_mcp(

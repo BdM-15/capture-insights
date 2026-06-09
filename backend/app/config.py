@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # LLM - Local first (good for 8GB VRAM), with optional xAI fallback
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5:7b"   # Safe & strong on 8GB VRAM. qwen2.5:7b or similar.
+    ollama_model: str = "qwen3.5:9b"   # Primary local model; override via OLLAMA_MODEL in .env
     ollama_temperature: float = 0.3
 
     # xAI Grok (via their OpenAI-compatible endpoint) - use when you want more power

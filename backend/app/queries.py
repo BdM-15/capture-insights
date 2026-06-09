@@ -2148,6 +2148,88 @@ def get_top_recipients(
 
 # --- Simple chat / co-pilot support (grounded in current user context + data) ---
 
+def build_llm_chat_messages(
+    *,
+    naics: str,
+    active_tab: str,
+    kpis: dict | None = None,
+    brain_items: list[dict] | None = None,
+    pipeline_items: list[dict] | None = None,
+    extra_context: str | None = None,
+    model_provider: str = "fast",
+    model_name: str | None = None,
+    chat_history: list[dict] | None = None,
+    mcp_tools: list[dict] | None = None,
+    context_block: str | None = None,
+    brain_count: int | None = None,
+    pipeline_count: int | None = None,
+) -> dict | None:
+    """Return LLM message pack for streaming/sync chat, or None for deterministic path."""
+    brain = brain_items or []
+    pipeline = pipeline_items or []
+    tools = mcp_tools or []
+    provider = model_provider if model_provider in ("fast", "ollama", "xai") else "fast"
+    if provider == "fast":
+        return None
+
+    if context_block is None:
+        brain_names = [b.get("name") for b in brain if b.get("name")][:5]
+        obligations = (kpis or {}).get("total_obligations_m", 0)
+        actions = (kpis or {}).get("total_actions", 0)
+        context_lines = [f"Current scope: NAICS {naics} | Viewing tab: {active_tab}"]
+        if obligations:
+            context_lines.append(f"Loaded market slice: ${obligations}M total obligations, {actions:,} actions.")
+        if brain_count is None:
+            brain_count = len(brain)
+        if pipeline_count is None:
+            pipeline_count = len(pipeline)
+        if brain_count:
+            context_lines.append(f"User's Brain ({brain_count} entries): " + ", ".join(brain_names) + ".")
+        else:
+            context_lines.append("User's Brain is currently empty.")
+        if pipeline_count:
+            context_lines.append(f"User's Pipeline has {pipeline_count} saved opportunities.")
+        else:
+            context_lines.append("User's Pipeline is currently empty.")
+        if tools:
+            tool_names = [t.get("name") for t in tools if isinstance(t, dict) and t.get("name")][:8]
+            context_lines.append("Available MCP tools: " + ", ".join(tool_names) + ".")
+        if extra_context:
+            context_lines.append(f"User asked / tool results injected: {extra_context}")
+        context_block = "\n".join(context_lines)
+
+    from .llm import default_xai_model, pick_best_model
+
+    system = (
+        "You are an agentic capture intelligence co-pilot for federal contractors. "
+        "Ground answers ONLY in provided CONTEXT (Brain, Pipeline, MCP results). "
+        "Never invent contract dollars, burn rates, or award statistics. "
+        "For obligation/incumbent questions without data, recommend the competitive-intel skill. "
+        "Use markdown for structure when helpful. Be concise and actionable."
+    )
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    for h in (chat_history or [])[-10:]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": str(h["content"])[:3000]})
+    user_turn = f"CONTEXT:\n{context_block}\n\nAnswer the latest user request."
+    messages.append({"role": "user", "content": user_turn})
+    chosen_model = model_name or (default_xai_model() if provider == "xai" else pick_best_model())
+
+    return {
+        "messages": messages,
+        "provider": provider,
+        "model": chosen_model,
+        "temperature": 0.25,
+        "max_tokens": 1200,
+        "naics": naics,
+        "active_tab": active_tab,
+        "extra_context": extra_context,
+        "chat_history": chat_history,
+        "brain_items": brain,
+        "pipeline_items": pipeline,
+    }
+
+
 def get_chat_response(
     naics: str,
     active_tab: str,
@@ -2157,6 +2239,9 @@ def get_chat_response(
     extra_context: str | None = None,
     use_llm: bool = False,
     mcp_tools: list[dict] | None = None,
+    model_provider: str = "fast",
+    model_name: str | None = None,
+    chat_history: list[dict] | None = None,
 ) -> dict:
     """
     Build a useful, context-aware response for the floating AI co-pilot.
@@ -2215,58 +2300,56 @@ def get_chat_response(
 
     context_block = "\n".join(context_lines)
 
-    # LLM path is opt-in for now (use_llm=True in the request) to keep the chat instant.
-    # The fast deterministic path below is already very powerful because it has your exact saved Brain + Pipeline.
-    llm_text = None
-    if use_llm:
-        ollama_models_to_try = ["qwen3.5:9b", "qwen2.5:7b-instruct", "qwen2.5:7b", "llama3.2:latest"]
-        for model in ollama_models_to_try:
-            try:
-                prompt = (
-                    "You are an agentic capture intelligence co-pilot. The user will NEVER call MCP tools or run uvx themselves.\n"
-                    "You are the one who decides when to use available MCP tools (from the catalog in context) to perform admin tasks on their behalf: searching SAM.gov for live notices, creating monitors, enriching brain entries, etc.\n"
-                    "You are grounded ONLY in the provided CONTEXT (scope + exact Brain + Pipeline + live tool results if any + available MCP tools).\n"
-                    "Be direct, actionable, reference specific names/numbers from context. If you used or want to reference live MCP data, say so.\n"
-                    "When you want to invoke a tool to help answer (e.g. because user asked to search SAM or create monitors), output on its own line in this exact format before your final prose:\n"
-                    "TOOL_CALL: search_opportunities {\"naics\": \"561210\", \"keywords\": \"...\", \"notice_types\": \"RFI,Sources Sought\"}\n"
-                    "The system will execute it and re-invoke you with the results injected. For this turn, just propose or use what is already injected.\n\n"
-                    f"CONTEXT:\n{context_block}\n\n"
-                    "Answer the user's request helpfully and concisely (4-8 sentences). At the end suggest 1-3 concrete next actions the user can click."
-                )
-                ollama_req = urllib.request.Request(
-                    "http://localhost:11434/api/generate",
-                    data=json.dumps({"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.2}}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(ollama_req, timeout=12) as resp:
-                    result = json.loads(resp.read())
-                llm_text = result.get("response", "").strip()
-                if llm_text:
-                    llm_actions = []
-                    if brain:
-                        top = brain[0].get("name")
-                        llm_actions.append({"label": f"Add more to Brain for {top}", "action": "add_to_brain", "payload": {"name": top, "type": brain[0].get("type", "competitor")}})
-                    if pipeline:
-                        llm_actions.append({"label": "Review my Pipeline", "action": "navigate", "payload": {"view": "pipeline"}})
-                    # If LLM output contains a TOOL_CALL we surface it as a special suggested action (frontend can later drive full loop)
-                    if "TOOL_CALL" in llm_text:
-                        llm_actions.append({"label": "Execute the tool call the model proposed (search/create)", "action": "log_note", "payload": {"note": "LLM proposed TOOL_CALL — backend orchestration handled the MCP in this version"}})
-                    return {
-                        "response": llm_text,
-                        "context_used": {
-                            "naics": naics,
-                            "active_tab": active_tab,
-                            "brain_count": brain_count,
-                            "pipeline_count": pipeline_count,
-                            "model": model,
-                            "mcp_tools": [t.get("name") for t in tools if isinstance(t, dict)][:5],
-                        },
-                        "source": "ollama+agentic",
-                        "suggested_actions": llm_actions,
-                    }
-            except Exception:
-                continue
+    provider = model_provider if model_provider in ("fast", "ollama", "xai") else ("ollama" if use_llm else "fast")
+    use_llm = use_llm or provider in ("ollama", "xai")
+
+    llm_pack = build_llm_chat_messages(
+        naics=naics,
+        active_tab=active_tab,
+        kpis=kpis,
+        brain_items=brain,
+        pipeline_items=pipeline,
+        extra_context=extra_context,
+        model_provider=provider,
+        model_name=model_name,
+        chat_history=chat_history,
+        mcp_tools=tools,
+        context_block=context_block,
+        brain_count=brain_count,
+        pipeline_count=pipeline_count,
+    )
+    if llm_pack and use_llm and provider != "fast":
+        from .llm import chat_messages_multi_provider
+
+        llm_text, model_label = chat_messages_multi_provider(
+            llm_pack["messages"],
+            provider=llm_pack["provider"],
+            model=llm_pack["model"],
+            temperature=llm_pack.get("temperature", 0.25),
+            max_tokens=llm_pack.get("max_tokens", 1200),
+        )
+        if llm_text and "LLM call failed" not in llm_text and "not configured" not in llm_text:
+            llm_actions = []
+            if brain:
+                top = brain[0].get("name")
+                llm_actions.append({"label": f"Add more to Brain for {top}", "action": "add_to_brain", "payload": {"name": top, "type": brain[0].get("type", "competitor")}})
+            if pipeline:
+                llm_actions.append({"label": "Review my Pipeline", "action": "navigate", "payload": {"view": "pipeline"}})
+            return {
+                "response": llm_text,
+                "context_used": {
+                    "naics": naics,
+                    "active_tab": active_tab,
+                    "brain_count": brain_count,
+                    "pipeline_count": pipeline_count,
+                    "model": model_label,
+                    "provider": provider,
+                    "mcp_tools": [t.get("name") for t in tools if isinstance(t, dict)][:5],
+                },
+                "source": f"{provider}+agentic",
+                "model": model_label,
+                "suggested_actions": llm_actions,
+            }
 
     # Fallback: deterministic but still very useful response (what we had before)
     lines = [f"Current scope: NAICS {naics} | Viewing: {active_tab}"]

@@ -99,3 +99,7 @@ mcp_servers_runtime/
 *.bak
 *.tmp
 *.orig
+terminals/
+mcps/
+*.tsbuildinfo
+frontend/vite.config.js

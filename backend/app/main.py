@@ -17,7 +17,7 @@ from typing import Any, List
 
 from fastapi import FastAPI, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -456,9 +456,128 @@ async def data_teaming_candidates(
 
 @app.get("/skills/catalog", tags=["skills"])
 async def skills_catalog():
-    """1102 + Theseus + marketing skill stubs for the Skills sidebar."""
-    from .federal_skills import build_skills_catalog
+    """Agent Skills catalog from skills/*/SKILL.md (agentskills.io open standard)."""
+    from .skill_registry import build_skills_catalog
     return build_skills_catalog()
+
+
+@app.get("/skills/validate", tags=["skills"])
+async def skills_validate():
+    """Validate all skills/*/SKILL.md (agentskills.io / skills-ref)."""
+    from .skill_validation import validate_all_skills
+
+    return validate_all_skills()
+
+
+@app.get("/skills/route", tags=["skills"])
+async def skills_route(message: str = "", use_llm: bool = False):
+    """Preview co-pilot routing from a message (description + triggers)."""
+    from .skill_router import route_skill_from_message
+
+    route = route_skill_from_message(message, use_llm=use_llm)
+    return route.to_dict()
+
+
+class SkillInvokeRequest(BaseModel):
+    skill_id: str
+    inquiry: str = ""
+    naics: str = "561210"
+    brain: list[dict] | None = None
+    pipeline: list[dict] | None = None
+    pursuit_item: dict | None = None
+    contract_number: str | None = None
+    displacement_target: str | None = None
+    capability_gap: str | None = None
+    scope: str = "auto"
+    use_llm: bool = False
+    conversation_id: str | None = None
+
+
+@app.get("/skills/runs", tags=["skills"])
+async def list_skill_runs(skill_id: str | None = None, limit: int = 50):
+    """Auditable run history — newest first."""
+    from .skill_run_store import list_runs
+
+    return {"runs": list_runs(skill_id=skill_id, limit=min(limit, 200))}
+
+
+@app.get("/skills/runs/{run_id}", tags=["skills"])
+async def get_skill_run(run_id: str):
+    """Full run envelope: process chain, transcript, artifacts."""
+    from .skill_run_store import get_run
+
+    run = get_run(run_id)
+    if not run:
+        from fastapi import HTTPException
+        raise HTTPException(404, f"Unknown run: {run_id}")
+    return run
+
+
+@app.post("/skills/invoke", tags=["skills"])
+async def invoke_skill_endpoint(req: SkillInvokeRequest):
+    """Run a skill from Agent Skills page or co-pilot — no CLI required."""
+    from .skill_invoke_service import invoke_skill, mirror_invoke_to_conversation
+
+    result = await invoke_skill(
+        req.skill_id,
+        naics=req.naics,
+        brain=req.brain,
+        pipeline=req.pipeline,
+        pursuit_item=req.pursuit_item,
+        contract_number=req.contract_number,
+        displacement_target=req.displacement_target,
+        capability_gap=req.capability_gap,
+        scope=req.scope or "auto",
+        use_llm=req.use_llm,
+        inquiry=req.inquiry or "",
+        source="skills-page",
+    )
+    conversation = None
+    if req.conversation_id:
+        conversation = mirror_invoke_to_conversation(
+            req.conversation_id,
+            skill_id=req.skill_id,
+            inquiry=req.inquiry or "",
+            result=result,
+        )
+    if conversation:
+        result["conversation"] = conversation
+    return result
+
+
+@app.post("/skills/competitive-intel/invoke", tags=["skills"])
+async def invoke_competitive_intel_legacy(req: SkillInvokeRequest):
+    """Backward-compatible alias — prefer POST /skills/invoke."""
+    from .skill_invoke_service import invoke_skill
+
+    return await invoke_skill(
+        "competitive-intel",
+        naics=req.naics,
+        brain=req.brain,
+        pipeline=req.pipeline,
+        pursuit_item=req.pursuit_item,
+        contract_number=req.contract_number,
+        scope=req.scope or "auto",
+        use_llm=req.use_llm,
+        source="skills-page",
+    )
+
+
+@app.get("/skills/{skill_name}", tags=["skills"])
+async def skill_detail(skill_name: str):
+    """Single skill metadata + instruction body for agent activation."""
+    from .skill_registry import get_skill
+
+    skill = get_skill(skill_name)
+    if not skill:
+        from fastapi import HTTPException
+        raise HTTPException(404, f"Unknown skill: {skill_name}")
+    return {
+        **skill.to_catalog_entry(),
+        "body_md": skill.body_md,
+        "license": skill.license,
+        "compatibility": skill.compatibility,
+    }
 
 
 @app.get("/data/top-recipients", tags=["data"])
@@ -495,21 +614,67 @@ async def mcp_tools_catalog(refresh: int = 0):
     Users choose by MCP (SAM.gov, USASpending, …); the co-pilot picks endpoints under the hood.
     """
     from .federal_mcps import build_mcp_catalog
-    from .mcp import list_sam_mcp_tools, MCP_AVAILABLE, settings as mcp_settings
+    from .mcp import MCP_AVAILABLE
+    from .mcp_client import discover_integrated_mcp_tools
+
     discovered: dict = {}
     try:
-        sam_tools = await list_sam_mcp_tools(force_refresh=bool(refresh))
-        if sam_tools:
-            discovered["sam-gov-mcp"] = sam_tools
+        discovered = await discover_integrated_mcp_tools(force_refresh=bool(refresh))
     except Exception:
         pass
     catalog = build_mcp_catalog(discovered)
     return {
         **catalog,
-        "mcp_available": catalog.get("online_count", 0) > 0 or (MCP_AVAILABLE and mcp_settings.enable_live_mcps),
+        "mcp_available": catalog.get("online_count", 0) > 0 or (MCP_AVAILABLE and settings.enable_live_mcps),
         "note": "Pick an MCP by data need — co-pilot and buttons invoke tools for you.",
-        "how_to_enable": "SAM.gov MCP warms at startup. Other 1102 MCPs appear in catalog until integrated. Refresh after starting external servers.",
+        "how_to_enable": "Integrated MCPs (SAM.gov, USASpending) warm on demand via uvx. Use Settings → Test connection to verify each server.",
     }
+
+
+@app.get("/settings", tags=["system"])
+async def settings_panel():
+    """Workstation settings snapshot: connections, key status (masked), readiness."""
+    from .settings_connections import get_settings_snapshot
+    return await get_settings_snapshot()
+
+
+@app.post("/settings/test/{connection_id}", tags=["system"])
+async def settings_test_connection(connection_id: str):
+    """Test one connection (DuckDB, Ollama, SAM key, or mcp:<server-id>)."""
+    from .settings_connections import test_connection
+    return await test_connection(connection_id)
+
+
+@app.post("/settings/test-all", tags=["system"])
+async def settings_test_all_connections():
+    """Run all testable connections (parallel)."""
+    from .settings_connections import test_all_connections
+    return await test_all_connections()
+
+
+@app.get("/settings/skill-runtime", tags=["system"])
+async def get_skill_runtime_settings():
+    """Global tools-mode runtime ceilings (turns, timeouts, truncation limits)."""
+    from .skill_runtime_settings import runtime_settings_snapshot
+    return runtime_settings_snapshot()
+
+
+@app.put("/settings/skill-runtime", tags=["system"])
+async def update_skill_runtime_settings(payload: Any = Body(...)):
+    from .skill_runtime_settings import runtime_settings_snapshot, write_runtime_settings
+    from .skill_runtime_settings import SkillRuntimeSettingsUpdate
+
+    model = SkillRuntimeSettingsUpdate.model_validate(payload)
+    write_runtime_settings(model.model_dump(exclude_none=True))
+    return runtime_settings_snapshot()
+
+
+@app.post("/settings/skill-runtime/reset", tags=["system"])
+async def reset_skill_runtime_settings():
+    from .skill_runtime_settings import reset_runtime_settings, runtime_settings_snapshot
+
+    reset_runtime_settings()
+    return runtime_settings_snapshot()
 
 
 # --- User accumulators (Pipeline + Brain) persistence ---
@@ -836,8 +1001,267 @@ class ChatRequest(BaseModel):
     brain: list[dict] | None = None
     pipeline: list[dict] | None = None
     message: str | None = None   # the user's typed question (we can use it later for routing)
-    use_llm: bool = False        # opt into local LLM (qwen3.5:9b etc.) for more natural responses; default is fast deterministic path using your exact persisted Brain + Pipeline data
+    use_llm: bool = False        # legacy — maps to model_provider=ollama when True
+    model_provider: str = "fast"  # fast | ollama | xai
+    model_name: str | None = None
     mcp_tools: list[dict] | None = None  # catalog of available MCP tools (from /mcp/tools or frontend cache). Passed so LLM knows what admin actions it can drive for the user.
+
+
+class ConversationCreateRequest(BaseModel):
+    title: str = "New conversation"
+    model_provider: str = "fast"
+    model_name: str | None = None
+    scope: dict | None = None
+
+
+class ConversationPatchRequest(BaseModel):
+    title: str | None = None
+    model_provider: str | None = None
+    model_name: str | None = None
+    scope: dict | None = None
+
+
+class ConversationAppendRequest(BaseModel):
+    role: str = "assistant"
+    content: str
+    source: str | None = None
+    run_id: str | None = None
+    skill_id: str | None = None
+    suggested_actions: list[dict] | None = None
+
+
+class ConversationMessageRequest(BaseModel):
+    message: str
+    naics: str = "561210"
+    active_tab: str = "market"
+    kpis: dict | None = None
+    brain: list[dict] | None = None
+    pipeline: list[dict] | None = None
+    mcp_tools: list[dict] | None = None
+    model_provider: str | None = None
+    model_name: str | None = None
+    regenerate: bool = False
+    edit_message_id: str | None = None
+    continue_run_id: str | None = None
+    vault_excerpt: str | None = None
+    include_vault_excerpt: bool = False
+
+
+def _resolve_model_provider(req: ChatRequest) -> str:
+    if req.model_provider and req.model_provider != "fast":
+        return req.model_provider
+    return "ollama" if req.use_llm else "fast"
+
+
+@app.get("/chat/conversations", tags=["chat"])
+async def list_chat_conversations(limit: int = Query(40, ge=1, le=100)):
+    from .chat_store import list_conversations
+    return {"conversations": list_conversations(limit=limit)}
+
+
+@app.post("/chat/conversations", tags=["chat"])
+async def create_chat_conversation(req: ConversationCreateRequest):
+    from .chat_store import create_conversation
+    conv = create_conversation(
+        title=req.title,
+        model_provider=req.model_provider,
+        model_name=req.model_name,
+        scope=req.scope,
+    )
+    return conv
+
+
+@app.get("/chat/conversations/{conversation_id}", tags=["chat"])
+async def get_chat_conversation(conversation_id: str):
+    from .chat_store import load_conversation
+    conv = load_conversation(conversation_id)
+    if not conv:
+        return {"ok": False, "error": "conversation not found"}
+    return conv
+
+
+@app.patch("/chat/conversations/{conversation_id}", tags=["chat"])
+async def patch_chat_conversation(conversation_id: str, req: ConversationPatchRequest):
+    from .chat_store import update_conversation
+    conv = update_conversation(
+        conversation_id,
+        title=req.title,
+        model_provider=req.model_provider,
+        model_name=req.model_name,
+        scope=req.scope,
+    )
+    if not conv:
+        return {"ok": False, "error": "conversation not found"}
+    return conv
+
+
+@app.delete("/chat/conversations/{conversation_id}", tags=["chat"])
+async def delete_chat_conversation(conversation_id: str):
+    from .chat_store import delete_conversation
+    ok = delete_conversation(conversation_id)
+    return {"ok": ok}
+
+
+@app.post("/chat/conversations/{conversation_id}/append", tags=["chat"])
+async def append_chat_message(conversation_id: str, req: ConversationAppendRequest):
+    """Append a message without re-running chat routing (e.g. skill invoke from action chip)."""
+    from .chat_store import append_message, load_conversation
+
+    conv = load_conversation(conversation_id)
+    if not conv:
+        return {"ok": False, "error": "conversation not found"}
+    msg = append_message(
+        conversation_id,
+        role=req.role,
+        content=req.content,
+        source=req.source,
+        run_id=req.run_id,
+        skill_id=req.skill_id,
+        suggested_actions=req.suggested_actions,
+    )
+    return {"ok": True, "conversation": load_conversation(conversation_id), "message": msg}
+
+
+def _prepare_conversation_user_turn(conversation_id: str, req: ConversationMessageRequest):
+    from .chat_store import (
+        append_message,
+        conversation_history_for_llm,
+        load_conversation,
+        pop_last_assistant,
+        truncate_messages_after,
+    )
+
+    conv = load_conversation(conversation_id)
+    if not conv:
+        return None, None, None, {"ok": False, "error": "conversation not found"}
+
+    provider = req.model_provider or conv.get("model_provider") or "fast"
+    model_name = req.model_name or conv.get("model_name")
+
+    if req.regenerate:
+        pop_last_assistant(conversation_id)
+        conv = load_conversation(conversation_id) or conv
+        user_msgs = [m for m in (conv.get("messages") or []) if m.get("role") == "user"]
+        user_text = (user_msgs[-1].get("content") if user_msgs else req.message) or req.message
+    elif req.edit_message_id:
+        truncate_messages_after(conversation_id, req.edit_message_id)
+        user_text = (req.message or "").strip()
+        if not user_text:
+            return None, None, None, {"ok": False, "error": "empty message"}
+        append_message(conversation_id, role="user", content=user_text)
+        conv = load_conversation(conversation_id) or conv
+    else:
+        user_text = (req.message or "").strip()
+        if not user_text:
+            return None, None, None, {"ok": False, "error": "empty message"}
+        append_message(conversation_id, role="user", content=user_text)
+        conv = load_conversation(conversation_id) or conv
+
+    history = conversation_history_for_llm(conv, max_turns=14)
+    return conv, user_text, {
+        "naics": req.naics,
+        "active_tab": req.active_tab,
+        "kpis": req.kpis,
+        "brain": req.brain,
+        "pipeline": req.pipeline,
+        "mcp_tools": req.mcp_tools,
+        "model_provider": provider,
+        "model_name": model_name,
+        "history": history[:-1] if history else None,
+        "continue_run_id": req.continue_run_id,
+        "vault_excerpt": req.vault_excerpt if req.include_vault_excerpt else None,
+    }, None
+
+
+def _persist_assistant_turn(conversation_id: str, result: dict):
+    from .chat_store import append_message, load_conversation
+
+    assistant_msg = append_message(
+        conversation_id,
+        role="assistant",
+        content=result.get("response") or "",
+        source=result.get("source"),
+        model=result.get("model"),
+        run_id=result.get("run_id"),
+        skill_id=(result.get("context_used") or {}).get("skill_id") or result.get("skill_id"),
+        suggested_actions=result.get("suggested_actions"),
+    )
+    conv = load_conversation(conversation_id)
+    return assistant_msg, conv
+
+
+@app.post("/chat/conversations/{conversation_id}/messages", tags=["chat"])
+async def post_conversation_message(conversation_id: str, req: ConversationMessageRequest):
+    from .chat_service import process_chat_message
+
+    conv, user_text, ctx, err = _prepare_conversation_user_turn(conversation_id, req)
+    if err:
+        return err
+
+    result = await process_chat_message(message=user_text, **ctx)
+    assistant_msg, conv = _persist_assistant_turn(conversation_id, result)
+
+    return {
+        "ok": True,
+        "conversation": conv,
+        "user_message": user_text,
+        "assistant_message": assistant_msg,
+        **result,
+    }
+
+
+@app.post("/chat/conversations/{conversation_id}/messages/stream", tags=["chat"])
+async def post_conversation_message_stream(conversation_id: str, req: ConversationMessageRequest):
+    """SSE stream for co-pilot replies (LLM token chunks + done event)."""
+    from .chat_service import finalize_stream_prep, iter_stream_chat_result, prepare_chat_message
+
+    conv, user_text, ctx, err = _prepare_conversation_user_turn(conversation_id, req)
+    if err:
+        return err
+
+    prep = await prepare_chat_message(message=user_text, **ctx)
+
+    async def event_stream():
+        yield "event: open\ndata: {}\n\n"
+        collected: list[str] = []
+        try:
+            for chunk in iter_stream_chat_result(prep):
+                if not chunk:
+                    continue
+                collected.append(chunk)
+                yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'message': str(exc)})}\n\n"
+
+        full_text = "".join(collected)
+        result = finalize_stream_prep(prep, full_text)
+        assistant_msg, conv_out = _persist_assistant_turn(conversation_id, result)
+        yield (
+            "event: done\ndata: "
+            + json.dumps({
+                "ok": True,
+                "conversation": conv_out,
+                "user_message": user_text,
+                "assistant_message": assistant_msg,
+                "response": result.get("response"),
+                "source": result.get("source"),
+                "model": result.get("model"),
+                "run_id": result.get("run_id"),
+                "suggested_actions": result.get("suggested_actions"),
+            })
+            + "\n\n"
+        )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
 
 @app.post("/chat", tags=["chat"])
 async def chat_endpoint(req: ChatRequest):
@@ -851,133 +1275,21 @@ async def chat_endpoint(req: ChatRequest):
       button in the UI, which activates the agent (LLM + MCP) directly.
     - Results/suggestions from either path feed the same accumulators.
     """
-    from .mcp import search_sam_opportunities_mcp, list_sam_mcp_tools
+    from .chat_service import process_chat_message
 
-    brain = req.brain or []
-    pipeline = req.pipeline or []
-    user_msg = (req.message or "").strip().lower()
-
-    # 1. Discover MCP tool catalog (prefer what FE sent, else ask mcp.py)
-    mcp_tools = req.mcp_tools or []
-    if not mcp_tools:
-        try:
-            mcp_tools = await list_sam_mcp_tools()
-        except Exception:
-            mcp_tools = []
-
-    tool_names = [t.get("name") for t in mcp_tools if isinstance(t, dict) and t.get("name")]
-
-    # 2. Optional chat-driven routing for admin (kept for power users / natural language).
-    #    Primary "agent does the task" is via UI buttons (see /user/actions/create-sam-monitor).
-    mcp_results: list = []
-    mcp_source_note = ""
-    did_mcp_call = False
-
-    # Simple but effective intent detection for first small agentic slice (grounded in current brain/expiring).
-    # Later we can feed this decision to the LLM for full ReAct/tool-calling.
-    wants_sam_search = any(k in user_msg for k in [
-        "search sam", "sam search", "find sam", "live sam", "opportunities on sam",
-        "rfi", "sources sought", "special notice", "monitor", "create monitor",
-        "check sam", "what is live", "new requirements", "emerging"
-    ])
-
-    if wants_sam_search or (req.use_llm and "sam" in user_msg):
-        # Build a smart query from current context (brain agencies + top expiring agencies + naics + user words)
-        brain_keywords = " ".join([str(b.get("name", "")) for b in brain[:4] if b.get("name")])
-        # Also pull a couple expiring agencies from the passed kpis? or just use message. For now use brain + naics scope.
-        keywords = (req.message or brain_keywords or "").strip() or "facilities support"
-        # Limit notice types to the common capture early signals if user didn't specify
-        notice_types = "RFI,Sources Sought,Special Notice,Presolicitation"
-        if any(x in user_msg for x in ["solicitation", "rfp", "full"]):
-            notice_types = "Solicitation,Presolicitation,RFI"
-
-        mcp_results = await search_sam_opportunities_mcp(
-            naics=req.naics,
-            keywords=keywords[:120],
-            notice_types=notice_types,
-            limit=6,
-        )
-        did_mcp_call = True
-        mcp_source_note = " (via MCP tool)" if any((isinstance(r,dict) and r.get("_source","").startswith("mcp")) for r in mcp_results) else " (direct/MCP-fallback)"
-
-        # Hybrid fallback for agentic path: if MCP gave nothing (server not up or tool name mismatch or key), still give the /mcp/sam/opportunities path a chance
-        # so the LLM always has *some* live-ish signal + the UI shows source. This keeps the "LLM drives the search" experience even before user starts the mcp server.
-        if not mcp_results:
-            try:
-                # Re-use the existing endpoint logic by doing an internal http (simple, no extra imports beyond stdlib)
-                q = f"http://127.0.0.1:8000/mcp/sam/opportunities?naics={req.naics}&keywords={urllib.parse.quote(keywords[:80])}&notice_types={urllib.parse.quote(notice_types)}&limit=5"
-                with urllib.request.urlopen(q, timeout=6) as rr:
-                    alt = json.loads(rr.read())
-                    if isinstance(alt, list) and alt:
-                        mcp_results = alt
-                        mcp_source_note = " (via /mcp/sam hybrid)"
-            except Exception:
-                pass
-
-    # 3. Enrich the extra_context that goes to the response builder (LLM or det)
-    extra_for_response = req.message or ""
-    if did_mcp_call and mcp_results:
-        # Inject structured live results so the final answer + suggested_actions are grounded in real MCP data.
-        # We keep it compact.
-        compact = []
-        for r in mcp_results[:5]:
-            if not isinstance(r, dict): continue
-            compact.append({
-                "title": r.get("title") or r.get("name"),
-                "agency": r.get("agency"),
-                "noticeType": r.get("noticeType") or r.get("type"),
-                "deadline": r.get("responseDeadLine") or r.get("endDate"),
-                "link": r.get("link"),
-            })
-        extra_for_response = (
-            (req.message or "Help with SAM opportunities for my current scope and brain.") +
-            f"\n\n[LIVE MCP RESULTS{mcp_source_note} — use these exact items for suggestions and actions]:\n" +
-            json.dumps(compact, ensure_ascii=False)[:1500]
-        )
-
-    # 4. Call the grounded response builder (it will see the enriched extra + mcp_tools catalog + brain/pipeline)
-    result = get_chat_response(
+    provider = _resolve_model_provider(req)
+    return await process_chat_message(
+        message=req.message or "",
         naics=req.naics,
         active_tab=req.active_tab,
         kpis=req.kpis,
-        brain_items=req.brain,
-        pipeline_items=req.pipeline,
-        extra_context=extra_for_response,
-        use_llm=req.use_llm,
-        mcp_tools=mcp_tools if mcp_tools else None,
+        brain=req.brain,
+        pipeline=req.pipeline,
+        mcp_tools=req.mcp_tools,
+        model_provider=provider,
+        model_name=req.model_name,
+        history=None,
     )
-
-    # 5. Post-process: tag source, and if we did MCP work make sure suggested_actions include "add these to pipeline as monitors"
-    if did_mcp_call:
-        result["source"] = (result.get("source") or "deterministic") + "+mcp"
-        # If the underlying builder didn't produce monitor actions, inject some based on the live results we have.
-        actions = result.get("suggested_actions") or []
-        has_monitor_action = any("monitor" in str(a).lower() for a in actions)
-        if mcp_results and not has_monitor_action:
-            for i, r in enumerate(mcp_results[:3]):
-                t = (r.get("title") or "") if isinstance(r, dict) else ""
-                # Skip placeholder / error messages from direct fallback when key missing
-                if not t or "requires a real SAM_API_KEY" in t or "search error" in t.lower():
-                    continue
-                actions.append({
-                    "label": f"Create monitor for: {t[:60]}",
-                    "action": "add_to_pipeline",
-                    "payload": {
-                        "title": r.get("title"),
-                        "agency": r.get("agency"),
-                        "noticeType": r.get("noticeType"),
-                        "link": r.get("link"),
-                        "type": "sam-monitor",
-                        "monitorUrl": r.get("link") or f"https://sam.gov/opp/{r.get('opportunityId','')}/view",
-                        "notes": f"From chat MCP search{mcp_source_note} • {r.get('responseDeadLine','')}"
-                    }
-                })
-            result["suggested_actions"] = actions
-
-    # Also surface the tools we considered (for transparency in UI source area if wanted)
-    result.setdefault("mcp_tools_considered", tool_names[:6] if tool_names else [])
-
-    return result
 
 
 @app.get("/", response_class=HTMLResponse, tags=["ui"])

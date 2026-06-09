@@ -247,7 +247,7 @@ def generate_executive_summary_narrative(
             "using the exact numbers below.]"
         )
 
-    configured = model or (app_settings.ollama_model if app_settings else "qwen2.5:7b")
+    configured = model or (app_settings.ollama_model if app_settings else "qwen3.5:9b")
 
     # Auto-detect available models and pick a sensible one if the configured isn't present
     try:

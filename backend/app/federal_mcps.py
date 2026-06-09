@@ -22,10 +22,11 @@ FEDERAL_MCP_SERVERS: List[Dict[str, Any]] = [
         "id": "usaspending-gov-mcp",
         "name": "USASpending.gov",
         "package": "usaspending-gov-mcp",
+        "executable": "usaspending-mcp",
         "category": "procurement",
         "use_when": "Contract & award history, recipients, agencies, subawards, Treasury accounts",
         "api_key": None,
-        "integrated": False,
+        "integrated": True,
     },
     {
         "id": "gsa-calc-mcp",
@@ -34,7 +35,7 @@ FEDERAL_MCP_SERVERS: List[Dict[str, Any]] = [
         "category": "procurement",
         "use_when": "MAS awarded NTE hourly rates — price realism & IGCE support",
         "api_key": None,
-        "integrated": False,
+        "integrated": True,
     },
     {
         "id": "bls-oews-mcp",
@@ -43,7 +44,7 @@ FEDERAL_MCP_SERVERS: List[Dict[str, Any]] = [
         "category": "procurement",
         "use_when": "Market wage benchmarks by occupation and metro",
         "api_key": "BLS_API_KEY",
-        "integrated": False,
+        "integrated": True,
     },
     {
         "id": "gsa-perdiem-mcp",
@@ -52,7 +53,7 @@ FEDERAL_MCP_SERVERS: List[Dict[str, Any]] = [
         "category": "procurement",
         "use_when": "CONUS lodging & M&IE travel rates",
         "api_key": "DATA_GOV_API_KEY",
-        "integrated": False,
+        "integrated": True,
     },
     {
         "id": "ecfr-mcp",
@@ -61,7 +62,7 @@ FEDERAL_MCP_SERVERS: List[Dict[str, Any]] = [
         "category": "regulatory",
         "use_when": "Current CFR text — FAR, DFARS, agency supplements",
         "api_key": None,
-        "integrated": False,
+        "integrated": True,
     },
     {
         "id": "federal-register-mcp",
@@ -70,18 +71,25 @@ FEDERAL_MCP_SERVERS: List[Dict[str, Any]] = [
         "category": "regulatory",
         "use_when": "Proposed/final rules, notices, executive orders, FAR cases",
         "api_key": None,
-        "integrated": False,
+        "integrated": True,
     },
     {
         "id": "regulations-gov-mcp",
         "name": "Regulations.gov",
-        "package": "regulations-gov-mcp",
+        "package": "regulationsgov-mcp",
         "category": "regulatory",
         "use_when": "Rulemaking dockets, public comments, comment-period tracking",
         "api_key": "DATA_GOV_API_KEY",
-        "integrated": False,
+        "integrated": True,
     },
 ]
+
+
+def get_mcp_server(server_id: str) -> Dict[str, Any] | None:
+    for spec in FEDERAL_MCP_SERVERS:
+        if spec["id"] == server_id:
+            return spec
+    return None
 
 
 def build_mcp_catalog(

@@ -1,0 +1,31 @@
+name: Validate Agent Skills
+
+on:
+  push:
+    paths:
+      - 'skills/**'
+      - 'backend/app/skill_validation.py'
+      - 'scripts/validate_skills.py'
+      - '.github/workflows/skills-validate.yml'
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'backend/app/skill_validation.py'
+      - 'scripts/validate_skills.py'
+      - '.github/workflows/skills-validate.yml'
+
+jobs:
+  skills-ref:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install validator
+        run: pip install skills-ref pyyaml
+
+      - name: Validate skills/*/SKILL.md
+        run: python scripts/validate_skills.py

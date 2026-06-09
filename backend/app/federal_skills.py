@@ -26,7 +26,7 @@ FEDERAL_1102_SKILLS: List[Dict[str, Any]] = [
         "category": "acquisition",
         "use_when": "Firm-fixed-price IGCE with layered wrap rate buildup",
         "mcp_deps": ["bls-oews-mcp", "gsa-calc-mcp", "gsa-perdiem-mcp"],
-        "status": "catalog",
+        "status": "active",
         "repo_path": "skills/igce-builder-ffp",
     },
     {
@@ -36,7 +36,7 @@ FEDERAL_1102_SKILLS: List[Dict[str, Any]] = [
         "category": "acquisition",
         "use_when": "Labor hour and time-and-materials IGCE with burden multipliers",
         "mcp_deps": ["bls-oews-mcp", "gsa-calc-mcp", "gsa-perdiem-mcp"],
-        "status": "catalog",
+        "status": "active",
         "repo_path": "skills/igce-builder-lh-tm",
     },
     {
@@ -46,7 +46,7 @@ FEDERAL_1102_SKILLS: List[Dict[str, Any]] = [
         "category": "acquisition",
         "use_when": "CPFF, CPAF, CPIF IGCEs with fee caps and structure analysis",
         "mcp_deps": ["bls-oews-mcp", "gsa-calc-mcp", "gsa-perdiem-mcp"],
-        "status": "catalog",
+        "status": "active",
         "repo_path": "skills/igce-builder-cr",
     },
     {
@@ -71,7 +71,7 @@ FEDERAL_1102_SKILLS: List[Dict[str, Any]] = [
     },
 ]
 
-# Theseus / capture-insights extensions (vendored + modified for BD/capture manager)
+# Theseus vendored capture skills + capture-insights originals (teaming-finder is ours, not Theseus)
 THESEUS_CAPTURE_SKILLS: List[Dict[str, Any]] = [
     {
         "id": "rfp-reverse-engineer",
@@ -80,7 +80,78 @@ THESEUS_CAPTURE_SKILLS: List[Dict[str, Any]] = [
         "category": "capture",
         "use_when": "Decompose RFP/SOW into evaluation criteria, discriminators, and compliance matrix seeds",
         "mcp_deps": ["sam-gov-mcp", "ecfr-mcp"],
-        "status": "planned",
+        "status": "active",
+        "repo_path": "skills/rfp-reverse-engineer",
+    },
+    {
+        "id": "subcontractor-sow-builder",
+        "name": "Subcontractor SOW Builder",
+        "source": "theseus",
+        "category": "acquisition",
+        "use_when": "Prime-issued SOW/PWS for teaming partner with FAR 37.102(d) discipline",
+        "mcp_deps": [],
+        "status": "catalog",
+        "repo_path": "skills/subcontractor-sow-builder",
+    },
+    {
+        "id": "oci-sweeper",
+        "name": "OCI Sweeper",
+        "source": "theseus",
+        "category": "compliance",
+        "use_when": "FAR 9.5 organizational conflict of interest pre-bid due diligence",
+        "mcp_deps": [],
+        "status": "active",
+        "repo_path": "skills/oci-sweeper",
+    },
+    {
+        "id": "ot-prototype-strategist",
+        "name": "OT Prototype Strategist",
+        "source": "theseus",
+        "category": "acquisition",
+        "use_when": "10 USC 4021/4022 OT milestone bid stack and cost-share strategy",
+        "mcp_deps": ["bls-oews-mcp", "gsa-calc-mcp", "gsa-perdiem-mcp"],
+        "status": "active",
+        "repo_path": "skills/ot-prototype-strategist",
+    },
+    {
+        "id": "proposal-generator",
+        "name": "Proposal Generator",
+        "source": "theseus",
+        "category": "capture",
+        "use_when": "Shipley proposal outline, compliance matrix, win themes, FAB chains",
+        "mcp_deps": [],
+        "status": "catalog",
+        "repo_path": "skills/proposal-generator",
+    },
+    {
+        "id": "data-analyzer",
+        "name": "Data Analyzer",
+        "source": "theseus",
+        "category": "analytics",
+        "use_when": "EDA, pattern detection, statistical analysis on structured datasets",
+        "mcp_deps": [],
+        "status": "active",
+        "repo_path": "skills/data-analyzer",
+    },
+    {
+        "id": "compliance-auditor",
+        "name": "Compliance Auditor",
+        "source": "theseus",
+        "category": "compliance",
+        "use_when": "FAR/DFARS clause coverage and L↔M traceability gap audit",
+        "mcp_deps": ["ecfr-mcp", "regulations-gov-mcp"],
+        "status": "catalog",
+        "repo_path": "skills/compliance-auditor",
+    },
+    {
+        "id": "competitive-intel",
+        "name": "Competitive Intel",
+        "source": "theseus",
+        "category": "capture",
+        "use_when": "Black-hat incumbent read and USASpending obligation intel",
+        "mcp_deps": ["usaspending-gov-mcp", "sam-gov-mcp"],
+        "status": "catalog",
+        "repo_path": "skills/competitive-intel",
     },
     {
         "id": "price-to-win",
@@ -94,11 +165,12 @@ THESEUS_CAPTURE_SKILLS: List[Dict[str, Any]] = [
     {
         "id": "teaming-finder",
         "name": "Teaming / Gap-Fill Finder",
-        "source": "theseus",
+        "source": "capture-insights",  # original idea — gap-fill teaming, not from Theseus
         "category": "capture",
         "use_when": "Adjacent vendors + subs (not top competitors) matched to capability gaps via USASpending, SAM, and web/marketing research",
         "mcp_deps": ["usaspending-gov-mcp", "sam-gov-mcp"],
         "status": "partial",
+        "repo_path": "skills/teaming-finder",
     },
     {
         "id": "capture-brief",
@@ -179,14 +251,7 @@ MARKETING_SKILL_STUBS: List[Dict[str, Any]] = [
 
 
 def build_skills_catalog() -> Dict[str, Any]:
-    all_skills = FEDERAL_1102_SKILLS + THESEUS_CAPTURE_SKILLS + MARKETING_SKILL_STUBS
-    partial = sum(1 for s in all_skills if s.get("status") == "partial")
-    return {
-        "skills": all_skills,
-        "skill_count": len(all_skills),
-        "federal_1102": FEDERAL_1102_SKILLS,
-        "theseus_capture": THESEUS_CAPTURE_SKILLS,
-        "marketing": MARKETING_SKILL_STUBS,
-        "partial_count": partial,
-        "active_count": 0,
-    }
+    """Legacy shim — canonical catalog is skills/*/SKILL.md via skill_registry."""
+    from .skill_registry import build_skills_catalog as _registry_catalog
+
+    return _registry_catalog()

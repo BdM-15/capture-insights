@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { 
   BarChart3, Target, Clock, TrendingUp,
-  RefreshCw, Plus, MessageSquare, Briefcase, BookOpen, X, Maximize2,
+  RefreshCw, Plus, MessageSquare, Briefcase, BookOpen,
   Copy, FolderOpen, Trash2, Info, Eye, Layers, Wrench,
   GitBranch, PieChart, Crosshair, Lightbulb, Zap, Search, Radar, Users, MapPin,
-  Settings, Sparkles, ClipboardList, UserCheck, Link2, Globe, Trophy, Handshake, Truck,
+  Settings, Sparkles, ClipboardList, UserCheck, Link2, Globe, Trophy, Handshake, Truck, Activity, Shield,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ReferenceLine, ZAxis } from 'recharts'
 import Plot from 'react-plotly.js'
@@ -20,7 +20,7 @@ import { DataTable } from './components/lists/DataTable'
 import { ReadinessStrip } from './components/opportunities/ReadinessStrip'
 import { RecompeteRadarTable } from './components/opportunities/RecompeteRadarTable'
 import { PursuitArtifactsList, type PursuitFolder } from './components/opportunities/PursuitArtifactsList'
-import { DocumentPreviewPanel } from './components/shell/DocumentPreviewPanel'
+import { DocumentPreviewPanel, readStoredPreviewWidth } from './components/shell/DocumentPreviewPanel'
 import { SkillWorkspacePanel, type SkillWorkspaceState } from './components/opportunities/SkillWorkspacePanel'
 import { EntryRow } from './components/lists/EntryRow'
 import { BrainEntryCard } from './components/lists/BrainEntryCard'
@@ -44,7 +44,21 @@ import { SetAsideBarChart } from './components/charts/SetAsideBarChart'
 import { RelationshipHeatmap } from './components/charts/RelationshipHeatmap'
 import { AgencyNoteInline } from './components/lists/AgencyNoteInline'
 import { McpServerCard, type McpServer } from './components/lists/McpServerCard'
+import { SettingsConnectionsPanel } from './components/settings/SettingsConnectionsPanel'
+import { SettingsSkillRuntimePanel } from './components/settings/SettingsSkillRuntimePanel'
+import { SettingsSkillsValidatePanel } from './components/settings/SettingsSkillsValidatePanel'
 import { SkillCard, type SkillEntry } from './components/lists/SkillCard'
+import { AssistantRail, type ChatSendRequest } from './components/assistant/AssistantRail'
+import { SkillInvokePanel } from './components/skills/SkillInvokePanel'
+import { invokeSkill } from './utils/skillInvoke'
+import {
+  loadStoredProvider,
+  providerLabel,
+  storeProvider,
+  type ChatSuggestedAction as ConvSuggestedAction,
+  type ModelProvider,
+} from './utils/conversations'
+import { skillsByIds, skillsInCategory, type SkillsCatalogData } from './utils/skillsCatalog'
 import { normalizeSetAsideRows } from './utils/chartLabels'
 import {
   buildRelationshipHeatmap,
@@ -182,20 +196,6 @@ interface FlowData {
   millions: number
 }
 
-interface ChatSuggestedAction {
-  action: string
-  label: string
-  payload?: Record<string, unknown>
-}
-
-interface ChatMessage {
-  role: string
-  content: string
-  source?: string
-  model?: string
-  suggested_actions?: ChatSuggestedAction[]
-}
-
 interface IntensityData {
   agency: string
   award_count: number
@@ -245,14 +245,9 @@ export default function App() {
   const [teamingSearch, setTeamingSearch] = useState('')
   const [teamingCapabilityGap, setTeamingCapabilityGap] = useState('')
   const [teamingRaw, setTeamingRaw] = useState<unknown>(null)
-  const [skillsCatalog, setSkillsCatalog] = useState<{
-    skill_count?: number
-    partial_count?: number
-    active_count?: number
-    federal_1102?: SkillEntry[]
-    theseus_capture?: SkillEntry[]
-    marketing?: SkillEntry[]
-  }>({})
+  const [skillsCatalog, setSkillsCatalog] = useState<SkillsCatalogData>({})
+  const [skillInvokeTarget, setSkillInvokeTarget] = useState<SkillEntry | null>(null)
+  const [skillInvokeRunId, setSkillInvokeRunId] = useState<string | null>(null)
   const [agencyRelationships, setAgencyRelationships] = useState<RelationshipRow[]>([])
   const [samKeywords, setSamKeywords] = useState('')
   const [samNoticeTypes, setSamNoticeTypes] = useState('RFI,Sources Sought,Special Notice,Presolicitation')
@@ -520,12 +515,16 @@ export default function App() {
   // Start collapsed per user request — user opens the co-pilot when they want the always-available helper.
   const [showChat, setShowChat] = useState(false)
   const [chatWidth, setChatWidth] = useState(380)
-  const [isResizing, setIsResizing] = useState(false)
-  const [chatInput, setChatInput] = useState('')
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
-    { role: 'assistant', content: 'Co-pilot ready (sees your NAICS, tab, KPIs, Pipeline, and Knowledge Vault from disk, and MCP tools).\n\nFor quick admin tasks (e.g. smart SAM monitor from an expiring contract) use the buttons in the views — they activate the agent (LLM + MCP) with context and citations. Chat is excellent for open questions, overlaps, "what should I watch", or natural language exploration. Use Smart for local LLM or Fast for instant.' }
-  ])
-  const [useSmartModel, setUseSmartModel] = useState(false)  // opt into local LLM (qwen3.5:9b etc.) for more natural answers; default is fast deterministic path using your exact persisted data + suggested action chips
+  const [modelProvider, setModelProvider] = useState<ModelProvider>(loadStoredProvider)
+  const [chatPrefill, setChatPrefill] = useState('')
+  const [chatSendRequest, setChatSendRequest] = useState<ChatSendRequest | null>(null)
+  const [chatConversationRefresh, setChatConversationRefresh] = useState(0)
+  const useSmartModel = modelProvider !== 'fast'
+  const previewPanelWidth = viewedWiki ? readStoredPreviewWidth() : 0
+  const rightRailOffset =
+    (showChat ? chatWidth : 0) +
+    (skillWorkspace ? 420 : 0) +
+    previewPanelWidth
   // MCP info for the dedicated sidebar view + for feeding the chat co-pilot (catalog of what the agent can drive)
   const [mcpInfo, setMcpInfo] = useState<{
     tools: any[]
@@ -752,7 +751,11 @@ export default function App() {
           item: skillWorkspace.row,
           naics,
           brain,
-          use_llm: workspaceUseLlm && (skillId === 'capture-brief' || skillId === 'competitive-battlecard'),
+          use_llm: workspaceUseLlm && (
+            skillId === 'capture-brief'
+            || skillId === 'competitive-battlecard'
+            || skillId === 'competitive-intel'
+          ),
         }),
       })
       const data = await res.json()
@@ -801,12 +804,71 @@ export default function App() {
         const llmNote = data.used_llm ? ' · LLM angles added' : ''
         const strat = data.strategy ? ` · ${data.strategy}` : ''
         showToast(`Battlecard saved${strat}${llmNote}`, 'success')
+      } else if (skillId === 'competitive-intel') {
+        setSkillWorkspace((w) => w && patchWorkspace(w))
+        showToast(
+          data.summary || `Burn-rate intel saved · ${data.child_order_count ?? 0} orders · see Studio`,
+          'success',
+        )
+      } else if (skillId === 'teaming-finder') {
+        setSkillWorkspace((w) => w && patchWorkspace(w))
+        showToast(data.summary || `Teaming shortlist saved · ${data.candidate_count ?? 0} candidates`, 'success')
       }
     } catch {
       showToast('Skill run failed', 'error')
     } finally {
       setWorkspaceLoading(false)
     }
+  }
+
+  function openSkillInvoke(skill: SkillEntry, runId?: string) {
+    setSidebar('skills')
+    setSkillInvokeTarget(skill)
+    setSkillInvokeRunId(runId || null)
+  }
+
+  function closeSkillInvoke() {
+    setSkillInvokeTarget(null)
+    setSkillInvokeRunId(null)
+  }
+
+  async function invokeSkillFromPage(skillId: string) {
+    const pursuitItem = skillWorkspace?.row
+      ?? (pipeline[0] as { raw?: Record<string, unknown> })?.raw
+      ?? pipeline[0]
+      ?? null
+    const data = await invokeSkill({
+      skill_id: skillId,
+      naics,
+      brain,
+      pipeline,
+      pursuit_item: pursuitItem as Record<string, unknown> | null,
+      use_llm: useSmartModel && (
+        skillId === 'capture-brief'
+        || skillId === 'competitive-battlecard'
+        || skillId === 'competitive-intel'
+        || skillId === 'vault-synthesize'
+        || skillId === 'teaming-finder'
+      ),
+    })
+    if (!data.ok) {
+      showToast(data.error || 'Skill failed', 'error')
+      if (data.hint === 'pipeline') setSidebar('pipeline')
+      return
+    }
+    if (skillId.startsWith('vault-')) {
+      showToast(data.summary || 'Vault task complete', 'success')
+      setSidebar('vault')
+      return
+    }
+    if (skillId === 'compliance-auditor') {
+      showToast(data.summary || 'Compliance audit complete', data.critical_count ? 'error' : 'success')
+      setSidebar('artifacts')
+      return
+    }
+    await loadUserAccumulators()
+    showToast(data.summary || `${skillId} complete — open Studio`, 'success')
+    setSidebar('artifacts')
   }
 
   async function searchSamLive() {
@@ -841,7 +903,6 @@ export default function App() {
     await syncAccumulators()
     const label = item.recipient || item.agency || item.label || type
     showToast(`Added to pipeline: ${label}`, 'success')
-    setChatHistory(h => [...h, { role: 'assistant', content: `Added to pipeline: ${label}. Saved to data/user_accumulators.json on disk.` }])
   }
 
   async function addToBrain(item: any, competitorKey: string, type: string = 'competitor') {
@@ -867,7 +928,6 @@ export default function App() {
     } catch {}
     await syncAccumulators()
     showToast(`Brain updated: ${name}`, 'success')
-    setChatHistory(h => [...h, { role: 'assistant', content: `Added/updated "${name}" in Brain / Wiki. Saved to data/user_accumulators.json. The entry compounds when you re-add the same name.` }])
   }
 
   async function removeFromPipeline(id: string) {
@@ -987,117 +1047,66 @@ export default function App() {
   // === Holistic chat with rich live context + suggested actions that can mutate state ===
   function askCoPilot(prompt: string, autoSend = false) {
     setShowChat(true)
-    setChatInput(prompt)
     if (autoSend) {
-      setTimeout(() => {
-        void sendChatMessage(prompt)
-        setChatInput('')
-      }, 40)
+      setChatSendRequest({ text: prompt, id: Date.now() })
+    } else {
+      setChatPrefill(prompt)
     }
   }
 
-  async function sendChatMessage(userText: string) {
-    const text = userText.trim()
-    if (!text) return
-    const userMsg = { role: 'user', content: text }
-    const newHistory = [...chatHistory, userMsg]
-    setChatHistory(newHistory)
-
-    // Build rich live context from the current dashboard + the persisted accumulators + MCP tool catalog.
-    // The catalog tells the LLM what admin/MCP actions it can perform on the user's behalf (search SAM,
-    // entity lookups, etc.). This is the core of the agentic design: LLM drives MCPs; user never does manually.
-    const payload = {
-      naics,
-      active_tab: dashTab,
-      kpis: kpis || null,
-      brain: brain || [],
-      pipeline: pipeline || [],
-      message: text,
-      use_llm: useSmartModel,
-      mcp_tools: mcpInfo.tools || [],
-    }
-
-    try {
-      const res = await fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const assistantContent = data.response || '(no response)'
-        const actions = data.suggested_actions || []
-        const src = data.source || null
-        const modelUsed = (data.context_used && data.context_used.model) || null
-        setTimeout(() => {
-          setChatHistory(prev => [...prev, { role: 'assistant', content: assistantContent, suggested_actions: actions, source: src, model: modelUsed }])
-        }, 150)
-        return
-      }
-    } catch (e) {
-      // fall through to local fallback
-    }
-
-    // Local fallback (if backend chat not available) — still better than nothing
-    const ctx = `NAICS=${naics} | activeTab=${dashTab} | pipeline=${pipeline.length} | brain=${brain.length}`
-    const fallback = `With current context: ${ctx}\n\n(Backend /chat not reachable right now. The real endpoint returns grounded analysis using your actual saved Brain and Pipeline items. Restart the backend if needed.)`
-    setTimeout(() => {
-      setChatHistory(prev => [...prev, { role: 'assistant', content: fallback, source: 'local-fallback' }])
-    }, 150)
+  function queueCoPilotMessage(text: string) {
+    setShowChat(true)
+    setChatSendRequest({ text, id: Date.now() })
   }
 
-  async function sendChat() {
-    const text = chatInput.trim()
-    if (!text) return
-    setChatInput('')
-    await sendChatMessage(text)
-  }
-
-  // Allow chat to drive actions (for the "suggested actions" in responses)
-  function applySuggestedAction(action: string, _payload?: unknown) {
-    if (action === 'brain-top-flows') {
-      flows.slice(0, 4).forEach(f => addToBrain(f, f.recipient, 'competitor'))
-    }
-    if (action === 'pipeline-expiring') {
-      expiring.slice(0, 3).forEach(e => addToPipeline(e, 'expiring'))
-    }
-    if (action === 'brain-hot-agencies') {
-      intensity.slice(0, 4).forEach(a => addToBrain(a, a.agency, 'agency'))
-    }
-  }
-
-  // New handler for structured actions coming from the backend /chat response
-  function handleChatSuggestedAction(action: any) {
+  function handleChatSuggestedAction(action: ConvSuggestedAction) {
     const { action: type, payload } = action || {}
     if (type === 'add_to_brain' && payload?.name) {
-      // Create a minimal item the addToBrain expects
-      addToBrain({ recipient: payload.name }, payload.name, payload.type || 'competitor')
+      const name = String(payload.name)
+      addToBrain({ recipient: name }, name, String(payload.type || 'competitor'))
     } else if (type === 'add_to_pipeline' && payload) {
-      addToPipeline(payload, payload.type || 'from_chat')
+      addToPipeline(payload, String(payload.type || 'from_chat'))
     } else if (type === 'navigate') {
-      if (payload?.view === 'pipeline' || payload?.tab === 'pipeline') {
+      if (payload?.view === 'vault') {
+        setSidebar('vault')
+      } else if (payload?.view === 'pipeline' || payload?.tab === 'pipeline') {
         setSidebar('pipeline')
       } else if (payload?.tab) {
-        setDashTab(payload.tab)
+        setDashTab(String(payload.tab))
         setSidebar('dashboard')
       }
+    } else if (type === 'open_studio') {
+      if (payload?.path) {
+        void openArtifactPath(String(payload.path), String(payload.slug || payload.path), { navigate: true })
+      } else {
+        setSidebar('artifacts')
+      }
+    } else if (type === 'continue_skill_run' && payload?.run_id) {
+      setShowChat(true)
+      setChatPrefill(`Follow up on ${payload.skill_id || 'skill'}: `)
+    } else if (type === 'view_skill_run' && payload?.run_id) {
+      const sid = payload.skill_id as string | undefined
+      const catalogSkill = (skillsCatalog.skills || []).find((s) => s.id === sid)
+      if (catalogSkill) {
+        openSkillInvoke(catalogSkill as SkillEntry, payload.run_id as string)
+      } else if (sid) {
+        openSkillInvoke({
+          id: sid,
+          name: sid,
+          use_when: '',
+          status: 'active',
+          runnable: true,
+        }, payload.run_id as string)
+      }
     } else if (type === 'log_note') {
-      // For now just echo in chat; later we can persist notes against items
-      setChatHistory(prev => [...prev, { role: 'assistant', content: `Note logged: ${payload?.note || 'user request'}` }])
+      showToast(`Note: ${payload?.note || 'logged'}`, 'info')
     } else if (type === 'mcp_search_sam') {
-      // This is the key agentic trigger: instead of user filling the SAM form or clicking manual buttons,
-      // the chat suggested action (or user just types) causes the LLM + backend router to drive the MCP search.
-      // We synthesize a natural prompt that the router will catch and execute search_sam_opportunities_mcp.
       const reason = payload?.reason || 'current scope'
       const kws = payload?.keywords || ''
       const prompt = `Search SAM for live opportunities (RFI, Sources Sought, Special Notice, Presolicitation) matching my Brain and expiring contracts. Keywords: ${kws}. Reason: ${reason}. Then suggest which ones to create monitors for and add to pipeline.`
-      // Reuse send path by setting input + calling (keeps history clean)
-      setChatInput(prompt)
-      // fire after paint
-      setTimeout(() => { sendChat() }, 30)
+      queueCoPilotMessage(prompt)
     } else {
-      // Fallback: just show the action
-      setChatHistory(prev => [...prev, { role: 'assistant', content: `Action requested: ${type} ${JSON.stringify(payload || {})}` }])
+      showToast(`Action: ${type}`, 'info')
     }
   }
 
@@ -2900,8 +2909,8 @@ export default function App() {
           smallBizPct: setAsideTeaming.smallBizPct,
           metaNote: teamingMeta.note,
         })
-        const theseusSkills = skillsCatalog.theseus_capture || []
-        const federal1102Skills = skillsCatalog.federal_1102 || []
+        const competitiveSkills = skillsByIds(skillsCatalog, ['teaming-finder', 'ptw-analysis', 'competitive-battlecard'])
+        const acquisitionSkills = skillsInCategory(skillsCatalog, 'acquisition-deliverables').slice(0, 3)
 
         return (
           <div className="page-sections">
@@ -3599,20 +3608,18 @@ export default function App() {
 
             <CollapsibleSection
               title="Skills & MCP Pairing"
-              subtitle="1102 + Theseus · data vs deliverables"
+              subtitle="MCP data · small focused skills · deliverables"
               icon={Sparkles}
               accent="purple"
               defaultOpen={false}
             >
               <div className="insight vault mb-3">
                 <a href="https://github.com/1102tools/federal-contracting-mcps" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">MCPs</a>
-                {' '}fetch data;{' '}
-                <a href="https://github.com/1102tools/federal-contracting-skills" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">1102 skills</a>
-                {' '}+ Theseus capture skills orchestrate deliverables (PTW, RFP reverse engineer, IGCE, SOW/PWS). Vendored and adapted in this workspace.
+                {' '}fetch data; skills in <span className="font-mono">skills/</span> orchestrate deliverables. Draft skills are not production-ready until marked Active.
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Theseus capture (partial / planned)</div>
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Market & competitive skills</div>
               <div className="space-y-2 mb-3">
-                {(theseusSkills.filter((s) => ['teaming-finder', 'price-to-win', 'rfp-reverse-engineer', 'competitive-battlecard'].includes(s.id))).map((skill) => (
+                {competitiveSkills.map((skill) => (
                   <SkillCard
                     key={skill.id}
                     skill={skill}
@@ -3623,9 +3630,9 @@ export default function App() {
                   />
                 ))}
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">1102 acquisition skills (catalog)</div>
+              <div className="text-[10px] uppercase tracking-wider text-text-500 mb-1.5">Acquisition deliverables (catalog)</div>
               <div className="space-y-2 mb-2">
-                {federal1102Skills.slice(0, 3).map((skill) => (
+                {acquisitionSkills.map((skill) => (
                   <SkillCard
                     key={skill.id}
                     skill={skill}
@@ -5606,7 +5613,12 @@ export default function App() {
             <MetricCard label="1102 MCPs" value={String(mcpInfo.server_count ?? (servers.length || 8))} accent="magenta" tooltip="Eight federal-contracting MCP servers from 1102tools" />
             <MetricCard label="Online now" value={String(onlineCount)} accent={onlineCount > 0 ? 'lime' : 'amber'} tooltip="MCPs with live discovered endpoints" />
             <MetricCard label="Backend" value={health === 'live' ? 'Healthy' : health === 'checking' ? '…' : 'Issue'} accent={health === 'live' ? 'cyan' : 'amber'} />
-            <MetricCard label="Chat context" value={useSmartModel ? 'Smart' : 'Fast'} accent="purple" tooltip="Model path used by co-pilot actions" />
+            <MetricCard
+              label="Co-pilot model"
+              value={providerLabel(modelProvider)}
+              accent="purple"
+              tooltip="Model provider for co-pilot and skill routing"
+            />
           </div>
 
           <CollapsibleSection
@@ -5672,126 +5684,74 @@ export default function App() {
             <div className="insight mb-2">
               You choose the <strong className="text-text-primary">MCP</strong> by intent (SAM data, spend data, FAR text). The co-pilot selects the right tool inside that MCP. Contextual buttons and chat never expect you to know endpoint names.
             </div>
-            <div className="text-[10px] text-text-500">SAM.gov is integrated today; other MCPs show as catalog until wired. Direct API fallbacks still work for core SAM search.</div>
+            <div className="text-[10px] text-text-500">All eight 1102 MCPs are integrated. Use Settings to test connections; refresh here to discover live tool endpoints.</div>
           </CollapsibleSection>
         </div>
       )
     }
 
     if (sidebar === 'skills') {
-      const federal1102 = skillsCatalog.federal_1102 || []
-      const theseusCapture = skillsCatalog.theseus_capture || []
-      const marketing = skillsCatalog.marketing || []
-      const partialCount = skillsCatalog.partial_count ?? theseusCapture.filter((s) => s.status === 'partial').length
+      const categories = skillsCatalog.categories || []
+      const statusCounts = skillsCatalog.status_counts || {}
+      const multiTurn = skillsCatalog.multi_turn_skills?.length ?? 0
       return (
         <div className="page-sections">
           <div className="insight mb-3">
-            Agent skill catalog and co-pilot stubs. Pursuit outputs from Workspace land in{' '}
+            One <span className="font-mono text-neon-cyan">skills/</span> repository — agents handle admin rote tasks; you can run any skill manually. Outputs land in{' '}
             <button type="button" onClick={() => setSidebar('artifacts')} className="text-neon-cyan hover:underline">Studio</button>
-            {' '}— curated knowledge stays in{' '}
+            {' '}(pursuits/). Curated knowledge stays in{' '}
             <button type="button" onClick={() => setSidebar('vault')} className="text-neon-cyan hover:underline">Knowledge Vault</button>.
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-1">
-            <MetricCard label="Skills catalog" value={String(skillsCatalog.skill_count ?? (federal1102.length + theseusCapture.length + marketing.length))} accent="magenta" tooltip="1102 + Theseus + marketing stubs" />
-            <MetricCard label="1102 official" value={String(federal1102.length)} accent="cyan" tooltip="federal-contracting-skills orchestration" />
-            <MetricCard label="Theseus capture" value={String(theseusCapture.length)} accent="lime" tooltip="Vendored + modified for capture manager" />
-            <MetricCard label="Live partial" value={String(partialCount)} accent="amber" tooltip="Behaviors stubbed via co-pilot + dashboard buttons" />
+            <MetricCard label="Skills" value={String(skillsCatalog.skill_count ?? 0)} accent="magenta" tooltip="Discovered from skills/*/SKILL.md" />
+            <MetricCard label="Active" value={String(skillsCatalog.active_count ?? statusCounts.active ?? 0)} accent="lime" tooltip="Production-ready runners" />
+            <MetricCard label="Draft / catalog" value={String((skillsCatalog.draft_count ?? 0) + (skillsCatalog.catalog_count ?? 0))} accent="amber" tooltip="Not production-verified" />
+            <MetricCard label="Multi-turn" value={String(multiTurn)} accent="cyan" tooltip="tools runtime — agent refinement loops" />
           </div>
 
           <CollapsibleSection
-            title="How Skills Pair With MCPs"
-            subtitle="Deliverables · not raw API calls"
+            title="How skills work"
+            subtitle="Small focused tasks · MCP data · agent or manual invoke"
             icon={Lightbulb}
             accent="none"
             defaultOpen
           >
             <div className="insight mb-2">
-              Eight{' '}
-              <button type="button" onClick={() => setSidebar('tools')} className="text-neon-cyan hover:underline">1102 MCPs</button>
-              {' '}supply deterministic data. Skills orchestrate that data into acquisition and capture deliverables — IGCE, SOW/PWS, PTW, teaming search, RFP reverse engineering.
+              Click <strong className="text-text-primary">Configure &amp; Run</strong> — describe your request, see the process chain and audit trail per run (Theseus-style).
+              Co-pilot uses the same runners when you ask in plain language. Context from Pipeline, Brain, vault files — no knowledge graph.
             </div>
-            <div className="text-[10px] text-text-500">
-              Stub run invokes co-pilot today; full skill runner will register parameters, citations, and rerun from chat. Sources:{' '}
-              <a href="https://github.com/1102tools/federal-contracting-skills" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">federal-contracting-skills</a>
-              ,{' '}
-              <a href="https://github.com/coreyhaines31/marketingskills" target="_blank" rel="noopener" className="text-neon-cyan hover:underline">marketingskills</a>
-              , Theseus workspace adaptations.
-            </div>
+            {skillsCatalog.note && <div className="text-[10px] text-text-500">{skillsCatalog.note}</div>}
           </CollapsibleSection>
 
-          <CollapsibleSection
-            title="Theseus Capture Skills"
-            subtitle="BD / capture manager · vendored + modified"
-            icon={Target}
-            accent="lime"
-            defaultOpen
-          >
-            <div className="space-y-2">
-              {theseusCapture.length ? theseusCapture.map((skill) => (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                  naics={naics}
-                  onAsk={askCoPilot}
-                  onOpenMcp={() => setSidebar('tools')}
-                />
-              )) : (
-                <div className="text-xs text-text-500">Loading catalog…</div>
-              )}
-            </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="1102 Acquisition Skills"
-            subtitle="federal-contracting-skills · IGCE · SOW/PWS · OT"
-            icon={Layers}
-            accent="cyan"
-            defaultOpen={false}
-          >
-            <div className="space-y-2">
-              {federal1102.map((skill) => (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                  naics={naics}
-                  onAsk={askCoPilot}
-                  onOpenMcp={() => setSidebar('tools')}
-                />
-              ))}
-            </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Marketing Skills"
-            subtitle="coreyhaines31/marketingskills · stubs"
-            icon={Sparkles}
-            accent="purple"
-            defaultOpen={false}
-          >
-            <div className="space-y-2">
-              {marketing.map((skill) => (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                  naics={naics}
-                  onAsk={askCoPilot}
-                />
-              ))}
-            </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Roadmap"
-            subtitle="Skill runner · parameters · vault output"
-            icon={Lightbulb}
-            accent="none"
-            defaultOpen={false}
-          >
-            <div className="text-[10px] text-text-500 leading-relaxed">
-              Next: register skills with NAICS + vault context, wire Teaming Finder and PTW to USASpending MCP, import 1102 SKILL.md files into workspace agents, and emit structured outputs to Knowledge Vault pursuits/.
-            </div>
-          </CollapsibleSection>
+          {categories.length === 0 ? (
+            <div className="text-xs text-text-500">Loading skills catalog…</div>
+          ) : (
+            categories.map((group) => (
+              <CollapsibleSection
+                key={group.id}
+                title={group.label}
+                subtitle={`${group.count ?? group.skills?.length ?? 0} skill(s)`}
+                icon={group.id === 'orchestrators' ? GitBranch : group.id === 'visuals-decks' ? Sparkles : Layers}
+                accent={group.id === 'pursuit-workspace' ? 'lime' : group.id === 'vault-admin' ? 'purple' : 'none'}
+                defaultOpen={group.id === 'pursuit-workspace'}
+              >
+                <div className="space-y-2">
+                  {(group.skills || []).map((skill) => (
+                    <SkillCard
+                      key={skill.id}
+                      skill={skill}
+                      naics={naics}
+                      onAsk={askCoPilot}
+                      onOpenInvoke={openSkillInvoke}
+                      onRun={invokeSkillFromPage}
+                      onOpenMcp={() => setSidebar('tools')}
+                    />
+                  ))}
+                </div>
+              </CollapsibleSection>
+            ))
+          )}
         </div>
       )
     }
@@ -5823,49 +5783,69 @@ export default function App() {
           </CollapsibleSection>
 
           <CollapsibleSection
+            title="Connections"
+            subtitle="Test DuckDB · Ollama · API keys · all 1102 MCPs"
+            icon={Activity}
+            accent="magenta"
+            defaultOpen
+          >
+            <SettingsConnectionsPanel
+              health={health}
+              readiness={readiness as Record<string, unknown> | null}
+              onOpenMcpTools={() => setSidebar('tools')}
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Skill runtime caps"
+            subtitle="Global turns · LLM timeouts · MCP truncation limits"
+            icon={Clock}
+            accent="magenta"
+            defaultOpen={false}
+          >
+            <SettingsSkillRuntimePanel />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Skills validation"
+            subtitle="agentskills.io frontmatter · CI parity"
+            icon={Shield}
+            accent="lime"
+            defaultOpen={false}
+          >
+            <SettingsSkillsValidatePanel />
+          </CollapsibleSection>
+
+          <CollapsibleSection
             title="Agent & Chat"
-            subtitle="Co-pilot model path"
+            subtitle="Co-pilot model provider"
             icon={MessageSquare}
             accent="purple"
-            defaultOpen
+            defaultOpen={false}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm text-text-primary">Response path</div>
                 <div className="text-[10px] text-text-500 mt-0.5">
-                  Fast = deterministic context from your data. Smart = local LLM when configured.
+                  Fast = grounded data. Local = Ollama. Cloud = frontier API (set XAI_API_KEY in Connections).
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setUseSmartModel(!useSmartModel)}
-                className={`chat-model-toggle ${useSmartModel ? 'is-active' : ''}`}
-              >
-                {useSmartModel ? 'Smart model' : 'Fast context'}
-              </button>
+              <div className="assistant-provider-picker">
+                {(['fast', 'ollama', 'xai'] as ModelProvider[]).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`assistant-provider-btn ${modelProvider === p ? 'is-active' : ''}`}
+                    onClick={() => {
+                      setModelProvider(p)
+                      storeProvider(p)
+                    }}
+                  >
+                    {providerLabel(p)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Integrations"
-            subtitle="MCP · SAM.gov API"
-            icon={Wrench}
-            accent="magenta"
-            defaultOpen={false}
-          >
-            <div className="space-y-2 text-[10px] text-text-500">
-              <p>
-                <span className="text-text-400">MCP:</span>{' '}
-                {mcpInfo.mcp_available ? 'At least one 1102 MCP online (SAM.gov).' : (mcpInfo.how_to_enable || 'Eight MCPs in catalog; SAM.gov warms at startup.')}
-              </p>
-              <p>
-                <span className="text-text-400">SAM live search:</span> Set SAM_API_KEY on the backend for direct API results when MCP is unavailable.
-              </p>
-              {mcpInfo.note && <p className="text-neon-magenta">{mcpInfo.note}</p>}
-            </div>
-            <Button variant="soft" className="mt-3" onClick={() => setSidebar('tools')}>
-              Open MCP Tools
-            </Button>
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -5889,32 +5869,21 @@ export default function App() {
     return null
   }
 
-  // === Resizable chat pane logic (makes the always-on chat actually useful for longer responses + context) ===
-  // Drag the left edge of the chat pane to resize width. "Maximize" button makes it substantially larger.
-  function startResize(e: React.MouseEvent) {
-    setIsResizing(true)
-    e.preventDefault()
-  }
-
-  useEffect(() => {
-    if (!isResizing) return
-    const onMove = (ev: MouseEvent) => {
-      const newW = Math.max(300, Math.min(820, window.innerWidth - ev.clientX))
-      setChatWidth(newW)
-    }
-    const onUp = () => setIsResizing(false)
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [isResizing])
-
   const toggleChat = () => setShowChat(v => !v)
-  const maximizeChat = () => setChatWidth(w => (w > 600 ? 380 : 680))
 
-  const contextHeader = `NAICS ${naics} | ${dashTab} | ${kpis ? kpis.total_obligations_m + 'M' : ''} | exp:${expiring.length} int:${intensity.length} fl:${flows.length} | pipe:${pipeline.length} brain:${brain.length}`
+  const assistantContext = {
+    naics,
+    activeTab: dashTab,
+    kpis: (kpis || null) as Record<string, unknown> | null,
+    brain: brain as Record<string, unknown>[],
+    pipeline: pipeline as Record<string, unknown>[],
+    mcpTools: (mcpInfo.tools || []) as Record<string, unknown>[],
+    pursuitSlug: skillWorkspace?.slug ?? null,
+    previewPath: viewedWiki?.path ?? null,
+    previewExcerpt: viewedWiki?.excerpt || viewedWiki?.content?.slice(0, 2000) || null,
+    brainCount: brain.length,
+    pipelineCount: pipeline.length,
+  }
 
   const viewContext = {
     naics,
@@ -5954,9 +5923,43 @@ export default function App() {
       {viewedWiki && (
         <DocumentPreviewPanel
           doc={viewedWiki}
+          stackWithChat={showChat}
+          chatWidth={chatWidth}
           stackWithWorkspace={!!skillWorkspace}
+          stackWithSkillInvoke={!!skillInvokeTarget}
           onClose={() => setViewedWiki(null)}
           onReload={reloadPreviewDoc}
+        />
+      )}
+
+      {skillInvokeTarget && (
+        <SkillInvokePanel
+          skill={skillInvokeTarget}
+          initialRunId={skillInvokeRunId}
+          stackRightOffset={rightRailOffset}
+          context={{
+            naics,
+            brain,
+            pipeline,
+            pursuitItem: (skillWorkspace?.row
+              ?? (pipeline[0] as { raw?: Record<string, unknown> })?.raw
+              ?? pipeline[0]
+              ?? null) as Record<string, unknown> | null,
+            useSmartModel,
+          }}
+          onClose={closeSkillInvoke}
+          onOpenArtifact={(path) => {
+            openArtifactPath(path, path, { navigate: false })
+          }}
+          onRunComplete={(result) => {
+            if (result.ok) {
+              void loadUserAccumulators()
+              showToast(result.summary || `${result.skill_id} complete`, 'success')
+            }
+            if (result.conversation) {
+              setChatConversationRefresh((n) => n + 1)
+            }
+          }}
         />
       )}
 
@@ -5966,6 +5969,7 @@ export default function App() {
           loading={workspaceLoading}
           useLlm={workspaceUseLlm}
           onUseLlmChange={setWorkspaceUseLlm}
+          stackRightOffset={(showChat ? chatWidth : 0) + previewPanelWidth}
           onClose={() => setSkillWorkspace(null)}
           onScaffoldBrief={() => scaffoldPursuitBrief(!!skillWorkspace.briefExists)}
           onRunSkill={runPursuitSkill}
@@ -5978,104 +5982,36 @@ export default function App() {
         />
       )}
 
-      {/* FLOATING / RESIZABLE CHAT PANE — the holistic always-on co-pilot.
-          No separate chat page in sidebar. Drag the left handle or use maximize to make it large and useful for real responses.
-          Injects live context from whatever tab + accumulators you are looking at. */}
-      {showChat && (
-        <div 
-          className="chat-pane fixed top-14 bottom-0 right-0 z-[60] flex flex-col overflow-hidden rounded-l-3xl" 
-          style={{ width: chatWidth }}
-        >
-          {/* Drag handle on the left edge */}
-          <div 
-            className={`resize-handle ${isResizing ? 'active' : ''}`} 
-            onMouseDown={startResize}
-            title="Drag to resize chat width"
-          />
-
-          <div className="chat-header">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-neon-cyan" />
-              <div className="chat-header-title">AI Co-pilot</div>
-              <span className="chat-header-meta">(always on • context-aware)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setUseSmartModel(!useSmartModel)}
-                className={`chat-model-toggle ${useSmartModel ? 'is-active' : ''}`}
-                title={useSmartModel ? 'Using local LLM. Click for fast context path.' : 'Fast context path. Click to try local LLM.'}
-              >
-                {useSmartModel ? 'Smart model' : 'Fast context'}
-              </button>
-              <button type="button" onClick={maximizeChat} className="chat-icon-btn" title="Toggle larger size">
-                <Maximize2 className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => setShowChat(false)} className="chat-icon-btn"><X className="w-3.5 h-3.5" /></button>
-            </div>
-          </div>
-
-          <div className="chat-messages space-y-2">
-            {chatHistory.map((m, idx) => (
-              <div key={idx} className={m.role === 'user' ? 'text-right' : ''}>
-                <div className={`chat-msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
-                  {m.content}
-                  {m.role === 'assistant' && (m.source || m.model) && (
-                    <div className="chat-msg-meta">
-                      {m.source}{m.model ? ` • ${m.model}` : ''}
-                    </div>
-                  )}
-                </div>
-                {/* Structured suggested actions from the backend (preferred) */}
-                {m.role === 'assistant' && m.suggested_actions && m.suggested_actions.length > 0 && (
-                  <div className="text-right mt-1">
-                    {m.suggested_actions.map((a, aIdx) => (
-                      <span
-                        key={aIdx}
-                        className="chat-suggest"
-                        onClick={() => handleChatSuggestedAction(a)}
-                      >
-                        {a.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {/* Legacy string-based chips for older messages / fallback content */}
-                {m.role === 'assistant' && !m.suggested_actions && m.content.toLowerCase().includes('top') && m.content.toLowerCase().includes('flow') && (
-                  <div className="text-right">
-                    <span className="chat-suggest" onClick={() => applySuggestedAction('brain-top-flows')}>Add top flows to brain now</span>
-                  </div>
-                )}
-                {m.role === 'assistant' && !m.suggested_actions && m.content.toLowerCase().includes('expir') && (
-                  <div className="text-right">
-                    <span className="chat-suggest" onClick={() => applySuggestedAction('pipeline-expiring')}>Add some expiring to pipeline</span>
-                  </div>
-                )}
-                {m.role === 'assistant' && !m.suggested_actions && (m.content.toLowerCase().includes('hot') || m.content.toLowerCase().includes('agency')) && (
-                  <div className="text-right">
-                    <span className="chat-suggest" onClick={() => applySuggestedAction('brain-hot-agencies')}>Add top hot agencies to brain</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="chat-input-row">
-            <input
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') sendChat() }}
-              placeholder="Ask the co-pilot — search SAM, create monitors, find overlaps…"
-              className="input-field"
-            />
-            <button type="button" onClick={sendChat} className="chat-send-btn">Send</button>
-          </div>
-
-          <div className="chat-context-bar">
-            Live context: {contextHeader}
-          </div>
-        </div>
-      )}
+      <AssistantRail
+        open={showChat}
+        onClose={() => setShowChat(false)}
+        width={chatWidth}
+        onWidthChange={setChatWidth}
+        context={assistantContext}
+        modelProvider={modelProvider}
+        onModelProviderChange={setModelProvider}
+        onSuggestedAction={handleChatSuggestedAction}
+        onOpenArtifact={(path) => openArtifactPath(path, path, { navigate: false })}
+        onViewSkillRun={(runId, skillId) => {
+          const catalogSkill = (skillsCatalog.skills || []).find((s) => s.id === skillId)
+          if (catalogSkill) {
+            openSkillInvoke(catalogSkill as SkillEntry, runId)
+          } else if (skillId) {
+            openSkillInvoke({
+              id: skillId,
+              name: skillId,
+              use_when: '',
+              status: 'active',
+              runnable: true,
+            }, runId)
+          }
+        }}
+        prefillInput={chatPrefill}
+        onPrefillConsumed={() => setChatPrefill('')}
+        sendRequest={chatSendRequest}
+        onSendRequestConsumed={() => setChatSendRequest(null)}
+        conversationRefreshToken={chatConversationRefresh}
+      />
 
       {/* Floating toggle when chat is closed */}
       {!showChat && (

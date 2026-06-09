@@ -9,9 +9,22 @@ export interface PreviewDocument {
 }
 
 const WORKSPACE_WIDTH = 420
+const SKILL_INVOKE_WIDTH = 480
+const CHAT_WIDTH_DEFAULT = 380
 const DEFAULT_WIDTH = 560
 const MIN_WIDTH = 360
-const STORAGE_KEY = 'ci_preview_panel_width'
+export const PREVIEW_PANEL_STORAGE_KEY = 'ci_preview_panel_width'
+export const PREVIEW_PANEL_DEFAULT_WIDTH = DEFAULT_WIDTH
+
+export function readStoredPreviewWidth(): number {
+  try {
+    const n = Number(localStorage.getItem(PREVIEW_PANEL_STORAGE_KEY))
+    if (n >= MIN_WIDTH && n <= 1400) return n
+  } catch {}
+  return DEFAULT_WIDTH
+}
+
+const STORAGE_KEY = PREVIEW_PANEL_STORAGE_KEY
 
 function readStoredWidth(): number {
   try {
@@ -23,8 +36,11 @@ function readStoredWidth(): number {
 
 interface DocumentPreviewPanelProps {
   doc: PreviewDocument
-  /** When pursuit workspace is open, shift left so both panels are visible */
+  /** Shift left when right-side drawers are open so preview stays visible */
   stackWithWorkspace?: boolean
+  stackWithSkillInvoke?: boolean
+  stackWithChat?: boolean
+  chatWidth?: number
   onClose: () => void
   onReload: () => void
 }
@@ -32,6 +48,9 @@ interface DocumentPreviewPanelProps {
 export function DocumentPreviewPanel({
   doc,
   stackWithWorkspace = false,
+  stackWithSkillInvoke = false,
+  stackWithChat = false,
+  chatWidth = CHAT_WIDTH_DEFAULT,
   onClose,
   onReload,
 }: DocumentPreviewPanelProps) {
@@ -45,7 +64,10 @@ export function DocumentPreviewPanel({
   const Icon = isArtifact ? FileStack : BookOpen
   const label = isArtifact ? 'Studio preview' : 'Vault preview'
 
-  const rightOffset = stackWithWorkspace ? WORKSPACE_WIDTH : 0
+  const rightOffset =
+    (stackWithChat ? chatWidth : 0) +
+    (stackWithWorkspace ? WORKSPACE_WIDTH : 0) +
+    (stackWithSkillInvoke ? SKILL_INVOKE_WIDTH : 0)
   const maxWidth = Math.max(
     MIN_WIDTH,
     Math.min(1100, window.innerWidth - rightOffset - 96),

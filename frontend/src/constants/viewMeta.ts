@@ -126,13 +126,13 @@ export const VIEW_META: Record<SidebarId, ViewMetaEntry> = {
   },
   skills: {
     title: 'Agent Skills',
-    subtitle: '1102 + capture skill catalog · pairs with MCP Tools for live agent actions',
+    subtitle: 'skills/ repository · small focused tasks · agents + manual invoke',
     icon: Layers,
     accent: 'magenta',
   },
   settings: {
     title: 'Settings',
-    subtitle: 'NAICS defaults, theme, API keys, and workspace preferences',
+    subtitle: 'Connection tests · API key status · MCP health · workspace prefs',
     icon: Settings,
     accent: 'lime',
   },

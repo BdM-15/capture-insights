@@ -6,13 +6,13 @@ import os
 import urllib.request
 from typing import Any, Dict
 
+from .api_keys import is_sam_key_configured
 from .config import settings
 from .deterministic.sam_budget import get_budget_status
 
 
 def _sam_key_ok() -> bool:
-    key = settings.sam_api_key or ""
-    return bool(key) and not key.startswith("SAM-7fa8ffb7") and len(key) >= 20
+    return is_sam_key_configured()
 
 
 async def get_readiness() -> Dict[str, Any]:
@@ -35,11 +35,17 @@ async def get_readiness() -> Dict[str, Any]:
     mcp_ok = False
     if MCP_AVAILABLE and settings.enable_live_mcps:
         try:
-            tools = await list_sam_mcp_tools(force_refresh=False)
-            mcp_tools = len(tools or [])
+            from .mcp_client import discover_integrated_mcp_tools
+            discovered = await discover_integrated_mcp_tools(force_refresh=False)
+            mcp_tools = sum(len(v) for v in discovered.values())
             mcp_ok = mcp_tools > 0
         except Exception:
-            pass
+            try:
+                tools = await list_sam_mcp_tools(force_refresh=False)
+                mcp_tools = len(tools or [])
+                mcp_ok = mcp_tools > 0
+            except Exception:
+                pass
 
     duckdb_ready = os.path.exists(str(settings.duckdb_path))
     sam_budget = get_budget_status()

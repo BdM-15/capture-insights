@@ -13,6 +13,7 @@ dependencies = [
     "duckdb>=1.1",
     # chromadb removed for MVP simplicity (single DuckDB only, as requested)
     "python-docx>=1.1",
+    "openpyxl>=3.1",
     "ollama>=0.4",
     "httpx>=0.27",
     "mcp>=1.0",  # official Python MCP SDK for connecting to federal-contracting-mcps etc.
@@ -21,6 +22,8 @@ dependencies = [
     "typer>=0.12",  # for CLI scripts
     "requests>=2.32",  # bulk USASpending downloads
     "tqdm>=4.66",  # download progress polling
+    "skills-ref>=0.1.1",  # agentskills.io SKILL.md validation
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

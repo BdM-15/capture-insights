@@ -26,43 +26,10 @@ try:
 except Exception:
     llm_client = None
 
-WORKSPACE_SKILLS = [
-    {
-        "id": "capture-brief",
-        "name": "Capture Brief",
-        "status": "active",
-        "use_when": "Snapshot from USASpending; use Enrich for SAM + LLM narrative",
-        "supports_llm": True,
-    },
-    {
-        "id": "sam-scan",
-        "name": "SAM Scan",
-        "status": "active",
-        "use_when": "Live SAM.gov notices — saves sam_scan.md in vault",
-        "supports_llm": False,
-    },
-    {
-        "id": "competitive-snapshot",
-        "name": "Competitive Snapshot",
-        "status": "active",
-        "use_when": "Incumbent/agency award relationships from USASpending bulk data",
-        "supports_llm": False,
-    },
-    {
-        "id": "competitive-battlecard",
-        "name": "Competitive Battlecard",
-        "status": "active",
-        "use_when": "Displace / team / ghost talk tracks for the incumbent on this recompete",
-        "supports_llm": True,
-    },
-    {
-        "id": "sam-monitor-builder",
-        "name": "SAM Monitor Builder",
-        "status": "active",
-        "use_when": "Save SAM search to Pipeline + sam_monitor.md in vault",
-        "supports_llm": False,
-    },
-]
+def _workspace_skills() -> List[Dict[str, Any]]:
+    from .skill_registry import workspace_skills
+
+    return workspace_skills()
 
 ARTIFACT_LABELS = {
     "brief": "Capture brief",
@@ -173,7 +140,7 @@ def get_workspace_meta(
         "brief_bytes": brief["bytes"] if brief else 0,
         "artifacts": artifacts,
         "row": row,
-        "skills": WORKSPACE_SKILLS,
+        "skills": _workspace_skills(),
         "vault_root": f"pursuits/{slug}",
     }
 
@@ -692,7 +659,7 @@ async def enrich_capture_brief(
     }
 
 
-async def run_pursuit_skill(
+async def _run_pursuit_skill_impl(
     skill_id: str,
     item: Dict[str, Any],
     naics: str = "561210",
@@ -798,6 +765,26 @@ async def run_pursuit_skill(
         }
 
     return {"ok": False, "error": f"unknown skill: {skill_id}"}
+
+
+async def run_pursuit_skill(
+    skill_id: str,
+    item: Dict[str, Any],
+    naics: str = "561210",
+    *,
+    brain_names: Optional[List[str]] = None,
+    use_llm: bool = False,
+) -> Dict[str, Any]:
+    from .skill_runtime import dispatch_skill
+
+    return await dispatch_skill(
+        skill_id,
+        _run_pursuit_skill_impl,
+        item,
+        naics,
+        brain_names=brain_names,
+        use_llm=use_llm,
+    )
 
 
 def audit_vault_separation() -> Dict[str, Any]:
